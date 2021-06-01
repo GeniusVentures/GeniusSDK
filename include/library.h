@@ -1,0 +1,6 @@
+#ifndef GENIUSSDK_LIBRARY_H
+#define GENIUSSDK_LIBRARY_H
+
+void hello();
+
+#endif //GENIUSSDK_LIBRARY_H
