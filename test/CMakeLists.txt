@@ -1,10 +1,13 @@
-include_directories(
-        ../include
-)
+addtest(TransactionDataTest
+        TransactionDataTest.cpp
+        )
+target_link_libraries(TransactionDataTest
+        GeniusSDK
+        )
 
-file(GLOB ALL_SRCS
-    "../include/*.h"
-    "../include/*.hpp"
-    "../src/*.cpp"
-    "../src/*.c"
-    )
+addtest(TransactionBlocksTest
+        TransactionBlocksTest.cpp
+        )
+target_link_libraries(TransactionBlocksTest
+        GeniusSDK
+        )

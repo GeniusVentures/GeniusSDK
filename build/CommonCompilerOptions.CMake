@@ -14,15 +14,18 @@ set (CPACK_PACKAGE_VENDOR "Genius Ventures")
 set(CMAKE_INSTALL_PREFIX ${CMAKE_CURRENT_BINARY_DIR}/GeniusSDK)
 
 include(GNUInstallDirs)
-include (GenerateExportHeader)
+include(GenerateExportHeader)
 include(CMakePackageConfigHelpers)
 include(CheckCXXCompilerFlag)
+include(${PROJECT_ROOT}/cmake/functions.cmake)
 include(${PROJECT_ROOT}/build/CompilationFlags.cmake)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${EXTRA_CXX_FLAGS}")
 if (${CMAKE_SYSTEM_NAME} STREQUAL "Windows")
