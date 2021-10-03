@@ -38,5 +38,9 @@ set(EXTRA_CXX_FLAGS)
 set(TESTING OFF)
 
 # --------------------------------------------------------
+# Set custom subfolder for ABI
+set(ABI_SUBFOLDER_NAME "")
+
+# --------------------------------------------------------
 # Include common build parameters
 include(../CommonBuildParameters.cmake)

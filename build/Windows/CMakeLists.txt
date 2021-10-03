@@ -28,5 +28,10 @@ set(MULTIPLE_OPTION /FORCE:MULTIPLE)
 set(EXTRA_CXX_FLAGS)
 
 # --------------------------------------------------------
+# Set custom subfolder for ABI
+set(ABI_SUBFOLDER_NAME "")
+
+
+# --------------------------------------------------------
 # Include common build paramaeters
 include(../CommonBuildParameters.cmake)

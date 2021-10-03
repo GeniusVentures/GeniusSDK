@@ -64,6 +64,16 @@ set(ENABLE_BITCODE NO)
 set(CMAKE_XCODE_ATTRIBUTE_ONLY_ACTIVE_ARCH YES)
 
 # --------------------------------------------------------
+# Set host system protoc executable path
+set(PROTOC_EXECUTABLE "${THIRDPARTY_DIR}/protobuf-host/bin/protoc")
+
+# --------------------------------------------------------
+# Set custom protobuf path for iOS
+set(iOS_Protobuf_DIR "${THIRDPARTY_DIR}/protobuf/lib/cmake/protobuf")
+set(iOS_Protobuf_INCLUDE_DIR "${THIRDPARTY_DIR}/protobuf/include/google/protobuf")
+set(iOS_Protobuf_LIBRARIES "${THIRDPARTY_DIR}/protobuf/lib")
+
+# --------------------------------------------------------
 # Set OS threading settings
 set(CMAKE_THREAD_LIBS_INIT "-lpthread")
 set(CMAKE_HAVE_THREADS_LIBRARY ON)
@@ -79,6 +89,10 @@ set(MULTIPLE_OPTION "-Xlink=-force:multiple")
 # --------------------------------------------------------
 # Set extra compiler flags
 set(EXTRA_CXX_FLAGS -std=c++17)
+
+# --------------------------------------------------------
+# Set custom subfolder for ABI
+set(ABI_SUBFOLDER_NAME "/${iOS_ABI}")
 
 set(TESTING OFF)
 
