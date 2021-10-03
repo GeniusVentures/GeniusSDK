@@ -66,3 +66,4 @@ function(geniussdk_install target)
         BUNDLE        DESTINATION ${CMAKE_INSTALL_BINDIR}
         )
 endfunction()
+
