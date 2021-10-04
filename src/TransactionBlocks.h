@@ -26,12 +26,12 @@ public:
   /** Equality operator
    * @return true if equal otherwise, it returns false.
    */
-  bool operator==(const TransactionBlocks &);
+  bool operator==(const TransactionBlocks &) const;
 
   /** Equality operator
   * @return true if NOT equal otherwise, it returns false.
   */
-  bool operator!=(const TransactionBlocks &);
+  bool operator!=(const TransactionBlocks &) const;
 
   /** Assignment operator
   */

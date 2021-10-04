@@ -27,7 +27,7 @@ TransactionBlocks &TransactionBlocks::operator=(const TransactionBlocks &tBlocks
   return *this;
 }
 
-bool TransactionBlocks::operator==(const TransactionBlocks &tBlocks)
+bool TransactionBlocks::operator==(const TransactionBlocks &tBlocks) const
 {
   bool returnEqual = true;
   returnEqual &= this->blockNumber_ == tBlocks.blockNumber_;
@@ -44,7 +44,7 @@ bool TransactionBlocks::operator==(const TransactionBlocks &tBlocks)
   return returnEqual;
 }
 
-bool TransactionBlocks::operator!=(const TransactionBlocks &tBlocks)
+bool TransactionBlocks::operator!=(const TransactionBlocks &tBlocks) const
 {
   return !(*this == tBlocks);
 }

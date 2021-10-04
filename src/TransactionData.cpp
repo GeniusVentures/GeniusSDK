@@ -20,7 +20,7 @@ TransactionData &TransactionData::operator=(const TransactionData &tData)
   return *this;
 }
 
-bool TransactionData::operator==(const TransactionData &tData)
+bool TransactionData::operator==(const TransactionData &tData) const
 {
   bool returnEqual = true;
   returnEqual &= this->sourceAddress_ == tData.sourceAddress_;
@@ -30,7 +30,7 @@ bool TransactionData::operator==(const TransactionData &tData)
   return returnEqual;
 }
 
-bool TransactionData::operator!=(const TransactionData &tData)
+bool TransactionData::operator!=(const TransactionData &tData) const
 {
   return !(*this == tData);
 }

@@ -28,12 +28,12 @@ class GENIUSSDK_EXPORT TransactionData
       /** Equality operator
        * @return true if equal otherwise, it returns false.
        */
-      bool operator==(const TransactionData&);
+      bool operator==(const TransactionData&) const;
 
       /** Equality operator
       * @return true if NOT equal otherwise, it returns false.
       */
-      bool operator!=(const TransactionData&);
+      bool operator!=(const TransactionData&) const;
 
       /** Assignment operator
       */
