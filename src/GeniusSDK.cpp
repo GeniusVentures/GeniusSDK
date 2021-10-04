@@ -6,7 +6,6 @@
 #include <ipfs_lite/ipfs/merkledag/impl/merkledag_service_impl.hpp>
 #include <ipfs_lite/ipfs/impl/in_memory_datastore.hpp>
 
-using sgns::storage::rocksdb;
 using sgns::base::Buffer;
 using sgns::ipfs_lite::ipld::IPLDNode;
 using sgns::ipfs_lite::ipfs::IpfsDatastore;
