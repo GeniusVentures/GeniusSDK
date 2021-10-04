@@ -59,7 +59,7 @@ jobs:
 
       - name: SuperGenius Install
         working-directory: ${{github.workspace}}/SuperGenius/.build
-        run: make install
+        run: cmake --install .
         
       - name: Create Build Directory
         run: cmake -E make_directory ${{github.workspace}}/GeniusSDK/.build          
