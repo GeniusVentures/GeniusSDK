@@ -11,3 +11,10 @@ addtest(TransactionBlocksTest
 target_link_libraries(TransactionBlocksTest
         GeniusSDK
         )
+
+addtest(GeniusSDKTest
+        GeniusSDKTest.cpp
+        )
+target_link_libraries(GeniusSDKTest
+        GeniusSDK
+        )
