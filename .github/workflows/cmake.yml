@@ -59,7 +59,7 @@ jobs:
 
       - name: Configure CMake
         working-directory: ${{github.workspace}}/GeniusSDK/.build
-        run: cmake -S ../build/Windows/ -G "Visual Studio 16 2019" -A x64 -DCMAKE_BUILD_TYPE=Release -DTHIRDPARTY_DIR=${{github.workspace}}/thirdparty/.build -DSuperGenius_DIR=${{github.workspace}}/SuperGenius/.build/SuperGenius/lib/cmake/SuperGenius/ 
+        run: cmake -S ../build/Windows/ -G "Visual Studio 16 2019" -A x64 -DCMAKE_BUILD_TYPE=Release -DTHIRDPARTY_BUILD_DIR=${{github.workspace}}/thirdparty/.build -DSuperGenius_DIR=${{github.workspace}}/SuperGenius/.build/SuperGenius/lib/cmake/SuperGenius/ 
 
       - name: Compile
         working-directory: ${{github.workspace}}/GeniusSDK/.build
@@ -119,7 +119,7 @@ jobs:
 
       - name: Configure CMake
         working-directory: ${{github.workspace}}/GeniusSDK/.build
-        run: cmake -S ../build/Linux/ -DCMAKE_BUILD_TYPE=Release -DTHIRDPARTY_DIR=${{github.workspace}}/thirdparty/.build -DSuperGenius_DIR=${{github.workspace}}/SuperGenius/.build/SuperGenius/lib/cmake/SuperGenius/ 
+        run: cmake -S ../build/Linux/ -DCMAKE_BUILD_TYPE=Release -DTHIRDPARTY_BUILD_DIR=${{github.workspace}}/thirdparty/.build -DSuperGenius_DIR=${{github.workspace}}/SuperGenius/.build/SuperGenius/lib/cmake/SuperGenius/ 
 
       - name: Compile
         working-directory: ${{github.workspace}}/GeniusSDK/.build
@@ -208,7 +208,7 @@ jobs:
           export ANDROID_NDK_HOME=${{env.ANDROID_NDK_HOME}}
           export ANDROID_TOOLCHAIN=${{env.ANDROID_TOOLCHAIN}}
           export PATH=${{env.ANDROID_TOOLCHAIN}}:$PATH 
-          cmake -S ../build/Android/ -DANDROID_ABI="armeabi-v7a" -DCMAKE_ANDROID_NDK=$ANDROID_NDK -DANDROID_TOOLCHAIN=clang -DTHIRDPARTY_DIR=${{github.workspace}}/thirdparty/.build -DSuperGenius_DIR=${{github.workspace}}/SuperGenius/.build/SuperGenius/lib/cmake/SuperGenius/
+          cmake -S ../build/Android/ -DANDROID_ABI="armeabi-v7a" -DCMAKE_ANDROID_NDK=$ANDROID_NDK -DANDROID_TOOLCHAIN=clang -DTHIRDPARTY_BUILD_DIR=${{github.workspace}}/thirdparty/.build -DSuperGenius_DIR=${{github.workspace}}/SuperGenius/.build/SuperGenius/lib/cmake/SuperGenius/
 
       - name: Compile
         working-directory: ${{github.workspace}}/GeniusSDK/.build
@@ -269,7 +269,7 @@ jobs:
 
       - name: Configure CMake
         working-directory: ${{github.workspace}}/GeniusSDK/.build
-        run: cmake -S ../build/OSX/ -DCMAKE_BUILD_TYPE=Release -DTHIRDPARTY_DIR=${{github.workspace}}/thirdparty/.build -DSuperGenius_DIR=${{github.workspace}}/SuperGenius/.build/SuperGenius/lib/cmake/SuperGenius/ 
+        run: cmake -S ../build/OSX/ -DCMAKE_BUILD_TYPE=Release -DTHIRDPARTY_BUILD_DIR=${{github.workspace}}/thirdparty/.build -DSuperGenius_DIR=${{github.workspace}}/SuperGenius/.build/SuperGenius/lib/cmake/SuperGenius/ 
 
       - name: Compile
         working-directory: ${{github.workspace}}/GeniusSDK/.build
@@ -329,7 +329,7 @@ jobs:
 
       - name: Configure CMake
         working-directory: ${{github.workspace}}/GeniusSDK/.build
-        run: cmake -S ../build/iOS/ -DCMAKE_BUILD_TYPE=Release -DiOS_ABI=arm64-v8a -DIOS_ARCH="arm64" -DENABLE_ARC=0 -DENABLE_BITCODE=0 -DENABLE_VISIBILITY=1  -DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_SYSTEM_PROCESSOR=arm64 -DCMAKE_TOOLCHAIN_FILE=${{github.workspace}}/GeniusSDK/build/iOS/iOS.cmake -DTHIRDPARTY_DIR=${{github.workspace}}/thirdparty/.build -DSuperGenius_DIR=${{github.workspace}}/SuperGenius/.build/SuperGenius/lib/cmake/SuperGenius/ 
+        run: cmake -S ../build/iOS/ -DCMAKE_BUILD_TYPE=Release -DiOS_ABI=arm64-v8a -DIOS_ARCH="arm64" -DENABLE_ARC=0 -DENABLE_BITCODE=0 -DENABLE_VISIBILITY=1  -DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_SYSTEM_PROCESSOR=arm64 -DCMAKE_TOOLCHAIN_FILE=${{github.workspace}}/GeniusSDK/build/iOS/iOS.cmake -DTHIRDPARTY_BUILD_DIR=${{github.workspace}}/thirdparty/.build -DSuperGenius_DIR=${{github.workspace}}/SuperGenius/.build/SuperGenius/lib/cmake/SuperGenius/ 
 
       - name: Compile
         working-directory: ${{github.workspace}}/GeniusSDK/.build
