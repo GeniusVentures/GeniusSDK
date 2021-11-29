@@ -91,8 +91,8 @@ include_directories(${GSL_INCLUDE_DIR})
 
 # --------------------------------------------------------
 # Set config of fmt
-set(fmt_DIR "${_THIRDPARTY_BUILD_DIR}/fmt/lib/cmake/fmt")
-set(fmt_INCLUDE_DIR "${_THIRDPARTY_BUILD_DIR}/fmt/include")
+set(fmt_DIR "${THIRDPARTY_BUILD_DIR}/fmt/lib/cmake/fmt")
+set(fmt_INCLUDE_DIR "${THIRDPARTY_BUILD_DIR}/fmt/include")
 find_package(fmt CONFIG REQUIRED)
 include_directories(${fmt_INCLUDE_DIR})
 
