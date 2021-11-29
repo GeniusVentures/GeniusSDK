@@ -104,6 +104,27 @@ find_package(spdlog CONFIG REQUIRED)
 include_directories(${spdlog_INCLUDE_DIR})
 
 # --------------------------------------------------------
+# Set config of soralog
+set(soralog_DIR "${THIRDPARTY_BUILD_DIR}/soralog/lib/cmake/soralog")
+set(soralog_INCLUDE_DIR "${THIRDPARTY_BUILD_DIR}/soralog/include")
+find_package(soralog CONFIG REQUIRED)
+include_directories(${soralog_INCLUDE_DIR})
+
+# --------------------------------------------------------
+# Set config of cares
+set(c-ares_DIR "${THIRDPARTY_BUILD_DIR}/cares/lib/cmake/c-ares")
+set(c-ares_INCLUDE_DIR "${THIRDPARTY_BUILD_DIR}/cares/include")
+find_package(c-ares CONFIG REQUIRED)
+include_directories(${c-ares_INCLUDE_DIR})
+
+# --------------------------------------------------------
+# Set config of yaml-cpp
+set(yaml-cpp_DIR "${THIRDPARTY_BUILD_DIR}/yaml-cpp/share/cmake/yaml-cpp")
+set(yaml-cpp_INCLUDE_DIR "${THIRDPARTY_BUILD_DIR}/yaml-cpp/include")
+find_package(yaml-cpp CONFIG REQUIRED)
+include_directories(${yaml-cpp_INCLUDE_DIR})
+
+# --------------------------------------------------------
 # Set config of  tsl_hat_trie
 set(tsl_hat_trie_DIR "${THIRDPARTY_BUILD_DIR}/hat-trie/lib/cmake/tsl_hat_trie")
 set(tsl_hat_trie_INCLUDE_DIR "${THIRDPARTY_BUILD_DIR}/hat-trie/include")
