@@ -118,11 +118,39 @@ set(GSL_INCLUDE_DIR "${THIRDPARTY_BUILD_DIR}/GSL/include")
 include_directories(${GSL_INCLUDE_DIR})
 
 # --------------------------------------------------------
+# Set config of fmt
+set(fmt_DIR "${THIRDPARTY_BUILD_DIR}/fmt/lib/cmake/fmt")
+set(fmt_INCLUDE_DIR "${THIRDPARTY_BUILD_DIR}/fmt/include")
+find_package(fmt CONFIG REQUIRED)
+include_directories(${fmt_INCLUDE_DIR})
+
+# --------------------------------------------------------
 # Set config of spdlog v1.4.2
 set(spdlog_DIR "${THIRDPARTY_BUILD_DIR}/spdlog/lib/cmake/spdlog")
 set(spdlog_INCLUDE_DIR "${THIRDPARTY_BUILD_DIR}/spdlog/include")
 find_package(spdlog CONFIG REQUIRED)
 include_directories(${spdlog_INCLUDE_DIR})
+
+# --------------------------------------------------------
+# Set config of soralog
+set(soralog_DIR "${THIRDPARTY_BUILD_DIR}/soralog/lib/cmake/soralog")
+set(soralog_INCLUDE_DIR "${THIRDPARTY_BUILD_DIR}/soralog/include")
+find_package(soralog CONFIG REQUIRED)
+include_directories(${soralog_INCLUDE_DIR})
+
+# --------------------------------------------------------
+# Set config of cares
+set(c-ares_DIR "${THIRDPARTY_BUILD_DIR}/cares/lib/cmake/c-ares")
+set(c-ares_INCLUDE_DIR "${THIRDPARTY_BUILD_DIR}/cares/include")
+find_package(c-ares CONFIG REQUIRED)
+include_directories(${c-ares_INCLUDE_DIR})
+
+# --------------------------------------------------------
+# Set config of yaml-cpp
+set(yaml-cpp_DIR "${THIRDPARTY_BUILD_DIR}/yaml-cpp/share/cmake/yaml-cpp")
+set(yaml-cpp_INCLUDE_DIR "${THIRDPARTY_BUILD_DIR}/yaml-cpp/include")
+find_package(yaml-cpp CONFIG REQUIRED)
+include_directories(${yaml-cpp_INCLUDE_DIR})
 
 # --------------------------------------------------------
 # Set config of  tsl_hat_trie
