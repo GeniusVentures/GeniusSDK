@@ -139,13 +139,6 @@ find_package(soralog CONFIG REQUIRED)
 include_directories(${soralog_INCLUDE_DIR})
 
 # --------------------------------------------------------
-# Set config of cares
-set(c-ares_DIR "${THIRDPARTY_BUILD_DIR}/cares/lib/cmake/c-ares")
-set(c-ares_INCLUDE_DIR "${THIRDPARTY_BUILD_DIR}/cares/include")
-find_package(c-ares CONFIG REQUIRED)
-include_directories(${c-ares_INCLUDE_DIR})
-
-# --------------------------------------------------------
 # Set config of yaml-cpp
 set(yaml-cpp_DIR "${THIRDPARTY_BUILD_DIR}/yaml-cpp/share/cmake/yaml-cpp")
 set(yaml-cpp_INCLUDE_DIR "${THIRDPARTY_BUILD_DIR}/yaml-cpp/include")
