@@ -1,16 +1,11 @@
 cmake_minimum_required(VERSION 3.12)
 
 # --------------------------------------------------------
-# if on Linux system, build the Android executables
-if (NOT ${CMAKE_HOST_SYSTEM_NAME} MATCHES "Linux")
-    message(FATAL_ERROR "${CMAKE_HOST_SYSTEM_NAME} host system name does not match Linux for Android cross compiling - Please select the correct folder for configuring project")
-endif()
-
-# --------------------------------------------------------
 # Set cross compiling settings
 set(CMAKE_SYSTEM_NAME Android)
 set(CMAKE_SYSTEM_VERSION 28) # API level
-set(ANDROID_NATIVE_API_LEVEL 28)
+set(ANDROID_NATIVE_API_LEVEL ${ANDROID_PLATFORM_LEVEL})
+set(ANDROID_PLATFORM ${ANDROID_PLATFORM_LEVEL})
 
 # --------------------------------------------------------
 # Check Android NDK version
@@ -50,6 +45,10 @@ set(CMAKE_TOOLCHAIN_FILE "${CMAKE_ANDROID_NDK}/build/cmake/android.toolchain.cma
 if(NOT EXISTS ${CMAKE_TOOLCHAIN_FILE})
   message(FATAL_ERROR "Android NDK toolchain file ${CMAKE_TOOLCHAIN_FILE} not found")
 endif()
+
+if("${LINUX_TARGET_ARCHITECTURES}" STREQUAL "")
+    set(LINUX_TARGET_ARCHITECTURES "${CMAKE_HOST_SYSTEM_PROCESSOR}")
+endif("${LINUX_TARGET_ARCHITECTURES}" STREQUAL "")
 
 # --------------------------------------------------------
 # Project
