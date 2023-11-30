@@ -1,3 +1,12 @@
+# BOOST VERSION TO USE
+set(BOOST_MAJOR_VERSION "1" CACHE STRING "Boost Major Version")
+set(BOOST_MINOR_VERSION "80" CACHE STRING "Boost Minor Version")
+set(BOOST_PATCH_VERSION "0" CACHE STRING "Boost Patch Version")
+# convenience settings
+set(BOOST_VERSION "${BOOST_MAJOR_VERSION}.${BOOST_MINOR_VERSION}.${BOOST_PATCH_VERSION}")
+set(BOOST_VERSION_3U "${BOOST_MAJOR_VERSION}_${BOOST_MINOR_VERSION}_${BOOST_PATCH_VERSION}")
+set(BOOST_VERSION_2U "${BOOST_MAJOR_VERSION}_${BOOST_MINOR_VERSION}")
+
 # --------------------------------------------------------
 # define third party directory
 if (NOT DEFINED THIRDPARTY_DIR)
@@ -40,30 +49,34 @@ include_directories(${soralog_INCLUDE_DIR})
 # Set config of cares
 set(c-ares_DIR "${THIRDPARTY_BUILD_DIR}/cares/lib/cmake/c-ares")
 set(c-ares_INCLUDE_DIR "${THIRDPARTY_BUILD_DIR}/cares/include")
-find_package(c-ares CONFIG REQUIRED)
-include_directories(${c-ares_INCLUDE_DIR})
+# find_package(c-ares CONFIG REQUIRED)
+# include_directories(${c-ares_INCLUDE_DIR})
 
 # --------------------------------------------------------
 # Set config of yaml-cpp
-set(yaml-cpp_DIR "${THIRDPARTY_BUILD_DIR}/yaml-cpp/share/cmake/yaml-cpp")
+set(yaml-cpp_DIR "${THIRDPARTY_BUILD_DIR}/yaml-cpp/lib/cmake/yaml-cpp")
 set(yaml-cpp_INCLUDE_DIR "${THIRDPARTY_BUILD_DIR}/yaml-cpp/include")
 find_package(yaml-cpp CONFIG REQUIRED)
 include_directories(${yaml-cpp_INCLUDE_DIR})
 
 # --------------------------------------------------------
 # Set config of protobuf project
-set(Protobuf_DIR "${THIRDPARTY_BUILD_DIR}/grpc/lib/cmake/protobuf")
-set(Protobuf_INCLUDE_DIR "${THIRDPARTY_BUILD_DIR}/grpc/include/google/protobuf")
+if (NOT DEFINED Protobuf_DIR)
+	set(Protobuf_DIR "${THIRDPARTY_BUILD_DIR}/grpc/lib/cmake/protobuf")
+endif()
+if (NOT DEFINED Protobuf_INCLUDE_DIR)
+	set(Protobuf_INCLUDE_DIR "${THIRDPARTY_BUILD_DIR}/grpc/include/google/protobuf")
+endif()
 if (${CMAKE_SYSTEM_NAME} STREQUAL "iOS")
   set(Protobuf_DIR  "${iOS_Protobuf_DIR}")
   set(Protobuf_INCLUDE_DIR "${iOS_Protobuf_INCLUDE_DIR}")
   set(Protobuf_LIBRARIES "${iOS_Protobuf_LIBRARIES}")
 endif()
-if (${CMAKE_SYSTEM_NAME} STREQUAL "Windows")
-  # TODO: Check grpc install on Windows
-  set(Protobuf_DIR  "${THIRDPARTY_BUILD_DIR}/grpc/build/third_party/protobuf/cmake")
-  set(Protobuf_INCLUDE_DIR "${THIRDPARTY_BUILD_DIR}/grpc/build/third_party/protobuf/include/google/protobuf")
-endif()
+# if (${CMAKE_SYSTEM_NAME} STREQUAL "Windows")
+  # # TODO: Check grpc install on Windows
+  # set(Protobuf_DIR  "${THIRDPARTY_BUILD_DIR}/grpc/build/third_party/protobuf/cmake")
+  # set(Protobuf_INCLUDE_DIR "${THIRDPARTY_BUILD_DIR}/grpc/build/third_party/protobuf/include/google/protobuf")
+# endif()
 
 find_package(Protobuf CONFIG REQUIRED )
 include_directories(${Protobuf_INCLUDE_DIR})
@@ -93,15 +106,29 @@ include(${PROJECT_ROOT}/cmake/functions.cmake)
 
 # --------------------------------------------------------
 # Set config of openssl project
-set(OPENSSL_DIR "${THIRDPARTY_BUILD_DIR}/openssl/build/${CMAKE_SYSTEM_NAME}${ABI_SUBFOLDER_NAME}")
-set(OPENSSL_USE_STATIC_LIBS ON)
-set(OPENSSL_MSVC_STATIC_RT ON)
-set(OPENSSL_ROOT_DIR "${OPENSSL_DIR}")
-set(OPENSSL_INCLUDE_DIR "${OPENSSL_DIR}/include")
-set(OPENSSL_LIBRARIES "${OPENSSL_DIR}/lib")
-set(OPENSSL_CRYPTO_LIBRARY ${OPENSSL_LIBRARIES}/libcrypto${CMAKE_STATIC_LIBRARY_SUFFIX})
-set(OPENSSL_SSL_LIBRARY ${OPENSSL_LIBRARIES}/libssl${CMAKE_STATIC_LIBRARY_SUFFIX})
+# set(OPENSSL_DIR "${THIRDPARTY_BUILD_DIR}/openssl/build/${CMAKE_SYSTEM_NAME}${ABI_SUBFOLDER_NAME}")
+# set(OPENSSL_USE_STATIC_LIBS ON)
+# set(OPENSSL_MSVC_STATIC_RT ON)
+# set(OPENSSL_ROOT_DIR "${OPENSSL_DIR}")
+# set(OPENSSL_INCLUDE_DIR "${OPENSSL_DIR}/include")
+# set(OPENSSL_LIBRARIES "${OPENSSL_DIR}/lib")
+# set(OPENSSL_CRYPTO_LIBRARY ${OPENSSL_LIBRARIES}/libcrypto${CMAKE_STATIC_LIBRARY_SUFFIX})
+# set(OPENSSL_SSL_LIBRARY ${OPENSSL_LIBRARIES}/libssl${CMAKE_STATIC_LIBRARY_SUFFIX})
 
+# find_package(OpenSSL REQUIRED)
+# include_directories(${OPENSSL_INCLUDE_DIR})
+
+
+set(OPENSSL_DIR "${THIRDPARTY_BUILD_DIR}/openssl/build/${CMAKE_SYSTEM_NAME}${ABI_SUBFOLDER_NAME}" CACHE PATH "Path to OpenSSL install folder")
+set(OPENSSL_USE_STATIC_LIBS ON CACHE BOOL "OpenSSL use static libs")
+set(OPENSSL_MSVC_STATIC_RT ON CACHE BOOL "OpenSSL use static RT")
+set(OPENSSL_ROOT_DIR "${OPENSSL_DIR}" CACHE PATH "Path to OpenSSL install root folder")
+set(OPENSSL_INCLUDE_DIR "${OPENSSL_DIR}/include" CACHE PATH "Path to OpenSSL include folder")
+set(OPENSSL_INCLUDE_DIR "${OPENSSL_DIR}/include")
+set(OPENSSL_LIBRARIES "${OPENSSL_DIR}/lib" CACHE PATH "Path to OpenSSL lib folder")
+set(OPENSSL_CRYPTO_LIBRARY ${OPENSSL_LIBRARIES}/libcrypto${CMAKE_STATIC_LIBRARY_SUFFIX} CACHE PATH "Path to OpenSSL crypto lib")
+set(OPENSSL_SSL_LIBRARY ${OPENSSL_LIBRARIES}/libssl${CMAKE_STATIC_LIBRARY_SUFFIX} CACHE PATH "Path to OpenSSL ssl lib")
+message(OPENSSLINCLUDE:"${OPENSSL_INCLUDE_DIR}")
 find_package(OpenSSL REQUIRED)
 include_directories(${OPENSSL_INCLUDE_DIR})
 
@@ -140,25 +167,18 @@ include_directories(${soralog_INCLUDE_DIR})
 
 # --------------------------------------------------------
 # Set config of yaml-cpp
-set(yaml-cpp_DIR "${THIRDPARTY_BUILD_DIR}/yaml-cpp/share/cmake/yaml-cpp")
-set(yaml-cpp_INCLUDE_DIR "${THIRDPARTY_BUILD_DIR}/yaml-cpp/include")
-find_package(yaml-cpp CONFIG REQUIRED)
-include_directories(${yaml-cpp_INCLUDE_DIR})
+# set(yaml-cpp_DIR "${THIRDPARTY_BUILD_DIR}/yaml-cpp/share/cmake/yaml-cpp")
+# set(yaml-cpp_INCLUDE_DIR "${THIRDPARTY_BUILD_DIR}/yaml-cpp/include")
+# find_package(yaml-cpp CONFIG REQUIRED)
+# include_directories(${yaml-cpp_INCLUDE_DIR})
 
 # --------------------------------------------------------
 # Set config of  tsl_hat_trie
-set(tsl_hat_trie_DIR "${THIRDPARTY_BUILD_DIR}/hat-trie/lib/cmake/tsl_hat_trie")
-set(tsl_hat_trie_INCLUDE_DIR "${THIRDPARTY_BUILD_DIR}/hat-trie/include")
+set(tsl_hat_trie_DIR "${THIRDPARTY_BUILD_DIR}/tsl_hat_trie/lib/cmake/tsl_hat_trie")
+set(tsl_hat_trie_INCLUDE_DIR "${THIRDPARTY_BUILD_DIR}/tsl_hat_trie/include")
 find_package(tsl_hat_trie CONFIG REQUIRED)
 include_directories(${tsl_hat_trie_INCLUDE_DIR})
 
-# --------------------------------------------------------
-# Set config of libp2p
-set(libp2p_DIR "${THIRDPARTY_BUILD_DIR}/libp2p/lib/cmake/libp2p")
-set(libp2p_LIBRARY_DIR "${THIRDPARTY_BUILD_DIR}/libp2p/lib")
-set(libp2p_INCLUDE_DIR    "${THIRDPARTY_BUILD_DIR}/libp2p/include")
-find_package(libp2p CONFIG REQUIRED)
-include_directories(${libp2p_INCLUDE_DIR})
 
 # --------------------------------------------------------
 # Set config of ipfs-lite-cpp
@@ -187,20 +207,20 @@ include_directories(${Boost.DI_INCLUDE_DIR})
 # Set config of Boost project
 set(_BOOST_ROOT "${THIRDPARTY_BUILD_DIR}/boost/build/${CMAKE_SYSTEM_NAME}${ABI_SUBFOLDER_NAME}")
 set(Boost_LIB_DIR "${_BOOST_ROOT}/lib")
-set(Boost_INCLUDE_DIR "${_BOOST_ROOT}/include/boost-1_72")
-set(Boost_DIR "${Boost_LIB_DIR}/cmake/Boost-1.72.0")
-set(boost_headers_DIR "${Boost_LIB_DIR}/cmake/boost_headers-1.72.0")
-set(boost_random_DIR "${Boost_LIB_DIR}/cmake/boost_random-1.72.0")
-set(boost_system_DIR "${Boost_LIB_DIR}/cmake/boost_system-1.72.0")
-set(boost_filesystem_DIR "${Boost_LIB_DIR}/cmake/boost_filesystem-1.72.0")
-set(boost_program_options_DIR "${Boost_LIB_DIR}/cmake/boost_program_options-1.72.0")
-set(boost_date_time_DIR "${Boost_LIB_DIR}/cmake/boost_date_time-1.72.0")
-set(boost_regex_DIR "${Boost_LIB_DIR}/cmake/boost_regex-1.72.0")
-set(boost_atomic_DIR "${Boost_LIB_DIR}/cmake/boost_atomic-1.72.0")
-set(boost_chrono_DIR "${Boost_LIB_DIR}/cmake/boost_chrono-1.72.0")
-set(boost_log_DIR "${Boost_LIB_DIR}/cmake/boost_log-1.72.0")
-set(boost_log_setup_DIR "${Boost_LIB_DIR}/cmake/boost_log_setup-1.72.0")
-set(boost_thread_DIR "${Boost_LIB_DIR}/cmake/boost_thread-1.72.0")
+set(Boost_INCLUDE_DIR "${_BOOST_ROOT}/include/boost-${BOOST_VERSION_2U}")
+set(Boost_DIR "${Boost_LIB_DIR}/cmake/Boost-${BOOST_VERSION}")
+set(boost_headers_DIR "${Boost_LIB_DIR}/cmake/boost_headers-${BOOST_VERSION}")
+set(boost_random_DIR "${Boost_LIB_DIR}/cmake/boost_random-${BOOST_VERSION}")
+set(boost_system_DIR "${Boost_LIB_DIR}/cmake/boost_system-${BOOST_VERSION}")
+set(boost_filesystem_DIR "${Boost_LIB_DIR}/cmake/boost_filesystem-${BOOST_VERSION}")
+set(boost_program_options_DIR "${Boost_LIB_DIR}/cmake/boost_program_options-${BOOST_VERSION}")
+set(boost_date_time_DIR "${Boost_LIB_DIR}/cmake/boost_date_time-${BOOST_VERSION}")
+set(boost_regex_DIR "${Boost_LIB_DIR}/cmake/boost_regex-${BOOST_VERSION}")
+set(boost_atomic_DIR "${Boost_LIB_DIR}/cmake/boost_atomic-${BOOST_VERSION}")
+set(boost_chrono_DIR "${Boost_LIB_DIR}/cmake/boost_chrono-${BOOST_VERSION}")
+set(boost_log_DIR "${Boost_LIB_DIR}/cmake/boost_log-${BOOST_VERSION}")
+set(boost_log_setup_DIR "${Boost_LIB_DIR}/cmake/boost_log_setup-${BOOST_VERSION}")
+set(boost_thread_DIR "${Boost_LIB_DIR}/cmake/boost_thread-${BOOST_VERSION}")
 set(Boost_USE_MULTITHREADED ON)
 set(Boost_USE_STATIC_LIBS ON)
 set(Boost_NO_SYSTEM_PATHS ON)
@@ -220,6 +240,36 @@ endif ()
 # header only libraries must not be added here
 find_package(Boost REQUIRED COMPONENTS date_time filesystem random regex system thread log log_setup program_options)
 include_directories(${Boost_INCLUDE_DIRS})
+
+# --------------------------------------------------------
+# Set config of SQLiteModernCpp project
+set(SQLiteModernCpp_ROOT_DIR "${THIRDPARTY_BUILD_DIR}/SQLiteModernCpp")
+set(SQLiteModernCpp_DIR "${SQLiteModernCpp_ROOT_DIR}/lib/cmake/SQLiteModernCpp")
+set(SQLiteModernCpp_LIB_DIR "${SQLiteModernCpp_ROOT_DIR}/lib")
+set(SQLiteModernCpp_INCLUDE_DIR "${SQLiteModernCpp_ROOT_DIR}/include")
+
+# --------------------------------------------------------
+# Set config of SQLiteModernCpp project
+set(sqlite3_ROOT_DIR "${THIRDPARTY_BUILD_DIR}/sqlite3")
+set(sqlite3_DIR "${sqlite3_ROOT_DIR}/lib/cmake/sqlite3")
+set(sqlite3_LIB_DIR "${sqlite3_ROOT_DIR}/lib")
+set(sqlite3_INCLUDE_DIR "${sqlite3_ROOT_DIR}/include")
+
+# --------------------------------------------------------
+# Set config of libp2p
+set(libp2p_DIR "${THIRDPARTY_BUILD_DIR}/libp2p/lib/cmake/libp2p")
+set(libp2p_LIBRARY_DIR "${THIRDPARTY_BUILD_DIR}/libp2p/lib")
+set(libp2p_INCLUDE_DIR    "${THIRDPARTY_BUILD_DIR}/libp2p/include")
+find_package(libp2p CONFIG REQUIRED)
+include_directories(${libp2p_INCLUDE_DIR})
+
+# --------------------------------------------------------
+# Find and include cares if libp2p have not included it
+if (NOT TARGET c-ares::cares_static)
+  find_package(c-ares CONFIG REQUIRED)
+endif()
+include_directories(${c-ares_INCLUDE_DIR})
+
 
 # --------------------------------------------------------
 # Set config of ed25519
@@ -265,11 +315,12 @@ include_directories(${xxhash_INCLUDE_DIR})
 
 # --------------------------------------------------------
 # Set config of SuperGenius project
-if (NOT DEFINED SuperGenius_DIR)
+#if (NOT DEFINED SuperGenius_DIR)
   print("Setting SuperGenius build directory default")
   set(SUPERGENIUS_SRC_DIR "${CMAKE_CURRENT_LIST_DIR}/../../SuperGenius")
   set(SuperGenius_DIR "${SUPERGENIUS_SRC_DIR}/build/${CMAKE_SYSTEM_NAME}/${CMAKE_BUILD_TYPE}/SuperGenius/lib/cmake/SuperGenius/")
-endif()
+  set(SuperGenius_DIR "${SUPERGENIUS_SRC_DIR}/build/${CMAKE_SYSTEM_NAME}/${CMAKE_BUILD_TYPE}/")
+#endif()
 print("SuperGenius_DIR: ${SuperGenius_DIR}")
 
 find_package(SuperGenius CONFIG REQUIRED)

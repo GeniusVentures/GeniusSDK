@@ -10,6 +10,9 @@ endif()
 # Project
 project(GeniusSDK C CXX)
 
+set(Protobuf_DIR  "${THIRDPARTY_DIR}/build/Windows/${CMAKE_BUILD_TYPE}/grpc/cmake")
+set(Protobuf_INCLUDE_DIR "${THIRDPARTY_DIR}/build/Windows/${CMAKE_BUILD_TYPE}/grpc/include/google/protobuf")
+
 # --------------------------------------------------------
 # build common libraries by platforms
 include(../CommonCompilerOptions.CMake)
