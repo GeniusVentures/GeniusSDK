@@ -9,20 +9,20 @@ set(BOOST_VERSION_2U "${BOOST_MAJOR_VERSION}_${BOOST_MINOR_VERSION}")
 
 # --------------------------------------------------------
 # define third party directory
-if (NOT DEFINED THIRDPARTY_DIR)
-  print("Setting default third party directory")
-  set(THIRDPARTY_DIR "${CMAKE_CURRENT_LIST_DIR}/../../thirdparty")
-  ## get absolute path
-  cmake_path(SET THIRDPARTY_DIR NORMALIZE "${THIRDPARTY_DIR}")
-endif()
-
-if (NOT DEFINED THIRDPARTY_BUILD_DIR)
-  print("Setting third party build directory default")
-  set(THIRDPARTY_BUILD_DIR "${THIRDPARTY_DIR}/build/${CMAKE_SYSTEM_NAME}/${CMAKE_BUILD_TYPE}")
-endif()
-
-print("THIRDPARTY BUILD DIR: ${THIRDPARTY_BUILD_DIR}")
-print("THIRDPARTY SRC DIR: ${THIRDPARTY_DIR}")
+#if (NOT DEFINED THIRDPARTY_DIR)
+#  print("Setting default third party directory")
+#  set(THIRDPARTY_DIR "${CMAKE_CURRENT_LIST_DIR}/../../thirdparty")
+#  ## get absolute path
+#  cmake_path(SET THIRDPARTY_DIR NORMALIZE "${THIRDPARTY_DIR}")
+#endif()
+#
+#if (NOT DEFINED THIRDPARTY_BUILD_DIR)
+#  print("Setting third party build directory default")
+#  set(THIRDPARTY_BUILD_DIR "${THIRDPARTY_DIR}/build/${CMAKE_SYSTEM_NAME}/${CMAKE_BUILD_TYPE}")
+#endif()
+#
+#print("THIRDPARTY BUILD DIR: ${THIRDPARTY_BUILD_DIR}")
+#print("THIRDPARTY SRC DIR: ${THIRDPARTY_DIR}")
 
 # --------------------------------------------------------
 # Set config of GTest
@@ -62,24 +62,16 @@ include_directories(${yaml-cpp_INCLUDE_DIR})
 # --------------------------------------------------------
 # Set config of protobuf project
 if (NOT DEFINED Protobuf_DIR)
-	set(Protobuf_DIR "${THIRDPARTY_BUILD_DIR}/grpc/lib/cmake/protobuf")
+    set(Protobuf_DIR "${_THIRDPARTY_BUILD_DIR}/grpc/lib/cmake/protobuf")
+endif()
+if (NOT DEFINED grpc_INCLUDE_DIR)
+    set(grpc_INCLUDE_DIR "${_THIRDPARTY_BUILD_DIR}/grpc/include")
 endif()
 if (NOT DEFINED Protobuf_INCLUDE_DIR)
-	set(Protobuf_INCLUDE_DIR "${THIRDPARTY_BUILD_DIR}/grpc/include/google/protobuf")
+    set(Protobuf_INCLUDE_DIR "${grpc_INCLUDE_DIR}/google/protobuf")
 endif()
-if (${CMAKE_SYSTEM_NAME} STREQUAL "iOS")
-  set(Protobuf_DIR  "${iOS_Protobuf_DIR}")
-  set(Protobuf_INCLUDE_DIR "${iOS_Protobuf_INCLUDE_DIR}")
-  set(Protobuf_LIBRARIES "${iOS_Protobuf_LIBRARIES}")
-endif()
-# if (${CMAKE_SYSTEM_NAME} STREQUAL "Windows")
-  # # TODO: Check grpc install on Windows
-  # set(Protobuf_DIR  "${THIRDPARTY_BUILD_DIR}/grpc/build/third_party/protobuf/cmake")
-  # set(Protobuf_INCLUDE_DIR "${THIRDPARTY_BUILD_DIR}/grpc/build/third_party/protobuf/include/google/protobuf")
-# endif()
 
 find_package(Protobuf CONFIG REQUIRED )
-include_directories(${Protobuf_INCLUDE_DIR})
 
 if (NOT DEFINED PROTOC_EXECUTABLE)
   set(PROTOC_EXECUTABLE "${THIRDPARTY_BUILD_DIR}/grpc/bin/protoc${CMAKE_EXECUTABLE_SUFFIX}")
@@ -101,6 +93,7 @@ if ( Protobuf_FOUND )
   message( STATUS "Protobuf version : ${Protobuf_VERSION}" )
   message( STATUS "Protobuf compiler : ${Protobuf_PROTOC_EXECUTABLE}")
 endif()
+include(${PROJECT_ROOT}/build/cmake/functions.cmake)
 include(${PROJECT_ROOT}/cmake/functions.cmake)
 
 
@@ -141,7 +134,7 @@ include_directories(${RocksDB_INCLUDE_DIR})
 
 # --------------------------------------------------------
 # Set config of Microsoft.GSL
-set(GSL_INCLUDE_DIR "${THIRDPARTY_BUILD_DIR}/GSL/include")
+set(GSL_INCLUDE_DIR "${THIRDPARTY_BUILD_DIR}/Microsoft.GSL/include")
 include_directories(${GSL_INCLUDE_DIR})
 
 # --------------------------------------------------------
@@ -315,12 +308,21 @@ include_directories(${xxhash_INCLUDE_DIR})
 
 # --------------------------------------------------------
 # Set config of SuperGenius project
-#if (NOT DEFINED SuperGenius_DIR)
-  print("Setting SuperGenius build directory default")
-  set(SUPERGENIUS_SRC_DIR "${CMAKE_CURRENT_LIST_DIR}/../../SuperGenius")
-  set(SuperGenius_DIR "${SUPERGENIUS_SRC_DIR}/build/${CMAKE_SYSTEM_NAME}/${CMAKE_BUILD_TYPE}/SuperGenius/lib/cmake/SuperGenius/")
-  set(SuperGenius_DIR "${SUPERGENIUS_SRC_DIR}/build/${CMAKE_SYSTEM_NAME}/${CMAKE_BUILD_TYPE}/")
-#endif()
+if (NOT DEFINED SUPERGENIUS_SRC_DIR)
+  if(EXISTS "${CMAKE_CURRENT_LIST_DIR}/../../SuperGenius/README.md")
+    print("Setting default SuperGenius directory")
+    set(SUPERGENIUS_SRC_DIR "${CMAKE_CURRENT_LIST_DIR}/../../SuperGenius" CACHE STRING "Default SuperGenius Library")
+    ## get absolute path
+    cmake_path(SET SUPERGENIUS_SRC_DIR NORMALIZE "${SUPERGENIUS_SRC_DIR}")
+  else()
+    message( FATAL_ERROR "Cannot find SuperGenius directory required to build" )
+  endif()
+endif()
+
+#set(SuperGenius_DIR "${SUPERGENIUS_SRC_DIR}/build/${CMAKE_SYSTEM_NAME}/${CMAKE_BUILD_TYPE}/SuperGenius/lib/cmake/SuperGenius/")
+set(SuperGenius_DIR "${SUPERGENIUS_SRC_DIR}/.build/SuperGenius/lib/cmake/SuperGenius/")
+
+
 print("SuperGenius_DIR: ${SuperGenius_DIR}")
 
 find_package(SuperGenius CONFIG REQUIRED)
