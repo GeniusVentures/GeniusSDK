@@ -1,77 +1,38 @@
-#ifndef GENIUSSDK_H
-#define GENIUSSDK_H
-
-#include "TransactionBlocks.h"
-#include <memory>
-namespace sgns
-{
-
-namespace crdt
-{
-class CrdtDatastore;
-}
-
 /**
- * @brief Interface library for
+ * @file       GeniusSDK.h
+ * @brief      New GeniusSDK node
+ * @date       2024-05-25
+ * @author     Henrique A. Klein (hklein@gnus.ai)
  */
-class GeniusSDK
+#ifndef _GENIUSSDK_H
+#define _GENIUSSDK_H
+
+#include <memory>
+#include "account/GeniusNode.hpp"
+
+#ifndef GNUS_EXPORT
+#define GNUS_EXPORT extern "C"
+#endif
+
+#ifdef _WIN32
+#define GNUS_VISIBILITY_DEFAULT __declspec( dllexport )
+#else
+#define GNUS_VISIBILITY_DEFAULT __attribute__( ( visibility( "default" ) ) )
+#endif
+
+#ifndef __cplusplus
+extern "C"
 {
-public:
+#endif
 
-  /** Constructor
-   */
-  GENIUSSDK_EXPORT GeniusSDK();
+    typedef char     ImagePath_t[1024];
+    typedef uint64_t PayAmount_t;
 
-  /** Destructor
-   */
-  GENIUSSDK_EXPORT virtual ~GeniusSDK() = default;
-
-  void SetDatastorePath(const std::string &aPath);
-
-  /**
-   * Adding TransactionBlocks to database
-   * @param tBlocks TransactionBlocks to add to database
-   * @return 0 on success
-   */
-  GENIUSSDK_EXPORT int AddTransactionBlocks(const TransactionBlocks &tBlocks);
-
-  /**
-   * Get seed from mnemonic phrase
-   * @param mnemonic List of words
-   * @param passphrase Passphrase used for generating seed
-   * @param seed Output result of generated seed as HEX
-   * @return 0 on success
-   */
-  GENIUSSDK_EXPORT static int
-  GetSeed(const std::vector<std::string> &mnemonic, const std::string &passphrase, std::string &seed);
-
-  /**
-   * Get public key from mnemonic phrase
-   * @param mnemonic List of words
-   * @param passphrase Passphrase used for generating public key
-   * @param publicKey
-   * @return 0 on success
-   */
-  GENIUSSDK_EXPORT static int
-  GetPublicKey(const std::vector<std::string> &mnemonic, const std::string &passphrase, std::string &publicKey);
-
-  /**
- * Get public key from mnemonic phrase
- * @param mnemonic List of words
- * @param passphrase Passphrase used for generating public key
- * @param privateKey
- * @return 0 on success
- */
-  GENIUSSDK_EXPORT static int
-  GetPrivateKey(const std::vector<std::string> &mnemonic, const std::string &passphrase, std::string &privateKey);
-
-protected:
-  /** Copy constructor
-  */
-  GeniusSDK(const GeniusSDK &) = default;
-
-  std::shared_ptr<sgns::crdt::CrdtDatastore> crdtDatastore_ = nullptr;
-};
+#ifndef __cplusplus
 }
+#endif
+
+GNUS_VISIBILITY_DEFAULT GNUS_EXPORT void GeniusSDKInit();
+GNUS_VISIBILITY_DEFAULT GNUS_EXPORT void GeniusSDKProcess( const ImagePath_t path, const PayAmount_t amount );
 
 #endif //GENIUSSDK_H

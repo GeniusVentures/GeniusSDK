@@ -8,13 +8,10 @@ file(GLOB ALL_SRCS
     "./*.c"
     )
 
-add_library(GeniusSDK SHARED ${ALL_SRCS} ${ALL_HDRS})
+add_library(GeniusSDK STATIC ${ALL_SRCS} ${ALL_HDRS})
 GENERATE_EXPORT_HEADER(GeniusSDK EXPORT_FILE_NAME ${CMAKE_BINARY_DIR}/GeniusSDKExport.h)
 set_target_properties(GeniusSDK PROPERTIES PUBLIC_HEADER "${ALL_HDRS};${CMAKE_BINARY_DIR}/GeniusSDKExport.h")
-target_link_libraries(GeniusSDK
-        sgns::crdt_datastore
-        sgns::sr25519_provider
-        sgns::bip39_provider
-        sgns::pbkdf2_provider
+target_link_libraries(GeniusSDK PUBLIC
+        sgns::sgns_account
         )
 geniussdk_install(GeniusSDK)

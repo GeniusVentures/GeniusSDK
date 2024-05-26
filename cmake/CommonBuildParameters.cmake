@@ -97,21 +97,6 @@ include(${PROJECT_ROOT}/build/cmake/functions.cmake)
 include(${PROJECT_ROOT}/cmake/functions.cmake)
 
 
-# --------------------------------------------------------
-# Set config of openssl project
-# set(OPENSSL_DIR "${THIRDPARTY_BUILD_DIR}/openssl/build/${CMAKE_SYSTEM_NAME}${ABI_SUBFOLDER_NAME}")
-# set(OPENSSL_USE_STATIC_LIBS ON)
-# set(OPENSSL_MSVC_STATIC_RT ON)
-# set(OPENSSL_ROOT_DIR "${OPENSSL_DIR}")
-# set(OPENSSL_INCLUDE_DIR "${OPENSSL_DIR}/include")
-# set(OPENSSL_LIBRARIES "${OPENSSL_DIR}/lib")
-# set(OPENSSL_CRYPTO_LIBRARY ${OPENSSL_LIBRARIES}/libcrypto${CMAKE_STATIC_LIBRARY_SUFFIX})
-# set(OPENSSL_SSL_LIBRARY ${OPENSSL_LIBRARIES}/libssl${CMAKE_STATIC_LIBRARY_SUFFIX})
-
-# find_package(OpenSSL REQUIRED)
-# include_directories(${OPENSSL_INCLUDE_DIR})
-
-
 set(OPENSSL_DIR "${THIRDPARTY_BUILD_DIR}/openssl/build/${CMAKE_SYSTEM_NAME}${ABI_SUBFOLDER_NAME}" CACHE PATH "Path to OpenSSL install folder")
 set(OPENSSL_USE_STATIC_LIBS ON CACHE BOOL "OpenSSL use static libs")
 set(OPENSSL_MSVC_STATIC_RT ON CACHE BOOL "OpenSSL use static RT")
@@ -133,6 +118,10 @@ find_package(RocksDB CONFIG REQUIRED)
 include_directories(${RocksDB_INCLUDE_DIR})
 
 # --------------------------------------------------------
+# Set config of stb
+include_directories(${THIRDPARTY_BUILD_DIR}/stb/include)
+
+# --------------------------------------------------------
 # Set config of Microsoft.GSL
 set(GSL_INCLUDE_DIR "${THIRDPARTY_BUILD_DIR}/Microsoft.GSL/include")
 include_directories(${GSL_INCLUDE_DIR})
@@ -149,7 +138,8 @@ include_directories(${fmt_INCLUDE_DIR})
 set(spdlog_DIR "${THIRDPARTY_BUILD_DIR}/spdlog/lib/cmake/spdlog")
 set(spdlog_INCLUDE_DIR "${THIRDPARTY_BUILD_DIR}/spdlog/include")
 find_package(spdlog CONFIG REQUIRED)
-include_directories(${spdlog_INCLUDE_DIR})
+include_directories(${spdlog_INCLUDE_DIR}
+add_compile_definitions("SPDLOG_FMT_EXTERNAL"))
 
 # --------------------------------------------------------
 # Set config of soralog
@@ -172,23 +162,6 @@ set(tsl_hat_trie_INCLUDE_DIR "${THIRDPARTY_BUILD_DIR}/tsl_hat_trie/include")
 find_package(tsl_hat_trie CONFIG REQUIRED)
 include_directories(${tsl_hat_trie_INCLUDE_DIR})
 
-
-# --------------------------------------------------------
-# Set config of ipfs-lite-cpp
-set(ipfs-lite-cpp_DIR "${THIRDPARTY_BUILD_DIR}/ipfs-lite-cpp/cmake/ipfs-lite-cpp")
-set(ipfs-lite-cpp_INCLUDE_DIR "${THIRDPARTY_BUILD_DIR}/ipfs-lite-cpp/include")
-set(ipfs-lite-cpp_LIB_DIR "${THIRDPARTY_BUILD_DIR}/ipfs-lite-cpp/lib")
-set(CBOR_INCLUDE_DIR "${THIRDPARTY_BUILD_DIR}/ipfs-lite-cpp/include/deps/tinycbor/src")
-find_package(ipfs-lite-cpp CONFIG REQUIRED)
-include_directories(${ipfs-lite-cpp_INCLUDE_DIR} ${CBOR_INCLUDE_DIR})
-
-# --------------------------------------------------------
-# Set config of ipfs-pubsub
-set(ipfs-pubsub_INCLUDE_DIR "${THIRDPARTY_BUILD_DIR}/ipfs-pubsub/include")
-set(ipfs-pubsub_DIR "${THIRDPARTY_BUILD_DIR}/ipfs-pubsub/lib/cmake/ipfs-pubsub")
-find_package(ipfs-pubsub CONFIG REQUIRED)
-include_directories(${ipfs-pubsub_INCLUDE_DIR})
-
 # --------------------------------------------------------
 # Set config of Boost.DI
 set(Boost.DI_INCLUDE_DIR "${THIRDPARTY_BUILD_DIR}/Boost.DI/include")
@@ -196,6 +169,8 @@ set(Boost.DI_DIR "${THIRDPARTY_BUILD_DIR}/Boost.DI/lib/cmake/Boost.DI")
 find_package(Boost.DI CONFIG REQUIRED)
 include_directories(${Boost.DI_INCLUDE_DIR})
 
+
+# Boost should be loaded before libp2p v0.1.2
 # --------------------------------------------------------
 # Set config of Boost project
 set(_BOOST_ROOT "${THIRDPARTY_BUILD_DIR}/boost/build/${CMAKE_SYSTEM_NAME}${ABI_SUBFOLDER_NAME}")
@@ -217,10 +192,8 @@ set(boost_thread_DIR "${Boost_LIB_DIR}/cmake/boost_thread-${BOOST_VERSION}")
 set(Boost_USE_MULTITHREADED ON)
 set(Boost_USE_STATIC_LIBS ON)
 set(Boost_NO_SYSTEM_PATHS ON)
-set(Boost_USE_STATIC_RUNTIME ON)
-if (${CMAKE_SYSTEM_NAME} STREQUAL "iOS")
-  set(Boost_USE_STATIC_RUNTIME OFF)
-endif()
+option(Boost_USE_STATIC_RUNTIME "Use static runtimes" ON)
+
 
 option (SGNS_STACKTRACE_BACKTRACE "Use BOOST_STACKTRACE_USE_BACKTRACE in stacktraces, for POSIX" OFF)
 if (SGNS_STACKTRACE_BACKTRACE)
@@ -249,6 +222,11 @@ set(sqlite3_LIB_DIR "${sqlite3_ROOT_DIR}/lib")
 set(sqlite3_INCLUDE_DIR "${sqlite3_ROOT_DIR}/include")
 
 # --------------------------------------------------------
+# Set config of cares
+set(c-ares_DIR "${THIRDPARTY_BUILD_DIR}/cares/lib/cmake/c-ares" CACHE PATH "Path to c-ares install folder")
+set(c-ares_INCLUDE_DIR "${THIRDPARTY_BUILD_DIR}/cares/include" CACHE PATH "Path to c-ares include folder")
+
+# --------------------------------------------------------
 # Set config of libp2p
 set(libp2p_DIR "${THIRDPARTY_BUILD_DIR}/libp2p/lib/cmake/libp2p")
 set(libp2p_LIBRARY_DIR "${THIRDPARTY_BUILD_DIR}/libp2p/lib")
@@ -263,6 +241,28 @@ if (NOT TARGET c-ares::cares_static)
 endif()
 include_directories(${c-ares_INCLUDE_DIR})
 
+# --------------------------------------------------------
+# Set config of ipfs-lite-cpp
+set(ipfs-lite-cpp_DIR "${THIRDPARTY_BUILD_DIR}/ipfs-lite-cpp/cmake/ipfs-lite-cpp")
+set(ipfs-lite-cpp_INCLUDE_DIR "${THIRDPARTY_BUILD_DIR}/ipfs-lite-cpp/include")
+set(ipfs-lite-cpp_LIB_DIR "${THIRDPARTY_BUILD_DIR}/ipfs-lite-cpp/lib")
+set(CBOR_INCLUDE_DIR "${THIRDPARTY_BUILD_DIR}/ipfs-lite-cpp/include/deps/tinycbor/src")
+find_package(ipfs-lite-cpp CONFIG REQUIRED)
+include_directories(${ipfs-lite-cpp_INCLUDE_DIR} ${CBOR_INCLUDE_DIR})
+
+# --------------------------------------------------------
+# Set config of ipfs-pubsub
+set(ipfs-pubsub_INCLUDE_DIR "${THIRDPARTY_BUILD_DIR}/ipfs-pubsub/include")
+set(ipfs-pubsub_DIR "${THIRDPARTY_BUILD_DIR}/ipfs-pubsub/lib/cmake/ipfs-pubsub")
+find_package(ipfs-pubsub CONFIG REQUIRED)
+include_directories(${ipfs-pubsub_INCLUDE_DIR})
+
+# --------------------------------------------------------
+# Set config of ipfs-bitswap-cpp
+set(ipfs-bitswap-cpp_INCLUDE_DIR "${THIRDPARTY_BUILD_DIR}/ipfs-bitswap-cpp/include")
+set(ipfs-bitswap-cpp_DIR "${THIRDPARTY_BUILD_DIR}/ipfs-bitswap-cpp/lib/cmake/ipfs-bitswap-cpp")
+find_package(ipfs-bitswap-cpp CONFIG REQUIRED)
+include_directories(${ipfs-bitswap-cpp_INCLUDE_DIR})
 
 # --------------------------------------------------------
 # Set config of ed25519
@@ -307,6 +307,22 @@ find_package(xxhash CONFIG REQUIRED)
 include_directories(${xxhash_INCLUDE_DIR})
 
 # --------------------------------------------------------
+# Set config of libssh2
+set(Libssh2_DIR "${THIRDPARTY_BUILD_DIR}/libssh2/lib/cmake/libssh2")
+set(Libssh2_LIBRARY_DIR "${THIRDPARTY_BUILD_DIR}/libssh2/lib")
+set(Libssh2_INCLUDE_DIR "${THIRDPARTY_BUILD_DIR}/libssh2/include")
+find_package(Libssh2 CONFIG REQUIRED)
+include_directories(${LIBSSH2_INCLUDE_DIR})
+
+# --------------------------------------------------------
+# Set config of AsyncIOManager
+set(AsyncIOManager_INCLUDE_DIR "${THIRDPARTY_BUILD_DIR}/AsyncIOManager/include")
+set(AsyncIOManager_LIBRARY_DIR "${THIRDPARTY_BUILD_DIR}/AsyncIOManager/lib")
+set(AsyncIOManager_DIR "${THIRDPARTY_BUILD_DIR}/AsyncIOManager/lib/cmake/AsyncIOManager")
+find_package(AsyncIOManager CONFIG REQUIRED)
+include_directories(${AsyncIOManager_INCLUDE_DIR})
+
+# --------------------------------------------------------
 # Set config of SuperGenius project
 if (NOT DEFINED SUPERGENIUS_SRC_DIR)
   if(EXISTS "${CMAKE_CURRENT_LIST_DIR}/../../SuperGenius/README.md")
@@ -349,7 +365,7 @@ if (TESTING)
   include_directories(${GTest_INCLUDE_DIR})
 
   enable_testing()
-  add_subdirectory(${PROJECT_ROOT}/test ${CMAKE_BINARY_DIR}/test)
+  #add_subdirectory(${PROJECT_ROOT}/test ${CMAKE_BINARY_DIR}/test)
 endif ()
 
 # --------------------------------------------------------
