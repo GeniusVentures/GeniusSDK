@@ -1,6 +1,6 @@
 # BOOST VERSION TO USE
 set(BOOST_MAJOR_VERSION "1" CACHE STRING "Boost Major Version")
-set(BOOST_MINOR_VERSION "80" CACHE STRING "Boost Minor Version")
+set(BOOST_MINOR_VERSION "85" CACHE STRING "Boost Minor Version")
 set(BOOST_PATCH_VERSION "0" CACHE STRING "Boost Patch Version")
 # convenience settings
 set(BOOST_VERSION "${BOOST_MAJOR_VERSION}.${BOOST_MINOR_VERSION}.${BOOST_PATCH_VERSION}")
@@ -323,6 +323,15 @@ find_package(AsyncIOManager CONFIG REQUIRED)
 include_directories(${AsyncIOManager_INCLUDE_DIR})
 
 # --------------------------------------------------------
+# Set config of gnus_upnp
+set(gnus_upnp_INCLUDE_DIR "${_THIRDPARTY_BUILD_DIR}/gnus_upnp/include")
+set(gnus_upnp_LIBRARY_DIR "${_THIRDPARTY_BUILD_DIR}/gnus_upnp/lib")
+set(gnus_upnp_DIR "${_THIRDPARTY_BUILD_DIR}/gnus_upnp/lib/cmake/gnus_upnp")
+find_package(gnus_upnp CONFIG REQUIRED)
+include_directories(${gnus_upnp_INCLUDE_DIR})
+
+
+# --------------------------------------------------------
 # Set config of SuperGenius project
 if (NOT DEFINED SUPERGENIUS_SRC_DIR)
   if(EXISTS "${CMAKE_CURRENT_LIST_DIR}/../../SuperGenius/README.md")
@@ -335,8 +344,11 @@ if (NOT DEFINED SUPERGENIUS_SRC_DIR)
   endif()
 endif()
 
-#set(SuperGenius_DIR "${SUPERGENIUS_SRC_DIR}/build/${CMAKE_SYSTEM_NAME}/${CMAKE_BUILD_TYPE}/SuperGenius/lib/cmake/SuperGenius/")
-set(SuperGenius_DIR "${SUPERGENIUS_SRC_DIR}/.build/SuperGenius/lib/cmake/SuperGenius/")
+set(SUPERGENIUS_BUILD_DIR "${SUPERGENIUS_SRC_DIR}/build/${CMAKE_SYSTEM_NAME}/${CMAKE_BUILD_TYPE}")
+if (DEFINED ANDROID_ABI)
+  set(SUPERGENIUS_BUILD_DIR "${SUPERGENIUS_BUILD_DIR}/${ANDROID_ABI}")
+endif()
+set(SuperGenius_DIR "${SUPERGENIUS_BUILD_DIR}/SuperGenius/lib/cmake/SuperGenius/")
 
 
 print("SuperGenius_DIR: ${SuperGenius_DIR}")
