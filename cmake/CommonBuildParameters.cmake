@@ -2,27 +2,36 @@
 set(BOOST_MAJOR_VERSION "1" CACHE STRING "Boost Major Version")
 set(BOOST_MINOR_VERSION "85" CACHE STRING "Boost Minor Version")
 set(BOOST_PATCH_VERSION "0" CACHE STRING "Boost Patch Version")
+
 # convenience settings
 set(BOOST_VERSION "${BOOST_MAJOR_VERSION}.${BOOST_MINOR_VERSION}.${BOOST_PATCH_VERSION}")
 set(BOOST_VERSION_3U "${BOOST_MAJOR_VERSION}_${BOOST_MINOR_VERSION}_${BOOST_PATCH_VERSION}")
 set(BOOST_VERSION_2U "${BOOST_MAJOR_VERSION}_${BOOST_MINOR_VERSION}")
 
+set(SHARED_LIB_BUILD OFF CACHE BOOL "Shared library option for GeniusSDK")
+
+if(SHARED_LIB_BUILD)
+  set(LIB_TYPE SHARED)
+else()
+  set(LIB_TYPE STATIC)
+endif()
+
 # --------------------------------------------------------
 # define third party directory
-#if (NOT DEFINED THIRDPARTY_DIR)
-#  print("Setting default third party directory")
-#  set(THIRDPARTY_DIR "${CMAKE_CURRENT_LIST_DIR}/../../thirdparty")
-#  ## get absolute path
-#  cmake_path(SET THIRDPARTY_DIR NORMALIZE "${THIRDPARTY_DIR}")
-#endif()
+# if (NOT DEFINED THIRDPARTY_DIR)
+# print("Setting default third party directory")
+# set(THIRDPARTY_DIR "${CMAKE_CURRENT_LIST_DIR}/../../thirdparty")
+# ## get absolute path
+# cmake_path(SET THIRDPARTY_DIR NORMALIZE "${THIRDPARTY_DIR}")
+# endif()
 #
-#if (NOT DEFINED THIRDPARTY_BUILD_DIR)
-#  print("Setting third party build directory default")
-#  set(THIRDPARTY_BUILD_DIR "${THIRDPARTY_DIR}/build/${CMAKE_SYSTEM_NAME}/${CMAKE_BUILD_TYPE}")
-#endif()
+# if (NOT DEFINED THIRDPARTY_BUILD_DIR)
+# print("Setting third party build directory default")
+# set(THIRDPARTY_BUILD_DIR "${THIRDPARTY_DIR}/build/${CMAKE_SYSTEM_NAME}/${CMAKE_BUILD_TYPE}")
+# endif()
 #
-#print("THIRDPARTY BUILD DIR: ${THIRDPARTY_BUILD_DIR}")
-#print("THIRDPARTY SRC DIR: ${THIRDPARTY_DIR}")
+# print("THIRDPARTY BUILD DIR: ${THIRDPARTY_BUILD_DIR}")
+# print("THIRDPARTY SRC DIR: ${THIRDPARTY_DIR}")
 
 # --------------------------------------------------------
 # Set config of GTest
@@ -49,6 +58,7 @@ include_directories(${soralog_INCLUDE_DIR})
 # Set config of cares
 set(c-ares_DIR "${THIRDPARTY_BUILD_DIR}/cares/lib/cmake/c-ares")
 set(c-ares_INCLUDE_DIR "${THIRDPARTY_BUILD_DIR}/cares/include")
+
 # find_package(c-ares CONFIG REQUIRED)
 # include_directories(${c-ares_INCLUDE_DIR})
 
@@ -61,51 +71,56 @@ include_directories(${yaml-cpp_INCLUDE_DIR})
 
 # absl
 if(NOT DEFINED absl_DIR)
-    set(absl_DIR "${_THIRDPARTY_BUILD_DIR}/grpc/lib/cmake/absl")
+  set(absl_DIR "${_THIRDPARTY_BUILD_DIR}/grpc/lib/cmake/absl")
 endif()
 
 # utf8_range
 if(NOT DEFINED utf8_range_DIR)
-    set(utf8_range_DIR "${_THIRDPARTY_BUILD_DIR}/grpc/lib/cmake/utf8_range")
+  set(utf8_range_DIR "${_THIRDPARTY_BUILD_DIR}/grpc/lib/cmake/utf8_range")
 endif()
 
 # --------------------------------------------------------
 # Set config of protobuf project
-if (NOT DEFINED Protobuf_DIR)
-    set(Protobuf_DIR "${_THIRDPARTY_BUILD_DIR}/grpc/lib/cmake/protobuf")
-endif()
-if (NOT DEFINED grpc_INCLUDE_DIR)
-    set(grpc_INCLUDE_DIR "${_THIRDPARTY_BUILD_DIR}/grpc/include")
-endif()
-if (NOT DEFINED Protobuf_INCLUDE_DIR)
-    set(Protobuf_INCLUDE_DIR "${grpc_INCLUDE_DIR}/google/protobuf")
+if(NOT DEFINED Protobuf_DIR)
+  set(Protobuf_DIR "${_THIRDPARTY_BUILD_DIR}/grpc/lib/cmake/protobuf")
 endif()
 
-find_package(Protobuf CONFIG REQUIRED )
+if(NOT DEFINED grpc_INCLUDE_DIR)
+  set(grpc_INCLUDE_DIR "${_THIRDPARTY_BUILD_DIR}/grpc/include")
+endif()
 
-if (NOT DEFINED PROTOC_EXECUTABLE)
+if(NOT DEFINED Protobuf_INCLUDE_DIR)
+  set(Protobuf_INCLUDE_DIR "${grpc_INCLUDE_DIR}/google/protobuf")
+endif()
+
+find_package(Protobuf CONFIG REQUIRED)
+
+if(NOT DEFINED PROTOC_EXECUTABLE)
   set(PROTOC_EXECUTABLE "${THIRDPARTY_BUILD_DIR}/grpc/bin/protoc${CMAKE_EXECUTABLE_SUFFIX}")
 endif()
 
 set(Protobuf_PROTOC_EXECUTABLE ${PROTOC_EXECUTABLE} CACHE PATH "Initial cache" FORCE)
+
 if(NOT TARGET protobuf::protoc)
   add_executable(protobuf::protoc IMPORTED)
 endif()
+
 if(EXISTS "${Protobuf_PROTOC_EXECUTABLE}")
   set_target_properties(protobuf::protoc PROPERTIES
-          IMPORTED_LOCATION ${Protobuf_PROTOC_EXECUTABLE})
+    IMPORTED_LOCATION ${Protobuf_PROTOC_EXECUTABLE})
 endif()
 
 # protoc definition #####################################################################################
 get_target_property(PROTOC_LOCATION protobuf::protoc IMPORTED_LOCATION)
 print("PROTOC_LOCATION: ${PROTOC_LOCATION}")
-if ( Protobuf_FOUND )
-  message( STATUS "Protobuf version : ${Protobuf_VERSION}" )
-  message( STATUS "Protobuf compiler : ${Protobuf_PROTOC_EXECUTABLE}")
+
+if(Protobuf_FOUND)
+  message(STATUS "Protobuf version : ${Protobuf_VERSION}")
+  message(STATUS "Protobuf compiler : ${Protobuf_PROTOC_EXECUTABLE}")
 endif()
+
 include(${PROJECT_ROOT}/build/cmake/functions.cmake)
 include(${PROJECT_ROOT}/cmake/functions.cmake)
-
 
 set(OPENSSL_DIR "${THIRDPARTY_BUILD_DIR}/openssl/build/${CMAKE_SYSTEM_NAME}${ABI_SUBFOLDER_NAME}" CACHE PATH "Path to OpenSSL install folder")
 set(OPENSSL_USE_STATIC_LIBS ON CACHE BOOL "OpenSSL use static libs")
@@ -149,7 +164,7 @@ set(spdlog_DIR "${THIRDPARTY_BUILD_DIR}/spdlog/lib/cmake/spdlog")
 set(spdlog_INCLUDE_DIR "${THIRDPARTY_BUILD_DIR}/spdlog/include")
 find_package(spdlog CONFIG REQUIRED)
 include_directories(${spdlog_INCLUDE_DIR}
-add_compile_definitions("SPDLOG_FMT_EXTERNAL"))
+  add_compile_definitions("SPDLOG_FMT_EXTERNAL"))
 
 # --------------------------------------------------------
 # Set config of soralog
@@ -179,7 +194,6 @@ set(Boost.DI_DIR "${THIRDPARTY_BUILD_DIR}/Boost.DI/lib/cmake/Boost.DI")
 find_package(Boost.DI CONFIG REQUIRED)
 include_directories(${Boost.DI_INCLUDE_DIR})
 
-
 # Boost should be loaded before libp2p v0.1.2
 # --------------------------------------------------------
 # Set config of Boost project
@@ -204,14 +218,15 @@ set(Boost_USE_STATIC_LIBS ON)
 set(Boost_NO_SYSTEM_PATHS ON)
 option(Boost_USE_STATIC_RUNTIME "Use static runtimes" ON)
 
+option(SGNS_STACKTRACE_BACKTRACE "Use BOOST_STACKTRACE_USE_BACKTRACE in stacktraces, for POSIX" OFF)
 
-option (SGNS_STACKTRACE_BACKTRACE "Use BOOST_STACKTRACE_USE_BACKTRACE in stacktraces, for POSIX" OFF)
-if (SGNS_STACKTRACE_BACKTRACE)
+if(SGNS_STACKTRACE_BACKTRACE)
   add_definitions(-DSGNS_STACKTRACE_BACKTRACE=1)
-  if (BACKTRACE_INCLUDE)
+
+  if(BACKTRACE_INCLUDE)
     add_definitions(-DBOOST_STACKTRACE_BACKTRACE_INCLUDE_FILE=${BACKTRACE_INCLUDE})
   endif()
-endif ()
+endif()
 
 # header only libraries must not be added here
 find_package(Boost REQUIRED COMPONENTS date_time filesystem random regex system thread log log_setup program_options)
@@ -240,15 +255,16 @@ set(c-ares_INCLUDE_DIR "${THIRDPARTY_BUILD_DIR}/cares/include" CACHE PATH "Path 
 # Set config of libp2p
 set(libp2p_DIR "${THIRDPARTY_BUILD_DIR}/libp2p/lib/cmake/libp2p")
 set(libp2p_LIBRARY_DIR "${THIRDPARTY_BUILD_DIR}/libp2p/lib")
-set(libp2p_INCLUDE_DIR    "${THIRDPARTY_BUILD_DIR}/libp2p/include")
+set(libp2p_INCLUDE_DIR "${THIRDPARTY_BUILD_DIR}/libp2p/include")
 find_package(libp2p CONFIG REQUIRED)
 include_directories(${libp2p_INCLUDE_DIR})
 
 # --------------------------------------------------------
 # Find and include cares if libp2p have not included it
-if (NOT TARGET c-ares::cares_static)
+if(NOT TARGET c-ares::cares_static)
   find_package(c-ares CONFIG REQUIRED)
 endif()
+
 include_directories(${c-ares_INCLUDE_DIR})
 
 # --------------------------------------------------------
@@ -340,26 +356,27 @@ set(gnus_upnp_DIR "${_THIRDPARTY_BUILD_DIR}/gnus_upnp/lib/cmake/gnus_upnp")
 find_package(gnus_upnp CONFIG REQUIRED)
 include_directories(${gnus_upnp_INCLUDE_DIR})
 
-
 # --------------------------------------------------------
 # Set config of SuperGenius project
-if (NOT DEFINED SUPERGENIUS_SRC_DIR)
+if(NOT DEFINED SUPERGENIUS_SRC_DIR)
   if(EXISTS "${CMAKE_CURRENT_LIST_DIR}/../../SuperGenius/README.md")
     print("Setting default SuperGenius directory")
     set(SUPERGENIUS_SRC_DIR "${CMAKE_CURRENT_LIST_DIR}/../../SuperGenius" CACHE STRING "Default SuperGenius Library")
-    ## get absolute path
+
+    # # get absolute path
     cmake_path(SET SUPERGENIUS_SRC_DIR NORMALIZE "${SUPERGENIUS_SRC_DIR}")
   else()
-    message( FATAL_ERROR "Cannot find SuperGenius directory required to build" )
+    message(FATAL_ERROR "Cannot find SuperGenius directory required to build")
   endif()
 endif()
 
 set(SUPERGENIUS_BUILD_DIR "${SUPERGENIUS_SRC_DIR}/build/${CMAKE_SYSTEM_NAME}/${CMAKE_BUILD_TYPE}")
-if (DEFINED ANDROID_ABI)
+
+if(DEFINED ANDROID_ABI)
   set(SUPERGENIUS_BUILD_DIR "${SUPERGENIUS_BUILD_DIR}/${ANDROID_ABI}")
 endif()
-set(SuperGenius_DIR "${SUPERGENIUS_BUILD_DIR}/SuperGenius/lib/cmake/SuperGenius/")
 
+set(SuperGenius_DIR "${SUPERGENIUS_BUILD_DIR}/SuperGenius/lib/cmake/SuperGenius/")
 
 print("SuperGenius_DIR: ${SuperGenius_DIR}")
 
@@ -368,9 +385,9 @@ include_directories(${SuperGenius_INCLUDE_DIR})
 
 # --------------------------------------------------------
 include_directories(
-        ${PROJECT_ROOT}/include
-        ${PROJECT_ROOT}/src
-        ${CMAKE_BINARY_DIR}
+  ${PROJECT_ROOT}/include
+  ${PROJECT_ROOT}/src
+  ${CMAKE_BINARY_DIR}
 )
 
 # --------------------------------------------------------
@@ -381,25 +398,24 @@ option(BUILD_EXAMPLES "Build examples" OFF)
 add_subdirectory(${PROJECT_ROOT}/src ${CMAKE_BINARY_DIR}/src)
 
 # --------------------------------------------------------
-if (TESTING)
+if(TESTING)
   # Set config of GTest project
   find_package(GTest CONFIG REQUIRED)
   include_directories(${GTest_INCLUDE_DIR})
 
   enable_testing()
-  #add_subdirectory(${PROJECT_ROOT}/test ${CMAKE_BINARY_DIR}/test)
-endif ()
+
+  # add_subdirectory(${PROJECT_ROOT}/test ${CMAKE_BINARY_DIR}/test)
+endif()
 
 # --------------------------------------------------------
 # Build examples
-
-if (BUILD_EXAMPLES)
-    add_subdirectory(${PROJECT_ROOT}/example ${CMAKE_BINARY_DIR}/example)
-endif ()
+if(BUILD_EXAMPLES)
+  add_subdirectory(${PROJECT_ROOT}/example ${CMAKE_BINARY_DIR}/example)
+endif()
 
 # --------------------------------------------------------
 # Install targets
-
 install(
   EXPORT GeniusSDKTargets
   DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/GeniusSDK
