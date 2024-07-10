@@ -59,6 +59,16 @@ set(yaml-cpp_INCLUDE_DIR "${THIRDPARTY_BUILD_DIR}/yaml-cpp/include")
 find_package(yaml-cpp CONFIG REQUIRED)
 include_directories(${yaml-cpp_INCLUDE_DIR})
 
+# absl
+if(NOT DEFINED absl_DIR)
+    set(absl_DIR "${_THIRDPARTY_BUILD_DIR}/grpc/lib/cmake/absl")
+endif()
+
+# utf8_range
+if(NOT DEFINED utf8_range_DIR)
+    set(utf8_range_DIR "${_THIRDPARTY_BUILD_DIR}/grpc/lib/cmake/utf8_range")
+endif()
+
 # --------------------------------------------------------
 # Set config of protobuf project
 if (NOT DEFINED Protobuf_DIR)
