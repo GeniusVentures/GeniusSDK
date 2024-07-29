@@ -8,7 +8,6 @@
 #define _GENIUSSDK_H
 
 #include <memory>
-#include "account/GeniusNode.hpp"
 
 #ifndef GNUS_EXPORT
 #define GNUS_EXPORT extern "C"

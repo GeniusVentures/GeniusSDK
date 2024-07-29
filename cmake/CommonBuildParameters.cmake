@@ -377,9 +377,11 @@ if(DEFINED ANDROID_ABI)
 endif()
 
 set(SuperGenius_DIR "${SUPERGENIUS_BUILD_DIR}/SuperGenius/lib/cmake/SuperGenius/")
+set(GeniusKDF_DIR "${SUPERGENIUS_BUILD_DIR}/SuperGenius/lib/cmake/GeniusKDF/")
 
 print("SuperGenius_DIR: ${SuperGenius_DIR}")
 
+find_package(GeniusKDF CONFIG REQUIRED)
 find_package(SuperGenius CONFIG REQUIRED)
 include_directories(${SuperGenius_INCLUDE_DIR})
 
