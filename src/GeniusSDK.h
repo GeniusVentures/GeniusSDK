@@ -31,7 +31,7 @@ extern "C"
 }
 #endif
 
-GNUS_VISIBILITY_DEFAULT GNUS_EXPORT void GeniusSDKInit();
-GNUS_VISIBILITY_DEFAULT GNUS_EXPORT void GeniusSDKProcess( const ImagePath_t path, const PayAmount_t amount );
+GNUS_VISIBILITY_DEFAULT GNUS_EXPORT const char *GeniusSDKInit( const char *base_path );
+GNUS_VISIBILITY_DEFAULT GNUS_EXPORT void        GeniusSDKProcess( const ImagePath_t path, const PayAmount_t amount );
 
 #endif //GENIUSSDK_H

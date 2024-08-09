@@ -9,6 +9,8 @@ set(BOOST_VERSION_3U "${BOOST_MAJOR_VERSION}_${BOOST_MINOR_VERSION}_${BOOST_PATC
 set(BOOST_VERSION_2U "${BOOST_MAJOR_VERSION}_${BOOST_MINOR_VERSION}")
 
 set(SHARED_LIB_BUILD OFF CACHE BOOL "Shared library option for GeniusSDK")
+find_package(Vulkan REQUIRED)
+
 
 if(SHARED_LIB_BUILD)
   set(LIB_TYPE SHARED)
@@ -269,7 +271,7 @@ include_directories(${c-ares_INCLUDE_DIR})
 
 # --------------------------------------------------------
 # Set config of ipfs-lite-cpp
-set(ipfs-lite-cpp_DIR "${THIRDPARTY_BUILD_DIR}/ipfs-lite-cpp/cmake/ipfs-lite-cpp")
+set(ipfs-lite-cpp_DIR "${THIRDPARTY_BUILD_DIR}/ipfs-lite-cpp/lib/cmake/ipfs-lite-cpp")
 set(ipfs-lite-cpp_INCLUDE_DIR "${THIRDPARTY_BUILD_DIR}/ipfs-lite-cpp/include")
 set(ipfs-lite-cpp_LIB_DIR "${THIRDPARTY_BUILD_DIR}/ipfs-lite-cpp/lib")
 set(CBOR_INCLUDE_DIR "${THIRDPARTY_BUILD_DIR}/ipfs-lite-cpp/include/deps/tinycbor/src")
