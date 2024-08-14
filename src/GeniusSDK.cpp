@@ -16,6 +16,7 @@
 #include <boost/exception/all.hpp>
 #include <string>
 #include <cstring>
+#include <fstream>
 
 class JsonError : public boost::exception
 {
@@ -83,7 +84,7 @@ std::shared_ptr<sgns::GeniusNode> GeniusNodeInstance;
 GNUS_VISIBILITY_DEFAULT GNUS_EXPORT const char *GeniusSDKInit( const char *base_path )
 {
     std::string path = "";
-    if ( base_path )
+    if ( base_path != nullptr )
     {
         path.assign( base_path );
     }
