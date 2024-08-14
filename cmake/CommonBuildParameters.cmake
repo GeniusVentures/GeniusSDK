@@ -11,11 +11,10 @@ set(BOOST_VERSION_2U "${BOOST_MAJOR_VERSION}_${BOOST_MINOR_VERSION}")
 set(SHARED_LIB_BUILD OFF CACHE BOOL "Shared library option for GeniusSDK")
 find_package(Vulkan REQUIRED)
 
-
 if(SHARED_LIB_BUILD)
-  set(LIB_TYPE SHARED)
+    set(LIB_TYPE SHARED)
 else()
-  set(LIB_TYPE STATIC)
+    set(LIB_TYPE STATIC)
 endif()
 
 # --------------------------------------------------------
@@ -73,43 +72,43 @@ include_directories(${yaml-cpp_INCLUDE_DIR})
 
 # absl
 if(NOT DEFINED absl_DIR)
-  set(absl_DIR "${_THIRDPARTY_BUILD_DIR}/grpc/lib/cmake/absl")
+    set(absl_DIR "${_THIRDPARTY_BUILD_DIR}/grpc/lib/cmake/absl")
 endif()
 
 # utf8_range
 if(NOT DEFINED utf8_range_DIR)
-  set(utf8_range_DIR "${_THIRDPARTY_BUILD_DIR}/grpc/lib/cmake/utf8_range")
+    set(utf8_range_DIR "${_THIRDPARTY_BUILD_DIR}/grpc/lib/cmake/utf8_range")
 endif()
 
 # --------------------------------------------------------
 # Set config of protobuf project
 if(NOT DEFINED Protobuf_DIR)
-  set(Protobuf_DIR "${_THIRDPARTY_BUILD_DIR}/grpc/lib/cmake/protobuf")
+    set(Protobuf_DIR "${_THIRDPARTY_BUILD_DIR}/grpc/lib/cmake/protobuf")
 endif()
 
 if(NOT DEFINED grpc_INCLUDE_DIR)
-  set(grpc_INCLUDE_DIR "${_THIRDPARTY_BUILD_DIR}/grpc/include")
+    set(grpc_INCLUDE_DIR "${_THIRDPARTY_BUILD_DIR}/grpc/include")
 endif()
 
 if(NOT DEFINED Protobuf_INCLUDE_DIR)
-  set(Protobuf_INCLUDE_DIR "${grpc_INCLUDE_DIR}/google/protobuf")
+    set(Protobuf_INCLUDE_DIR "${grpc_INCLUDE_DIR}/google/protobuf")
 endif()
 
 find_package(Protobuf CONFIG REQUIRED)
 
 if(NOT DEFINED PROTOC_EXECUTABLE)
-  set(PROTOC_EXECUTABLE "${THIRDPARTY_BUILD_DIR}/grpc/bin/protoc${CMAKE_EXECUTABLE_SUFFIX}")
+    set(PROTOC_EXECUTABLE "${THIRDPARTY_BUILD_DIR}/grpc/bin/protoc${CMAKE_EXECUTABLE_SUFFIX}")
 endif()
 
 set(Protobuf_PROTOC_EXECUTABLE ${PROTOC_EXECUTABLE} CACHE PATH "Initial cache" FORCE)
 
 if(NOT TARGET protobuf::protoc)
-  add_executable(protobuf::protoc IMPORTED)
+    add_executable(protobuf::protoc IMPORTED)
 endif()
 
 if(EXISTS "${Protobuf_PROTOC_EXECUTABLE}")
-  set_target_properties(protobuf::protoc PROPERTIES
-    IMPORTED_LOCATION ${Protobuf_PROTOC_EXECUTABLE})
+    set_target_properties(protobuf::protoc PROPERTIES
+        IMPORTED_LOCATION ${Protobuf_PROTOC_EXECUTABLE})
 endif()
 
 # protoc definition #####################################################################################
@@ -117,8 +116,8 @@ get_target_property(PROTOC_LOCATION protobuf::protoc IMPORTED_LOCATION)
 print("PROTOC_LOCATION: ${PROTOC_LOCATION}")
 
 if(Protobuf_FOUND)
-  message(STATUS "Protobuf version : ${Protobuf_VERSION}")
-  message(STATUS "Protobuf compiler : ${Protobuf_PROTOC_EXECUTABLE}")
+    message(STATUS "Protobuf version : ${Protobuf_VERSION}")
+    message(STATUS "Protobuf compiler : ${Protobuf_PROTOC_EXECUTABLE}")
 endif()
 
 include(${PROJECT_ROOT}/build/cmake/functions.cmake)
@@ -166,7 +165,7 @@ set(spdlog_DIR "${THIRDPARTY_BUILD_DIR}/spdlog/lib/cmake/spdlog")
 set(spdlog_INCLUDE_DIR "${THIRDPARTY_BUILD_DIR}/spdlog/include")
 find_package(spdlog CONFIG REQUIRED)
 include_directories(${spdlog_INCLUDE_DIR}
-  add_compile_definitions("SPDLOG_FMT_EXTERNAL"))
+    add_compile_definitions("SPDLOG_FMT_EXTERNAL"))
 
 # --------------------------------------------------------
 # Set config of soralog
@@ -223,11 +222,11 @@ option(Boost_USE_STATIC_RUNTIME "Use static runtimes" ON)
 option(SGNS_STACKTRACE_BACKTRACE "Use BOOST_STACKTRACE_USE_BACKTRACE in stacktraces, for POSIX" OFF)
 
 if(SGNS_STACKTRACE_BACKTRACE)
-  add_definitions(-DSGNS_STACKTRACE_BACKTRACE=1)
+    add_definitions(-DSGNS_STACKTRACE_BACKTRACE=1)
 
-  if(BACKTRACE_INCLUDE)
-    add_definitions(-DBOOST_STACKTRACE_BACKTRACE_INCLUDE_FILE=${BACKTRACE_INCLUDE})
-  endif()
+    if(BACKTRACE_INCLUDE)
+        add_definitions(-DBOOST_STACKTRACE_BACKTRACE_INCLUDE_FILE=${BACKTRACE_INCLUDE})
+    endif()
 endif()
 
 # header only libraries must not be added here
@@ -264,7 +263,7 @@ include_directories(${libp2p_INCLUDE_DIR})
 # --------------------------------------------------------
 # Find and include cares if libp2p have not included it
 if(NOT TARGET c-ares::cares_static)
-  find_package(c-ares CONFIG REQUIRED)
+    find_package(c-ares CONFIG REQUIRED)
 endif()
 
 include_directories(${c-ares_INCLUDE_DIR})
@@ -361,21 +360,21 @@ include_directories(${gnus_upnp_INCLUDE_DIR})
 # --------------------------------------------------------
 # Set config of SuperGenius project
 if(NOT DEFINED SUPERGENIUS_SRC_DIR)
-  if(EXISTS "${CMAKE_CURRENT_LIST_DIR}/../../SuperGenius/README.md")
-    print("Setting default SuperGenius directory")
-    set(SUPERGENIUS_SRC_DIR "${CMAKE_CURRENT_LIST_DIR}/../../SuperGenius" CACHE STRING "Default SuperGenius Library")
+    if(EXISTS "${CMAKE_CURRENT_LIST_DIR}/../../SuperGenius/README.md" OR EXISTS "${CMAKE_CURRENT_LIST_DIR}/../../SuperGenius/Readme.md")
+        print("Setting default SuperGenius directory")
+        set(SUPERGENIUS_SRC_DIR "${CMAKE_CURRENT_LIST_DIR}/../../SuperGenius" CACHE STRING "Default SuperGenius Library")
 
-    # # get absolute path
-    cmake_path(SET SUPERGENIUS_SRC_DIR NORMALIZE "${SUPERGENIUS_SRC_DIR}")
-  else()
-    message(FATAL_ERROR "Cannot find SuperGenius directory required to build")
-  endif()
+        # # get absolute path
+        cmake_path(SET SUPERGENIUS_SRC_DIR NORMALIZE "${SUPERGENIUS_SRC_DIR}")
+    else()
+        message(FATAL_ERROR "Cannot find SuperGenius directory required to build")
+    endif()
 endif()
 
 set(SUPERGENIUS_BUILD_DIR "${SUPERGENIUS_SRC_DIR}/build/${CMAKE_SYSTEM_NAME}/${CMAKE_BUILD_TYPE}")
 
 if(DEFINED ANDROID_ABI)
-  set(SUPERGENIUS_BUILD_DIR "${SUPERGENIUS_BUILD_DIR}/${ANDROID_ABI}")
+    set(SUPERGENIUS_BUILD_DIR "${SUPERGENIUS_BUILD_DIR}/${ANDROID_ABI}")
 endif()
 
 set(SuperGenius_DIR "${SUPERGENIUS_BUILD_DIR}/SuperGenius/lib/cmake/SuperGenius/")
@@ -389,9 +388,9 @@ include_directories(${SuperGenius_INCLUDE_DIR})
 
 # --------------------------------------------------------
 include_directories(
-  ${PROJECT_ROOT}/include
-  ${PROJECT_ROOT}/src
-  ${CMAKE_BINARY_DIR}
+    ${PROJECT_ROOT}/include
+    ${PROJECT_ROOT}/src
+    ${CMAKE_BINARY_DIR}
 )
 
 # --------------------------------------------------------
@@ -403,51 +402,51 @@ add_subdirectory(${PROJECT_ROOT}/src ${CMAKE_BINARY_DIR}/src)
 
 # --------------------------------------------------------
 if(TESTING)
-  # Set config of GTest project
-  find_package(GTest CONFIG REQUIRED)
-  include_directories(${GTest_INCLUDE_DIR})
+    # Set config of GTest project
+    find_package(GTest CONFIG REQUIRED)
+    include_directories(${GTest_INCLUDE_DIR})
 
-  enable_testing()
+    enable_testing()
 
-  # add_subdirectory(${PROJECT_ROOT}/test ${CMAKE_BINARY_DIR}/test)
+    # add_subdirectory(${PROJECT_ROOT}/test ${CMAKE_BINARY_DIR}/test)
 endif()
 
 # --------------------------------------------------------
 # Build examples
 if(BUILD_EXAMPLES)
-  add_subdirectory(${PROJECT_ROOT}/example ${CMAKE_BINARY_DIR}/example)
+    add_subdirectory(${PROJECT_ROOT}/example ${CMAKE_BINARY_DIR}/example)
 endif()
 
 # --------------------------------------------------------
 # Install targets
 install(
-  EXPORT GeniusSDKTargets
-  DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/GeniusSDK
-  NAMESPACE sgns::
+    EXPORT GeniusSDKTargets
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/GeniusSDK
+    NAMESPACE sgns::
 )
 
 # generate the config file that is includes the exports
 configure_package_config_file(${PROJECT_ROOT}/cmake/config.cmake.in
-  "${CMAKE_CURRENT_BINARY_DIR}/GeniusSDKConfig.cmake"
-  INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/GeniusSDK
-  NO_SET_AND_CHECK_MACRO
-  NO_CHECK_REQUIRED_COMPONENTS_MACRO
+    "${CMAKE_CURRENT_BINARY_DIR}/GeniusSDKConfig.cmake"
+    INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/GeniusSDK
+    NO_SET_AND_CHECK_MACRO
+    NO_CHECK_REQUIRED_COMPONENTS_MACRO
 )
 
 # generate the version file for the config file
 write_basic_package_version_file(
-  "${CMAKE_CURRENT_BINARY_DIR}/GeniusSDKConfigVersion.cmake"
-  VERSION "${CPACK_PACKAGE_VERSION_MAJOR}.${CPACK_PACKAGE_VERSION_MINOR}.${CPACK_PACKAGE_VERSION_PATCH}"
-  COMPATIBILITY AnyNewerVersion
+    "${CMAKE_CURRENT_BINARY_DIR}/GeniusSDKConfigVersion.cmake"
+    VERSION "${CPACK_PACKAGE_VERSION_MAJOR}.${CPACK_PACKAGE_VERSION_MINOR}.${CPACK_PACKAGE_VERSION_PATCH}"
+    COMPATIBILITY AnyNewerVersion
 )
 
 # install the configuration file
 install(FILES
-  ${CMAKE_CURRENT_BINARY_DIR}/GeniusSDKConfig.cmake
-  DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/GeniusSDK
+    ${CMAKE_CURRENT_BINARY_DIR}/GeniusSDKConfig.cmake
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/GeniusSDK
 )
 
 install(FILES
-  ${CMAKE_CURRENT_BINARY_DIR}/GeniusSDKConfigVersion.cmake
-  DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/GeniusSDK
+    ${CMAKE_CURRENT_BINARY_DIR}/GeniusSDKConfigVersion.cmake
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/GeniusSDK
 )
