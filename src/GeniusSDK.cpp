@@ -81,7 +81,7 @@ static outcome::result<DevConfig_st, JsonError> ReadDevConfigFromJSON( const std
 
 std::shared_ptr<sgns::GeniusNode> GeniusNodeInstance;
 
-GNUS_VISIBILITY_DEFAULT GNUS_EXPORT const char *GeniusSDKInit( const char *base_path )
+const char *GeniusSDKInit( const char *base_path )
 {
     std::string path = "";
     if ( base_path != nullptr )
@@ -104,7 +104,7 @@ GNUS_VISIBILITY_DEFAULT GNUS_EXPORT const char *GeniusSDKInit( const char *base_
     return ret_val.c_str();
 }
 
-GNUS_VISIBILITY_DEFAULT GNUS_EXPORT void GeniusSDKProcess( const ImagePath_t path, const PayAmount_t amount )
+void GeniusSDKProcess( const ImagePath_t path, const PayAmount_t amount )
 {
     GeniusNodeInstance->ProcessImage( std::string{ path }, amount );
 }
