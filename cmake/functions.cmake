@@ -54,7 +54,7 @@ function(print)
   message(STATUS "[${CMAKE_PROJECT_NAME}] ${ARGV}")
 endfunction()
 
-### geniussdk_install should be called right after add_library(target)
+# geniussdk_install should be called right after add_library(target)
 function(geniussdk_install target)
     install(TARGETS ${target} EXPORT GeniusSDKTargets
         LIBRARY       DESTINATION ${CMAKE_INSTALL_LIBDIR}
