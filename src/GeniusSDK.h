@@ -7,13 +7,15 @@
 #ifndef _GENIUSSDK_H
 #define _GENIUSSDK_H
 
-#include <memory>
+#include <stdint.h>
 
 #ifndef GNUS_EXPORT_BEGIN
-    #if defined(__cplusplus)
-        #define GNUS_EXPORT_BEGIN extern "C" {
-        #define GNUS_EXPORT_END }
-    #endif
+#if defined( __cplusplus )
+#define GNUS_EXPORT_BEGIN                                                                                              \
+    extern "C"                                                                                                         \
+    {
+#define GNUS_EXPORT_END }
+#endif
 #endif
 
 #ifdef _WIN32
@@ -24,11 +26,12 @@
 
 GNUS_EXPORT_BEGIN
 
-    typedef char     ImagePath_t[1024]; ///< ID/Path of the image to be processed
-    typedef uint64_t PayAmount_t;       ///< Amount to be paid for the processing
+typedef char     ImagePath_t[1024]; ///< ID/Path of the image to be processed
+typedef uint64_t PayAmount_t;       ///< Amount to be paid for the processing
 
-GNUS_VISIBILITY_DEFAULT  const char *GeniusSDKInit( const char *base_path );
-GNUS_VISIBILITY_DEFAULT  void        GeniusSDKProcess( const ImagePath_t path, const PayAmount_t amount );
+GNUS_VISIBILITY_DEFAULT const char *GeniusSDKInit( const char *base_path );
+GNUS_VISIBILITY_DEFAULT void        GeniusSDKProcess( const ImagePath_t path, PayAmount_t amount );
+GNUS_VISIBILITY_DEFAULT uint64_t    GeniusSDKGetBalance();
 
 GNUS_EXPORT_END
 

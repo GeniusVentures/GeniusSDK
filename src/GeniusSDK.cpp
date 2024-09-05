@@ -108,3 +108,8 @@ void GeniusSDKProcess( const ImagePath_t path, const PayAmount_t amount )
 {
     GeniusNodeInstance->ProcessImage( std::string{ path }, amount );
 }
+
+uint64_t GeniusSDKGetBalance()
+{
+    return GeniusNodeInstance->GetBalance();
+}
