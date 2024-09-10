@@ -15,6 +15,9 @@
     extern "C"                                                                                                         \
     {
 #define GNUS_EXPORT_END }
+#else
+#define GNUS_EXPORT_BEGIN
+#define GNUS_EXPORT_END
 #endif
 #endif
 
@@ -26,13 +29,27 @@
 
 GNUS_EXPORT_BEGIN
 
+typedef struct
+{
+    uint64_t size;
+    uint8_t *ptr;
+} GeniusArray; ///< Struct to interop C++ vectors with C
+
+typedef struct
+{
+    uint64_t     size;
+    GeniusArray *ptr;
+} GeniusMatrix; ///< Struct to interop a matrix of C++ vectors in C
+
 typedef char     ImagePath_t[1024]; ///< ID/Path of the image to be processed
 typedef uint64_t PayAmount_t;       ///< Amount to be paid for the processing
 
 GNUS_VISIBILITY_DEFAULT const char *GeniusSDKInit( const char *base_path );
 GNUS_VISIBILITY_DEFAULT void        GeniusSDKProcess( const ImagePath_t path, PayAmount_t amount );
 GNUS_VISIBILITY_DEFAULT uint64_t    GeniusSDKGetBalance();
+GNUS_VISIBILITY_DEFAULT GeniusMatrix GeniusSDKGetTransactions();
+GNUS_VISIBILITY_DEFAULT void         GeniusSDKFreeTransactions( GeniusMatrix matrix );
 
 GNUS_EXPORT_END
 
-#endif //GENIUSSDK_H
+#endif

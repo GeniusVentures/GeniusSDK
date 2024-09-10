@@ -34,7 +34,9 @@ private:
     std::string message;
 };
 
-static outcome::result<DevConfig_st, JsonError> ReadDevConfigFromJSON( const std::string &base_path )
+namespace
+{
+    outcome::result<DevConfig_st, JsonError> ReadDevConfigFromJSON( const std::string &base_path )
 {
     std::ifstream file( base_path + "dev_config.json" );
     if ( !file.is_open() )
@@ -48,7 +50,7 @@ static outcome::result<DevConfig_st, JsonError> ReadDevConfigFromJSON( const std
 
     rapidjson::Document    document;
     rapidjson::ParseResult parseResult = document.Parse( jsonStr.c_str() );
-    if ( !parseResult )
+        if ( parseResult == nullptr )
     {
         return outcome::failure( JsonError( "Parse error " ) );
     }
@@ -79,7 +81,24 @@ static outcome::result<DevConfig_st, JsonError> ReadDevConfigFromJSON( const std
     return outcome::success( config_from_file );
 }
 
+    GeniusMatrix matrix_from_vector_of_vector( const std::vector<std::vector<uint8_t>> &vec )
+    {
+        uint64_t size = vec.size();
+
+        GeniusMatrix matrix = { size, reinterpret_cast<GeniusArray *>( malloc( size * sizeof( GeniusArray ) ) ) };
+
+        for ( uint64_t i = 0; i < size; i++ )
+        {
+            matrix.ptr[i] = GeniusArray{ vec[i].size(),
+                                         reinterpret_cast<uint8_t *>( malloc( vec[i].size() * sizeof( uint8_t ) ) ) };
+            memcpy( matrix.ptr[i].ptr, vec[i].data(), vec[i].size() * sizeof( uint8_t ) );
+        }
+
+        return matrix;
+    }
+
 std::shared_ptr<sgns::GeniusNode> GeniusNodeInstance;
+}
 
 const char *GeniusSDKInit( const char *base_path )
 {
@@ -113,3 +132,18 @@ uint64_t GeniusSDKGetBalance()
 {
     return GeniusNodeInstance->GetBalance();
 }
+
+GeniusMatrix GeniusSDKGetTransactions()
+{
+    return matrix_from_vector_of_vector( GeniusNodeInstance->GetTransactions() );
+}
+
+void GeniusSDKFreeTransactions( GeniusMatrix matrix )
+{
+    for ( uint64_t i = 0; i < matrix.size; ++i )
+    {
+        free( matrix.ptr[i].ptr );
+    }
+    free( matrix.ptr );
+}
+
