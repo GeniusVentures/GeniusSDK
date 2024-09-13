@@ -8,6 +8,7 @@
 #define _GENIUSSDK_H
 
 #include <stdint.h>
+#include <stdbool.h>
 
 #ifndef GNUS_EXPORT_BEGIN
 #if defined( __cplusplus )
@@ -58,6 +59,7 @@ GNUS_VISIBILITY_DEFAULT GeniusMatrix GeniusSDKGetTransactions();
 GNUS_VISIBILITY_DEFAULT void         GeniusSDKFreeTransactions( GeniusMatrix matrix );
 GNUS_VISIBILITY_DEFAULT void         GeniusSDKMintTokens( uint64_t amount );
 GNUS_VISIBILITY_DEFAULT GeniusAddress GeniusSDKGetAddress();
+GNUS_VISIBILITY_DEFAULT bool          GeniusSDKTransferTokens( uint64_t amount, GeniusAddress *dest );
 
 GNUS_EXPORT_END
 

@@ -6,7 +6,9 @@
  */
 
 #include "GeniusSDK.h"
+
 #include "account/GeniusNode.hpp"
+#include <algorithm>
 #include <boost/multiprecision/cpp_int/import_export.hpp>
 #include <memory>
 #include <rapidjson/document.h>
@@ -162,4 +164,11 @@ GeniusAddress GeniusSDKGetAddress()
     std::copy( address.cbegin(), address.cend(), ret.address );
 
     return ret;
+}
+
+bool GeniusSDKTransferTokens( uint64_t amount, GeniusAddress *dest )
+{
+    uint256_t destination( dest->address );
+
+    return GeniusNodeInstance->TransferFunds( amount, destination );
 }
