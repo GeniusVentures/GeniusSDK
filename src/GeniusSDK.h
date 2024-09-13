@@ -41,6 +41,13 @@ typedef struct
     GeniusArray *ptr;
 } GeniusMatrix; ///< Struct to interop a matrix of C++ vectors in C
 
+typedef struct
+{
+    /// A string prepended with `0x` followed by 64 hex characters,
+    /// including a null-terminating char just for safety.
+    char address[2 + 256 / 4 + 1];
+} GeniusAddress;
+
 typedef char     ImagePath_t[1024]; ///< ID/Path of the image to be processed
 typedef uint64_t PayAmount_t;       ///< Amount to be paid for the processing
 
@@ -50,6 +57,7 @@ GNUS_VISIBILITY_DEFAULT uint64_t    GeniusSDKGetBalance();
 GNUS_VISIBILITY_DEFAULT GeniusMatrix GeniusSDKGetTransactions();
 GNUS_VISIBILITY_DEFAULT void         GeniusSDKFreeTransactions( GeniusMatrix matrix );
 GNUS_VISIBILITY_DEFAULT void         GeniusSDKMintTokens( uint64_t amount );
+GNUS_VISIBILITY_DEFAULT GeniusAddress GeniusSDKGetAddress();
 
 GNUS_EXPORT_END
 

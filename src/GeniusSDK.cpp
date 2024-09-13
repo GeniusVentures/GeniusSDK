@@ -7,6 +7,7 @@
 
 #include "GeniusSDK.h"
 #include "account/GeniusNode.hpp"
+#include <boost/multiprecision/cpp_int/import_export.hpp>
 #include <memory>
 #include <rapidjson/document.h>
 #include <rapidjson/writer.h>
@@ -150,4 +151,15 @@ void GeniusSDKFreeTransactions( GeniusMatrix matrix )
 void GeniusSDKMintTokens( uint64_t amount )
 {
     GeniusNodeInstance->MintTokens( amount );
+}
+
+GeniusAddress GeniusSDKGetAddress()
+{
+    auto address = GeniusNodeInstance->GetAddress();
+
+    GeniusAddress ret;
+
+    std::copy( address.cbegin(), address.cend(), ret.address );
+
+    return ret;
 }
