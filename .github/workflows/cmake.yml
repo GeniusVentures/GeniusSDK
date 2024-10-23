@@ -220,7 +220,7 @@ jobs:
         run: cmake -S .. -DCMAKE_BUILD_TYPE=Release -DTHIRDPARTY_DIR=${{github.workspace}}/thirdparty/
 
       - name: SuperGenius Compile
-        working-directory: ${{github.workspace}}/SuperGenius/build/Windows/Release
+        working-directory: ${{github.workspace}}/SuperGenius/build/Linux/Release
         run: cmake --build . --config Release -j
 
       - name: SuperGenius install
