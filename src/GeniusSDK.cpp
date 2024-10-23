@@ -103,18 +103,20 @@ namespace
     std::shared_ptr<sgns::GeniusNode> GeniusNodeInstance;
 }
 
-const char *GeniusSDKInit( const char *base_path )
+const char *GeniusSDKInit( const char *base_path, const char *eth_private_key )
 {
-    std::string path = "";
-    if ( base_path != nullptr )
+    if ( base_path == nullptr )
     {
-        path.assign( base_path );
+        std::cerr << "base_path should not be empty!" << std::endl;
+        return nullptr;
     }
-    auto               load_config_ret = ReadDevConfigFromJSON( path );
+
+    auto               load_config_ret = ReadDevConfigFromJSON( base_path );
     static std::string ret_val         = "Initialized on ";
+
     if ( load_config_ret )
     {
-        GeniusNodeInstance = std::make_shared<sgns::GeniusNode>( load_config_ret.value() );
+        GeniusNodeInstance = std::make_shared<sgns::GeniusNode>( load_config_ret.value(), eth_private_key );
         ret_val.append( load_config_ret.value().BaseWritePath );
     }
     else
@@ -168,7 +170,7 @@ GeniusAddress GeniusSDKGetAddress()
 
 bool GeniusSDKTransferTokens( uint64_t amount, GeniusAddress *dest )
 {
-    uint256_t destination( dest->address );
+    boost::multiprecision::uint256_t destination( dest->address );
 
     return GeniusNodeInstance->TransferFunds( amount, destination );
 }

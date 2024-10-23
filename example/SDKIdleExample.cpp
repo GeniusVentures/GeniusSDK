@@ -22,8 +22,7 @@
 int main( int argc, char *argv[] )
 {
     const char* no_path = "/home/henrique/SGNSNode/";
-    GeniusSDKInit(no_path);
-
+    GeniusSDKInit( no_path, "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef" );
 
     while ( true )
     {
