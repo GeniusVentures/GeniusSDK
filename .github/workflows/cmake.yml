@@ -180,13 +180,13 @@ jobs:
     
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - name: Check out GeniusSDK repository
-      - uses: actions/checkout@v3
+        uses: actions/checkout@v3
         with:
           path: 'GeniusSDK'
           submodules: "recursive"
 
       - name: Check out SuperGenius repository
-      - uses: actions/checkout@v3
+        uses: actions/checkout@v3
         with:
           repository: 'GeniusVentures/SuperGenius'
           path: 'SuperGenius'
@@ -311,7 +311,7 @@ jobs:
     
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - name: Checkout GeniusSDK repository
-      - uses: actions/checkout@v3
+        uses: actions/checkout@v3
         with:
           path: 'GeniusSDK'
           submodules: "recursive"
@@ -343,7 +343,7 @@ jobs:
           ref: develop
 
       - name: Checkout SuperGenius repository
-      - uses: actions/checkout@v3
+        uses: actions/checkout@v3
         with:
           repository: 'GeniusVentures/SuperGenius'
           path: 'SuperGenius'
@@ -490,7 +490,7 @@ jobs:
         
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - name: Checkout GeniusSDK repository
-      - uses: actions/checkout@v3
+        uses: actions/checkout@v3
         with:
           path: 'GeniusSDK'
           submodules: "recursive"
@@ -630,7 +630,7 @@ jobs:
         
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - name: Checkout GeniusSDK repository
-      - uses: actions/checkout@v3
+        uses: actions/checkout@v3
         with:
           path: 'GeniusSDK'
           submodules: "recursive"    
