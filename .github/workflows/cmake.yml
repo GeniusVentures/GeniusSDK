@@ -39,7 +39,7 @@ jobs:
           submodules: "recursive"
       
       - name: Check if branch exists in SuperGenius
-        id: check_branch
+        id: check_supergenius
         uses: tj-actions/branch-names@v6
         with:
           repo: 'GeniusVentures/SuperGenius'
@@ -52,10 +52,10 @@ jobs:
           repository: 'GeniusVentures/SuperGenius'
           path: 'SuperGenius'
           submodules: "recursive"
-          ref: ${{ steps.check_branch_first_repo.outputs.branch_exists == 'true' && steps.branch-name.outputs.current_branch || 'develop' }}
+          ref: ${{ steps.check_supergenius.outputs.branch_exists == 'true' && steps.branch-name.outputs.current_branch || 'develop' }}
       
       - name: Check if branch exists in thirdparty
-        id: check_branch
+        id: check_thirdparty
         uses: tj-actions/branch-names@v6
         with:
           repo: 'GeniusVentures/thirdparty'
@@ -67,9 +67,9 @@ jobs:
           repository: 'GeniusVentures/thirdparty'
           path: 'thirdparty'
           submodules: 'recursive' 
-          ref: ${{ steps.check_branch_first_repo.outputs.branch_exists == 'true' && steps.branch-name.outputs.current_branch || 'develop' }}
+          ref: ${{ steps.check_thirdparty.outputs.branch_exists == 'true' && steps.branch-name.outputs.current_branch || 'develop' }}
 
-          
+
       - name: Thirdparty Create Build Directory
         run: cmake -E make_directory ${{github.workspace}}/thirdparty/build/Windows/Release          
 
@@ -202,7 +202,7 @@ jobs:
           submodules: "recursive"
 
       - name: Check if branch exists in SuperGenius
-        id: check_branch
+        id: check_supergenius
         uses: tj-actions/branch-names@v6
         with:
           repo: 'GeniusVentures/SuperGenius'
@@ -215,10 +215,10 @@ jobs:
           repository: 'GeniusVentures/SuperGenius'
           path: 'SuperGenius'
           submodules: "recursive"
-          ref: ${{ steps.check_branch_first_repo.outputs.branch_exists == 'true' && steps.branch-name.outputs.current_branch || 'develop' }}
+          ref: ${{ steps.check_supergenius.outputs.branch_exists == 'true' && steps.branch-name.outputs.current_branch || 'develop' }}
       
       - name: Check if branch exists in thirdparty
-        id: check_branch
+        id: check_thirdparty
         uses: tj-actions/branch-names@v6
         with:
           repo: 'GeniusVentures/thirdparty'
@@ -230,9 +230,9 @@ jobs:
           repository: 'GeniusVentures/thirdparty'
           path: 'thirdparty'
           submodules: 'recursive' 
-          ref: ${{ steps.check_branch_first_repo.outputs.branch_exists == 'true' && steps.branch-name.outputs.current_branch || 'develop' }}
+          ref: ${{ steps.check_thirdparty.outputs.branch_exists == 'true' && steps.branch-name.outputs.current_branch || 'develop' }}
 
-          
+
       - name: Thirdparty Create Build Directory
         run: cmake -E make_directory ${{github.workspace}}/thirdparty/build/Linux/Release        
 
@@ -367,7 +367,7 @@ jobs:
           rustup target add aarch64-linux-android
           
       - name: Check if branch exists in SuperGenius
-        id: check_branch
+        id: check_supergenius
         uses: tj-actions/branch-names@v6
         with:
           repo: 'GeniusVentures/SuperGenius'
@@ -380,10 +380,10 @@ jobs:
           repository: 'GeniusVentures/SuperGenius'
           path: 'SuperGenius'
           submodules: "recursive"
-          ref: ${{ steps.check_branch_first_repo.outputs.branch_exists == 'true' && steps.branch-name.outputs.current_branch || 'develop' }}
+          ref: ${{ steps.check_supergenius.outputs.branch_exists == 'true' && steps.branch-name.outputs.current_branch || 'develop' }}
       
       - name: Check if branch exists in thirdparty
-        id: check_branch
+        id: check_thirdparty
         uses: tj-actions/branch-names@v6
         with:
           repo: 'GeniusVentures/thirdparty'
@@ -395,7 +395,7 @@ jobs:
           repository: 'GeniusVentures/thirdparty'
           path: 'thirdparty'
           submodules: 'recursive' 
-          ref: ${{ steps.check_branch_first_repo.outputs.branch_exists == 'true' && steps.branch-name.outputs.current_branch || 'develop' }}
+          ref: ${{ steps.check_thirdparty.outputs.branch_exists == 'true' && steps.branch-name.outputs.current_branch || 'develop' }}
 
           
       - name: Thirdparty Create Build Directory
@@ -559,7 +559,7 @@ jobs:
         run: rustup target add x86_64-apple-darwin
       
       - name: Check if branch exists in SuperGenius
-        id: check_branch
+        id: check_supergenius
         uses: tj-actions/branch-names@v6
         with:
           repo: 'GeniusVentures/SuperGenius'
@@ -572,10 +572,10 @@ jobs:
           repository: 'GeniusVentures/SuperGenius'
           path: 'SuperGenius'
           submodules: "recursive"
-          ref: ${{ steps.check_branch_first_repo.outputs.branch_exists == 'true' && steps.branch-name.outputs.current_branch || 'develop' }}
+          ref: ${{ steps.check_supergenius.outputs.branch_exists == 'true' && steps.branch-name.outputs.current_branch || 'develop' }}
       
       - name: Check if branch exists in thirdparty
-        id: check_branch
+        id: check_thirdparty
         uses: tj-actions/branch-names@v6
         with:
           repo: 'GeniusVentures/thirdparty'
@@ -587,7 +587,7 @@ jobs:
           repository: 'GeniusVentures/thirdparty'
           path: 'thirdparty'
           submodules: 'recursive' 
-          ref: ${{ steps.check_branch_first_repo.outputs.branch_exists == 'true' && steps.branch-name.outputs.current_branch || 'develop' }}
+          ref: ${{ steps.check_thirdparty.outputs.branch_exists == 'true' && steps.branch-name.outputs.current_branch || 'develop' }}
 
           
       - name: Thirdparty Create Build Directory
@@ -717,7 +717,7 @@ jobs:
           rustup target add aarch64-apple-ios
 
       - name: Check if branch exists in SuperGenius
-        id: check_branch
+        id: check_supergenius
         uses: tj-actions/branch-names@v6
         with:
           repo: 'GeniusVentures/SuperGenius'
@@ -730,10 +730,10 @@ jobs:
           repository: 'GeniusVentures/SuperGenius'
           path: 'SuperGenius'
           submodules: "recursive"
-          ref: ${{ steps.check_branch_first_repo.outputs.branch_exists == 'true' && steps.branch-name.outputs.current_branch || 'develop' }}
+          ref: ${{ steps.check_supergenius.outputs.branch_exists == 'true' && steps.branch-name.outputs.current_branch || 'develop' }}
       
       - name: Check if branch exists in thirdparty
-        id: check_branch
+        id: check_thirdparty
         uses: tj-actions/branch-names@v6
         with:
           repo: 'GeniusVentures/thirdparty'
@@ -745,7 +745,7 @@ jobs:
           repository: 'GeniusVentures/thirdparty'
           path: 'thirdparty'
           submodules: 'recursive' 
-          ref: ${{ steps.check_branch_first_repo.outputs.branch_exists == 'true' && steps.branch-name.outputs.current_branch || 'develop' }}
+          ref: ${{ steps.check_thirdparty.outputs.branch_exists == 'true' && steps.branch-name.outputs.current_branch || 'develop' }}
 
           
       - name: Thirdparty Create Build Directory
