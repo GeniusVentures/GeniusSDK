@@ -1,10 +1,7 @@
-include_directories(
-        ../include
+add_executable(SDKIdleExample
+    SDKIdleExample.cpp
 )
+target_link_libraries(SDKIdleExample PRIVATE "-Wl,--whole-archive"
+    GeniusSDK "-Wl,--no-whole-archive"
 
-file(GLOB ALL_SRCS
-    "../include/*.h"
-    "../include/*.hpp"
-    "../src/*.cpp"
-    "../src/*.c"
-    )
+)

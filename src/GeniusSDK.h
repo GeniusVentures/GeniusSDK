@@ -1,77 +1,66 @@
-#ifndef GENIUSSDK_H
-#define GENIUSSDK_H
-
-#include "TransactionBlocks.h"
-#include <memory>
-namespace sgns
-{
-
-namespace crdt
-{
-class CrdtDatastore;
-}
-
 /**
- * @brief Interface library for
+ * @file       GeniusSDK.h
+ * @brief      New GeniusSDK node
+ * @date       2024-05-25
+ * @author     Henrique A. Klein (hklein@gnus.ai)
  */
-class GeniusSDK
+#ifndef _GENIUSSDK_H
+#define _GENIUSSDK_H
+
+#include <stdint.h>
+#include <stdbool.h>
+
+#ifndef GNUS_EXPORT_BEGIN
+#if defined( __cplusplus )
+#define GNUS_EXPORT_BEGIN                                                                                              \
+    extern "C"                                                                                                         \
+    {
+#define GNUS_EXPORT_END }
+#else
+#define GNUS_EXPORT_BEGIN
+#define GNUS_EXPORT_END
+#endif
+#endif
+
+#ifdef _WIN32
+#define GNUS_VISIBILITY_DEFAULT __declspec( dllexport )
+#else
+#define GNUS_VISIBILITY_DEFAULT __attribute__( ( visibility( "default" ) ) )
+#endif
+
+GNUS_EXPORT_BEGIN
+
+typedef struct
 {
-public:
+    uint64_t size;
+    uint8_t *ptr;
+} GeniusArray; ///< Struct to interop C++ vectors with C
 
-  /** Constructor
-   */
-  GENIUSSDK_EXPORT GeniusSDK();
+typedef struct
+{
+    uint64_t     size;
+    GeniusArray *ptr;
+} GeniusMatrix; ///< Struct to interop a matrix of C++ vectors in C
 
-  /** Destructor
-   */
-  GENIUSSDK_EXPORT virtual ~GeniusSDK() = default;
+typedef struct
+{
+    /// A string prepended with `0x` followed by 64 hex characters,
+    /// including a null-terminating char just for safety.
+    char address[2 + 256 / 4 + 1];
+} GeniusAddress;
 
-  void SetDatastorePath(const std::string &aPath);
+typedef char     ImagePath_t[1024]; ///< ID/Path of the image to be processed
+typedef uint64_t PayAmount_t;       ///< Amount to be paid for the processing
 
-  /**
-   * Adding TransactionBlocks to database
-   * @param tBlocks TransactionBlocks to add to database
-   * @return 0 on success
-   */
-  GENIUSSDK_EXPORT int AddTransactionBlocks(const TransactionBlocks &tBlocks);
+GNUS_VISIBILITY_DEFAULT const char   *GeniusSDKInit( const char *base_path, const char *eth_private_key );
+GNUS_VISIBILITY_DEFAULT void        GeniusSDKProcess( const ImagePath_t path, PayAmount_t amount );
+GNUS_VISIBILITY_DEFAULT uint64_t    GeniusSDKGetBalance();
+GNUS_VISIBILITY_DEFAULT GeniusMatrix GeniusSDKGetTransactions();
+GNUS_VISIBILITY_DEFAULT void         GeniusSDKFreeTransactions( GeniusMatrix matrix );
+GNUS_VISIBILITY_DEFAULT void         GeniusSDKMintTokens( uint64_t amount );
+GNUS_VISIBILITY_DEFAULT GeniusAddress GeniusSDKGetAddress();
+GNUS_VISIBILITY_DEFAULT bool          GeniusSDKTransferTokens( uint64_t amount, GeniusAddress *dest );
 
-  /**
-   * Get seed from mnemonic phrase
-   * @param mnemonic List of words
-   * @param passphrase Passphrase used for generating seed
-   * @param seed Output result of generated seed as HEX
-   * @return 0 on success
-   */
-  GENIUSSDK_EXPORT static int
-  GetSeed(const std::vector<std::string> &mnemonic, const std::string &passphrase, std::string &seed);
+GNUS_EXPORT_END
 
-  /**
-   * Get public key from mnemonic phrase
-   * @param mnemonic List of words
-   * @param passphrase Passphrase used for generating public key
-   * @param publicKey
-   * @return 0 on success
-   */
-  GENIUSSDK_EXPORT static int
-  GetPublicKey(const std::vector<std::string> &mnemonic, const std::string &passphrase, std::string &publicKey);
-
-  /**
- * Get public key from mnemonic phrase
- * @param mnemonic List of words
- * @param passphrase Passphrase used for generating public key
- * @param privateKey
- * @return 0 on success
- */
-  GENIUSSDK_EXPORT static int
-  GetPrivateKey(const std::vector<std::string> &mnemonic, const std::string &passphrase, std::string &privateKey);
-
-protected:
-  /** Copy constructor
-  */
-  GeniusSDK(const GeniusSDK &) = default;
-
-  std::shared_ptr<sgns::crdt::CrdtDatastore> crdtDatastore_ = nullptr;
-};
-}
-
-#endif //GENIUSSDK_H
+#endif
