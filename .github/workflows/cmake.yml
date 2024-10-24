@@ -37,6 +37,14 @@ jobs:
         with:
           path: 'GeniusSDK'
           submodules: "recursive"
+      
+      - name: Check if branch exists in SuperGenius
+        id: check_branch
+        uses: tj-actions/branch-names@v6
+        with:
+          repo: 'GeniusVentures/SuperGenius'
+          branch: ${{ steps.branch-name.outputs.current_branch }}
+
 
       - name: Checkout SuperGenius repository
         uses: actions/checkout@v3
@@ -44,15 +52,23 @@ jobs:
           repository: 'GeniusVentures/SuperGenius'
           path: 'SuperGenius'
           submodules: "recursive"
-          ref: develop
+          ref: ${{ steps.check_branch_first_repo.outputs.branch_exists == 'true' && steps.branch-name.outputs.current_branch || 'develop' }}
       
+      - name: Check if branch exists in thirdparty
+        id: check_branch
+        uses: tj-actions/branch-names@v6
+        with:
+          repo: 'GeniusVentures/thirdparty'
+          branch: ${{ steps.branch-name.outputs.current_branch }}
+
       - name: Check out thirdparty repository
         uses: actions/checkout@v3
         with:
           repository: 'GeniusVentures/thirdparty'
           path: 'thirdparty'
           submodules: 'recursive' 
-          ref: develop
+          ref: ${{ steps.check_branch_first_repo.outputs.branch_exists == 'true' && steps.branch-name.outputs.current_branch || 'develop' }}
+
           
       - name: Thirdparty Create Build Directory
         run: cmake -E make_directory ${{github.workspace}}/thirdparty/build/Windows/Release          
@@ -185,21 +201,37 @@ jobs:
           path: 'GeniusSDK'
           submodules: "recursive"
 
-      - name: Check out SuperGenius repository
+      - name: Check if branch exists in SuperGenius
+        id: check_branch
+        uses: tj-actions/branch-names@v6
+        with:
+          repo: 'GeniusVentures/SuperGenius'
+          branch: ${{ steps.branch-name.outputs.current_branch }}
+
+
+      - name: Checkout SuperGenius repository
         uses: actions/checkout@v3
         with:
           repository: 'GeniusVentures/SuperGenius'
           path: 'SuperGenius'
           submodules: "recursive"
-          ref: develop   
+          ref: ${{ steps.check_branch_first_repo.outputs.branch_exists == 'true' && steps.branch-name.outputs.current_branch || 'develop' }}
       
+      - name: Check if branch exists in thirdparty
+        id: check_branch
+        uses: tj-actions/branch-names@v6
+        with:
+          repo: 'GeniusVentures/thirdparty'
+          branch: ${{ steps.branch-name.outputs.current_branch }}
+
       - name: Check out thirdparty repository
         uses: actions/checkout@v3
         with:
           repository: 'GeniusVentures/thirdparty'
           path: 'thirdparty'
           submodules: 'recursive' 
-          ref: develop
+          ref: ${{ steps.check_branch_first_repo.outputs.branch_exists == 'true' && steps.branch-name.outputs.current_branch || 'develop' }}
+
           
       - name: Thirdparty Create Build Directory
         run: cmake -E make_directory ${{github.workspace}}/thirdparty/build/Linux/Release        
@@ -334,13 +366,13 @@ jobs:
         run: |
           rustup target add aarch64-linux-android
           
-      - name: Checkout thirdparty repository
-        uses: actions/checkout@v3
+      - name: Check if branch exists in SuperGenius
+        id: check_branch
+        uses: tj-actions/branch-names@v6
         with:
-          repository: 'GeniusVentures/thirdparty'
-          path: 'thirdparty'
-          submodules: 'recursive' 
-          ref: develop
+          repo: 'GeniusVentures/SuperGenius'
+          branch: ${{ steps.branch-name.outputs.current_branch }}
+
 
       - name: Checkout SuperGenius repository
         uses: actions/checkout@v3
@@ -348,7 +380,23 @@ jobs:
           repository: 'GeniusVentures/SuperGenius'
           path: 'SuperGenius'
           submodules: "recursive"
-          ref: develop  
+          ref: ${{ steps.check_branch_first_repo.outputs.branch_exists == 'true' && steps.branch-name.outputs.current_branch || 'develop' }}
+      
+      - name: Check if branch exists in thirdparty
+        id: check_branch
+        uses: tj-actions/branch-names@v6
+        with:
+          repo: 'GeniusVentures/thirdparty'
+          branch: ${{ steps.branch-name.outputs.current_branch }}
+
+      - name: Check out thirdparty repository
+        uses: actions/checkout@v3
+        with:
+          repository: 'GeniusVentures/thirdparty'
+          path: 'thirdparty'
+          submodules: 'recursive' 
+          ref: ${{ steps.check_branch_first_repo.outputs.branch_exists == 'true' && steps.branch-name.outputs.current_branch || 'develop' }}
+
           
       - name: Thirdparty Create Build Directory
         run: cmake -E make_directory ${{github.workspace}}/thirdparty/build/Android/Release/arm64-v8a      
@@ -510,21 +558,37 @@ jobs:
       - name: Add Darwin rust toolchain
         run: rustup target add x86_64-apple-darwin
       
+      - name: Check if branch exists in SuperGenius
+        id: check_branch
+        uses: tj-actions/branch-names@v6
+        with:
+          repo: 'GeniusVentures/SuperGenius'
+          branch: ${{ steps.branch-name.outputs.current_branch }}
+
+
       - name: Checkout SuperGenius repository
         uses: actions/checkout@v3
         with:
           repository: 'GeniusVentures/SuperGenius'
           path: 'SuperGenius'
-          submodules: 'recursive' 
-          ref: develop
+          submodules: "recursive"
+          ref: ${{ steps.check_branch_first_repo.outputs.branch_exists == 'true' && steps.branch-name.outputs.current_branch || 'develop' }}
       
+      - name: Check if branch exists in thirdparty
+        id: check_branch
+        uses: tj-actions/branch-names@v6
+        with:
+          repo: 'GeniusVentures/thirdparty'
+          branch: ${{ steps.branch-name.outputs.current_branch }}
+
       - name: Check out thirdparty repository
         uses: actions/checkout@v3
         with:
           repository: 'GeniusVentures/thirdparty'
           path: 'thirdparty'
           submodules: 'recursive' 
-          ref: develop
+          ref: ${{ steps.check_branch_first_repo.outputs.branch_exists == 'true' && steps.branch-name.outputs.current_branch || 'develop' }}
+
           
       - name: Thirdparty Create Build Directory
         run: cmake -E make_directory ${{github.workspace}}/thirdparty/build/OSX/Release      
@@ -652,13 +716,28 @@ jobs:
           rustup component add rust-src --toolchain nightly-aarch64-apple-darwin
           rustup target add aarch64-apple-ios
 
+      - name: Check if branch exists in SuperGenius
+        id: check_branch
+        uses: tj-actions/branch-names@v6
+        with:
+          repo: 'GeniusVentures/SuperGenius'
+          branch: ${{ steps.branch-name.outputs.current_branch }}
+
+
       - name: Checkout SuperGenius repository
         uses: actions/checkout@v3
         with:
           repository: 'GeniusVentures/SuperGenius'
           path: 'SuperGenius'
-          submodules: 'recursive' 
-          ref: develop
+          submodules: "recursive"
+          ref: ${{ steps.check_branch_first_repo.outputs.branch_exists == 'true' && steps.branch-name.outputs.current_branch || 'develop' }}
+      
+      - name: Check if branch exists in thirdparty
+        id: check_branch
+        uses: tj-actions/branch-names@v6
+        with:
+          repo: 'GeniusVentures/thirdparty'
+          branch: ${{ steps.branch-name.outputs.current_branch }}
 
       - name: Check out thirdparty repository
         uses: actions/checkout@v3
@@ -666,7 +745,8 @@ jobs:
           repository: 'GeniusVentures/thirdparty'
           path: 'thirdparty'
           submodules: 'recursive' 
-          ref: develop
+          ref: ${{ steps.check_branch_first_repo.outputs.branch_exists == 'true' && steps.branch-name.outputs.current_branch || 'develop' }}
+
           
       - name: Thirdparty Create Build Directory
         run: cmake -E make_directory ${{github.workspace}}/thirdparty/build/iOS/Release     
