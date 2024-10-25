@@ -10,7 +10,7 @@ set(BOOST_VERSION_2U "${BOOST_MAJOR_VERSION}_${BOOST_MINOR_VERSION}")
 
 set(SHARED_LIB_BUILD OFF CACHE BOOL "Shared library option for GeniusSDK")
 
-# find_package(Vulkan REQUIRED)
+find_package(Vulkan REQUIRED)
 if(SHARED_LIB_BUILD)
     set(LIB_TYPE SHARED)
 else()
@@ -347,13 +347,16 @@ if(DEFINED ANDROID_ABI)
 endif()
 
 set(SuperGenius_DIR "${SUPERGENIUS_BUILD_DIR}/SuperGenius/lib/cmake/SuperGenius/")
+set(ProofSystem_DIR "${SUPERGENIUS_BUILD_DIR}/SuperGenius/lib/cmake/ProofSystem/")
 set(GeniusKDF_DIR "${SUPERGENIUS_BUILD_DIR}/SuperGenius/lib/cmake/GeniusKDF/")
 
 print("SuperGenius_DIR: ${SuperGenius_DIR}")
 
 find_package(GeniusKDF CONFIG REQUIRED)
+find_package(ProofSystem CONFIG REQUIRED)
 find_package(SuperGenius CONFIG REQUIRED)
 include_directories(${SuperGenius_INCLUDE_DIR})
+include_directories("${THIRDPARTY_BUILD_DIR}/crypto3/include")
 
 include_directories(
     ${PROJECT_ROOT}/include
