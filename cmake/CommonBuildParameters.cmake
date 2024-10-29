@@ -45,6 +45,12 @@ set(fmt_DIR "${THIRDPARTY_BUILD_DIR}/fmt/lib/cmake/fmt")
 find_package(fmt CONFIG REQUIRED)
 include_directories(${fmt_INCLUDE_DIR})
 
+# Set config of MNN
+set(MNN_INCLUDE_DIR "${THIRDPARTY_BUILD_DIR}/MNN/include")
+set(MNN_DIR "${THIRDPARTY_BUILD_DIR}/MNN/lib/cmake/MNN")
+find_package(MNN CONFIG REQUIRED)
+include_directories(${MNN_INCLUDE_DIR})
+
 # Set config of soralog
 set(soralog_DIR "${THIRDPARTY_BUILD_DIR}/soralog/lib/cmake/soralog")
 set(soralog_INCLUDE_DIR "${THIRDPARTY_BUILD_DIR}/soralog/include")
