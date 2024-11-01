@@ -10,6 +10,17 @@ set(BOOST_VERSION_2U "${BOOST_MAJOR_VERSION}_${BOOST_MINOR_VERSION}")
 
 set(SHARED_LIB_BUILD OFF CACHE BOOL "Shared library option for GeniusSDK")
 
+if(APPLE)
+    if(IOS)
+        # Settings specifically for iOS
+        set(Vulkan_INCLUDE_DIR "${THIRDPARTY_BUILD_DIR}/moltenvk/build/include")
+        set(Vulkan_LIBRARY "${THIRDPARTY_BUILD_DIR}/moltenvk/build/lib/MoltenVK.xcframework")
+    else()
+        # Settings for macOS
+        set(Vulkan_INCLUDE_DIR "${THIRDPARTY_BUILD_DIR}/moltenvk/build/include")
+        set(Vulkan_LIBRARY "${THIRDPARTY_BUILD_DIR}/moltenvk/build/lib/MoltenVK.xcframework")
+    endif()
+endif()
 find_package(Vulkan REQUIRED)
 if(SHARED_LIB_BUILD)
     set(LIB_TYPE SHARED)
