@@ -57,6 +57,7 @@ GNUS_VISIBILITY_DEFAULT void        GeniusSDKProcess( const ImagePath_t path, Pa
 GNUS_VISIBILITY_DEFAULT uint64_t    GeniusSDKGetBalance();
 GNUS_VISIBILITY_DEFAULT GeniusMatrix GeniusSDKGetTransactions();
 GNUS_VISIBILITY_DEFAULT void         GeniusSDKFreeTransactions( GeniusMatrix matrix );
+GNUS_VISIBILITY_DEFAULT GeniusMatrix  GeniusSDKGetBlocks();
 GNUS_VISIBILITY_DEFAULT void         GeniusSDKMintTokens( uint64_t amount );
 GNUS_VISIBILITY_DEFAULT GeniusAddress GeniusSDKGetAddress();
 GNUS_VISIBILITY_DEFAULT bool          GeniusSDKTransferTokens( uint64_t amount, GeniusAddress *dest );

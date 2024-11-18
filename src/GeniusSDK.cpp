@@ -9,6 +9,7 @@
 
 #include "account/GeniusNode.hpp"
 #include <algorithm>
+#include <base/buffer.hpp>
 #include <boost/multiprecision/cpp_int/import_export.hpp>
 #include <memory>
 #include <rapidjson/document.h>
@@ -100,6 +101,22 @@ namespace
         return matrix;
     }
 
+    GeniusMatrix matrix_from_buffer( const std::vector<sgns::base::Buffer> &vec )
+    {
+        uint64_t size = vec.size();
+
+        GeniusMatrix matrix = { size, reinterpret_cast<GeniusArray *>( malloc( size * sizeof( GeniusArray ) ) ) };
+
+        for ( uint64_t i = 0; i < size; i++ )
+        {
+            matrix.ptr[i] = GeniusArray{ vec[i].size(),
+                                         reinterpret_cast<uint8_t *>( malloc( vec[i].size() * sizeof( uint8_t ) ) ) };
+            memcpy( matrix.ptr[i].ptr, vec[i].data(), vec[i].size() * sizeof( uint8_t ) );
+        }
+
+        return matrix;
+    }
+
     std::shared_ptr<sgns::GeniusNode> GeniusNodeInstance;
 }
 
@@ -150,6 +167,12 @@ void GeniusSDKFreeTransactions( GeniusMatrix matrix )
         free( matrix.ptr[i].ptr );
     }
     free( matrix.ptr );
+}
+
+GeniusMatrix GeniusSDKGetBlocks()
+{
+    auto blocks = GeniusNodeInstance->GetBlocks();
+    return matrix_from_buffer( blocks );
 }
 
 void GeniusSDKMintTokens( uint64_t amount )
