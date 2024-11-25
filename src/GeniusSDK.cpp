@@ -145,9 +145,9 @@ const char *GeniusSDKInit( const char *base_path, const char *eth_private_key )
     return ret_val.c_str();
 }
 
-void GeniusSDKProcess( const ImagePath_t path, const PayAmount_t amount )
+void GeniusSDKProcess( const JsonData_t jsondata )
 {
-    GeniusNodeInstance->ProcessImage( std::string{ path }, amount );
+    GeniusNodeInstance->ProcessImage( std::string{ jsondata } );
 }
 
 uint64_t GeniusSDKGetBalance()
@@ -196,4 +196,9 @@ bool GeniusSDKTransferTokens( uint64_t amount, GeniusAddress *dest )
     boost::multiprecision::uint256_t destination( dest->address );
 
     return GeniusNodeInstance->TransferFunds( amount, destination );
+}
+
+uint64_t GeniusSDKGetCost( const JsonData_t jsondata )
+{
+    return GeniusNodeInstance->GetProcessCost( jsondata );
 }
