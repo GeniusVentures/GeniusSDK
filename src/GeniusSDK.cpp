@@ -9,6 +9,7 @@
 
 #include "account/GeniusNode.hpp"
 #include <algorithm>
+#include <base/buffer.hpp>
 #include <boost/multiprecision/cpp_int/import_export.hpp>
 #include <memory>
 #include <rapidjson/document.h>
@@ -100,6 +101,22 @@ namespace
         return matrix;
     }
 
+    GeniusMatrix matrix_from_buffer( const std::vector<sgns::base::Buffer> &vec )
+    {
+        uint64_t size = vec.size();
+
+        GeniusMatrix matrix = { size, reinterpret_cast<GeniusArray *>( malloc( size * sizeof( GeniusArray ) ) ) };
+
+        for ( uint64_t i = 0; i < size; i++ )
+        {
+            matrix.ptr[i] = GeniusArray{ vec[i].size(),
+                                         reinterpret_cast<uint8_t *>( malloc( vec[i].size() * sizeof( uint8_t ) ) ) };
+            memcpy( matrix.ptr[i].ptr, vec[i].data(), vec[i].size() * sizeof( uint8_t ) );
+        }
+
+        return matrix;
+    }
+
     std::shared_ptr<sgns::GeniusNode> GeniusNodeInstance;
 }
 
@@ -128,9 +145,9 @@ const char *GeniusSDKInit( const char *base_path, const char *eth_private_key )
     return ret_val.c_str();
 }
 
-void GeniusSDKProcess( const ImagePath_t path, const PayAmount_t amount )
+void GeniusSDKProcess( const JsonData_t jsondata )
 {
-    GeniusNodeInstance->ProcessImage( std::string{ path }, amount );
+    GeniusNodeInstance->ProcessImage( std::string{ jsondata } );
 }
 
 uint64_t GeniusSDKGetBalance()
@@ -152,9 +169,15 @@ void GeniusSDKFreeTransactions( GeniusMatrix matrix )
     free( matrix.ptr );
 }
 
-void GeniusSDKMintTokens( uint64_t amount )
+GeniusMatrix GeniusSDKGetBlocks()
 {
-    GeniusNodeInstance->MintTokens( amount );
+    auto blocks = GeniusNodeInstance->GetBlocks();
+    return matrix_from_buffer( blocks );
+}
+
+void GeniusSDKMintTokens( uint64_t amount, const char *transaction_hash, const char *chain_id  )
+{
+    GeniusNodeInstance->MintTokens( amount, transaction_hash, chain_id );
 }
 
 GeniusAddress GeniusSDKGetAddress()
@@ -173,4 +196,9 @@ bool GeniusSDKTransferTokens( uint64_t amount, GeniusAddress *dest )
     boost::multiprecision::uint256_t destination( dest->address );
 
     return GeniusNodeInstance->TransferFunds( amount, destination );
+}
+
+uint64_t GeniusSDKGetCost( const JsonData_t jsondata )
+{
+    return GeniusNodeInstance->GetProcessCost( jsondata );
 }
