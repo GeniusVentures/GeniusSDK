@@ -175,9 +175,9 @@ GeniusMatrix GeniusSDKGetBlocks()
     return matrix_from_buffer( blocks );
 }
 
-void GeniusSDKMintTokens( uint64_t amount, const char *transaction_hash, const char *chain_id  )
+void GeniusSDKMintTokens( uint64_t amount, const char *transaction_hash, const char *chain_id, const char *token_id  )
 {
-    GeniusNodeInstance->MintTokens( amount, transaction_hash, chain_id );
+    GeniusNodeInstance->MintTokens( amount, transaction_hash, chain_id, token_id );
 }
 
 GeniusAddress GeniusSDKGetAddress()
