@@ -22,7 +22,7 @@
 int main( int argc, char *argv[] )
 {
     const char* no_path = "./";
-    GeniusSDKInit( no_path, "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef" );
+    GeniusSDKInit( no_path, "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef", true, true );
 
     while ( true )
     {

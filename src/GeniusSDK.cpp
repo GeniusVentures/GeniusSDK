@@ -120,7 +120,7 @@ namespace
     std::shared_ptr<sgns::GeniusNode> GeniusNodeInstance;
 }
 
-const char *GeniusSDKInit( const char *base_path, const char *eth_private_key )
+const char *GeniusSDKInit( const char *base_path, const char *eth_private_key, bool autodht, bool process )
 {
     if ( base_path == nullptr )
     {
@@ -133,7 +133,7 @@ const char *GeniusSDKInit( const char *base_path, const char *eth_private_key )
 
     if ( load_config_ret )
     {
-        GeniusNodeInstance = std::make_shared<sgns::GeniusNode>( load_config_ret.value(), eth_private_key );
+        GeniusNodeInstance = std::make_shared<sgns::GeniusNode>( load_config_ret.value(), eth_private_key, autodht, process );
         ret_val.append( load_config_ret.value().BaseWritePath );
     }
     else
