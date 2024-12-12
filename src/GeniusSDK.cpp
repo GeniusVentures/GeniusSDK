@@ -155,9 +155,13 @@ uint64_t GeniusSDKGetBalance()
     return GeniusNodeInstance->GetBalance();
 }
 
-GeniusMatrix GeniusSDKGetTransactions()
+GeniusMatrix GeniusSDKGetOutTransactions()
 {
-    return matrix_from_vector_of_vector( GeniusNodeInstance->GetTransactions() );
+    return matrix_from_vector_of_vector( GeniusNodeInstance->GetOutTransactions() );
+}
+GeniusMatrix GeniusSDKGetInTransactions()
+{
+    return matrix_from_vector_of_vector( GeniusNodeInstance->GetInTransactions() );
 }
 
 void GeniusSDKFreeTransactions( GeniusMatrix matrix )
@@ -169,12 +173,6 @@ void GeniusSDKFreeTransactions( GeniusMatrix matrix )
     free( matrix.ptr );
 }
 
-GeniusMatrix GeniusSDKGetBlocks()
-{
-    auto blocks = GeniusNodeInstance->GetBlocks();
-    return matrix_from_buffer( blocks );
-}
-
 void GeniusSDKMintTokens( uint64_t amount, const char *transaction_hash, const char *chain_id, const char *token_id  )
 {
     GeniusNodeInstance->MintTokens( amount, transaction_hash, chain_id, token_id );
@@ -182,7 +180,7 @@ void GeniusSDKMintTokens( uint64_t amount, const char *transaction_hash, const c
 
 GeniusAddress GeniusSDKGetAddress()
 {
-    auto address = GeniusNodeInstance->GetAddress();
+    auto address = GeniusNodeInstance->GetAddress<std::string>();
 
     GeniusAddress ret;
 
