@@ -379,7 +379,7 @@ print("SuperGenius_DIR: ${SuperGenius_DIR}")
 find_package(ProofSystem CONFIG REQUIRED)
 find_package(SuperGenius CONFIG REQUIRED)
 include_directories(${SuperGenius_INCLUDE_DIR})
-include_directories("${THIRDPARTY_BUILD_DIR}/zkLLVM/include")
+include_directories("${ZKLLVM_DIR}/zkLLVM/include")
 
 include_directories(
     ${PROJECT_ROOT}/include
