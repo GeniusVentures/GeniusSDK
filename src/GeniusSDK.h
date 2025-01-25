@@ -64,6 +64,7 @@ GNUS_VISIBILITY_DEFAULT void GeniusSDKMintTokens( uint64_t amount, const char *t
 GNUS_VISIBILITY_DEFAULT GeniusAddress GeniusSDKGetAddress();
 GNUS_VISIBILITY_DEFAULT bool          GeniusSDKTransferTokens( uint64_t amount, GeniusAddress *dest );
 GNUS_VISIBILITY_DEFAULT uint64_t      GeniusSDKGetCost( const JsonData_t jsondata );
+GNUS_VISIBILITY_DEFAULT void         GeniusSDKShutdown();
 
 GNUS_EXPORT_END
 

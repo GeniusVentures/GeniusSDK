@@ -200,3 +200,10 @@ uint64_t GeniusSDKGetCost( const JsonData_t jsondata )
 {
     return GeniusNodeInstance->GetProcessCost( jsondata );
 }
+
+void GeniusSDKShutdown() {
+    if (GeniusNodeInstance) {
+        GeniusNodeInstance.reset(); // Explicitly destroy the shared_ptr
+        std::cout << "GeniusNodeInstance has been shut down." << std::endl;
+    }
+}
