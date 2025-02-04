@@ -63,7 +63,7 @@ namespace
         {
             return outcome::failure( JsonError( "Missing or invalid 'Address'" ) );
         }
-        if ( !document.HasMember( "Cut" ) || !document["Cut"].IsDouble() )
+        if ( !document.HasMember( "Cut" ) || !document["Cut"].IsString() )
         {
             return outcome::failure( JsonError( "Missing or invalid 'Cut'" ) );
         }
@@ -77,7 +77,7 @@ namespace
         }
 
         strncpy( config_from_file.Addr, document["Address"].GetString(), document["Address"].GetStringLength() );
-        config_from_file.Cut              = document["Cut"].GetDouble();
+        config_from_file.Cut              = document["Cut"].GetString();
         config_from_file.TokenValueInGNUS = document["TokenValue"].GetDouble();
         config_from_file.TokenID          = document["TokenID"].GetInt();
         strncpy( config_from_file.BaseWritePath, base_path.data(), base_path.size() );
@@ -120,7 +120,7 @@ namespace
     std::shared_ptr<sgns::GeniusNode> GeniusNodeInstance;
 }
 
-const char *GeniusSDKInit( const char *base_path, const char *eth_private_key, bool autodht, bool process, int baseport )
+const char *GeniusSDKInit( const char *base_path, const char *eth_private_key, bool autodht, bool process, uint16_t baseport )
 {
     if ( base_path == nullptr )
     {
@@ -133,7 +133,7 @@ const char *GeniusSDKInit( const char *base_path, const char *eth_private_key, b
 
     if ( load_config_ret )
     {
-        GeniusNodeInstance = std::make_shared<sgns::GeniusNode>( load_config_ret.value(), eth_private_key, autodht, process, baseport );
+        GeniusNodeInstance = std::make_shared<sgns::GeniusNode>( load_config_ret.value(), eth_private_key, autodht, process, baseport);
         ret_val.append( load_config_ret.value().BaseWritePath );
     }
     else
@@ -173,9 +173,14 @@ void GeniusSDKFreeTransactions( GeniusMatrix matrix )
     free( matrix.ptr );
 }
 
-void GeniusSDKMintTokens( uint64_t amount, const char *transaction_hash, const char *chain_id, const char *token_id  )
+void GeniusSDKMintTokens( const char * amount, const char *transaction_hash, const char *chain_id, const char *token_id  )
 {
-    GeniusNodeInstance->MintTokens( amount, transaction_hash, chain_id, token_id );
+    GeniusNodeInstance->MintTokens(
+        std::string(amount),
+        std::string(transaction_hash),
+        std::string(chain_id),
+        std::string(token_id)
+    );
 }
 
 GeniusAddress GeniusSDKGetAddress()
