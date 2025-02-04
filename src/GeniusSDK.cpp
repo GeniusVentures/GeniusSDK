@@ -134,7 +134,7 @@ const char *GeniusSDKInit( const char *base_path, const char *eth_private_key, b
 
     if ( load_config_ret )
     {
-        GeniusNodeInstance = std::make_shared<sgns::GeniusNode>( load_config_ret.value(), eth_private_key, autodht, process, baseport );
+        GeniusNodeInstance = std::make_shared<sgns::GeniusNode>( load_config_ret.value(), eth_private_key, autodht, process, baseport);
         ret_val.append( load_config_ret.value().BaseWritePath );
     }
     else
@@ -175,9 +175,14 @@ void GeniusSDKFreeTransactions( GeniusMatrix matrix )
     free( matrix.ptr );
 }
 
-void GeniusSDKMintTokens( uint64_t amount, const char *transaction_hash, const char *chain_id, const char *token_id  )
+void GeniusSDKMintTokens( const char * amount, const char *transaction_hash, const char *chain_id, const char *token_id  )
 {
-    GeniusNodeInstance->MintTokens( amount, transaction_hash, chain_id, token_id );
+    GeniusNodeInstance->MintTokens(
+        std::string(amount),
+        std::string(transaction_hash),
+        std::string(chain_id),
+        std::string(token_id)
+    );
 }
 
 GeniusAddress GeniusSDKGetAddress()
