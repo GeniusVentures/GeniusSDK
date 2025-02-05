@@ -120,7 +120,7 @@ namespace
     std::shared_ptr<sgns::GeniusNode> GeniusNodeInstance;
 }
 
-const char *GeniusSDKInit( const char *base_path, const char *eth_private_key, bool autodht, bool process, int baseport )
+const char *GeniusSDKInit( const char *base_path, const char *eth_private_key, bool autodht, bool process, uint16_t baseport )
 {
     if ( base_path == nullptr )
     {
@@ -173,7 +173,7 @@ void GeniusSDKFreeTransactions( GeniusMatrix matrix )
     free( matrix.ptr );
 }
 
-void GeniusSDKMintTokens( uint64_t amount, const char *transaction_hash, const char *chain_id, const char *token_id  )
+void GeniusSDKMintTokens( double amount, const char *transaction_hash, const char *chain_id, const char *token_id  )
 {
     GeniusNodeInstance->MintTokens( amount, transaction_hash, chain_id, token_id );
 }
