@@ -175,10 +175,10 @@ void GeniusSDKFreeTransactions( GeniusMatrix matrix )
     free( matrix.ptr );
 }
 
-void GeniusSDKMintTokens( const char * amount, const char *transaction_hash, const char *chain_id, const char *token_id  )
+void GeniusSDKMintTokens( uint64_t amount, const char *transaction_hash, const char *chain_id, const char *token_id  )
 {
     GeniusNodeInstance->MintTokens(
-        std::string(amount),
+        amount,
         std::string(transaction_hash),
         std::string(chain_id),
         std::string(token_id)

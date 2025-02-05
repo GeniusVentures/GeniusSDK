@@ -59,7 +59,7 @@ GNUS_VISIBILITY_DEFAULT uint64_t     GeniusSDKGetBalance();
 GNUS_VISIBILITY_DEFAULT GeniusMatrix GeniusSDKGetOutTransactions();
 GNUS_VISIBILITY_DEFAULT GeniusMatrix GeniusSDKGetInTransactions();
 GNUS_VISIBILITY_DEFAULT void         GeniusSDKFreeTransactions( GeniusMatrix matrix );
-GNUS_VISIBILITY_DEFAULT void GeniusSDKMintTokens( const char * amount, const char *transaction_hash, const char *chain_id,
+GNUS_VISIBILITY_DEFAULT void GeniusSDKMintTokens( uint64_t amount, const char *transaction_hash, const char *chain_id,
                                                   const char *token_id );
 GNUS_VISIBILITY_DEFAULT GeniusAddress GeniusSDKGetAddress();
 GNUS_VISIBILITY_DEFAULT bool          GeniusSDKTransferTokens( uint64_t amount, GeniusAddress *dest );
