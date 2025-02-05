@@ -171,7 +171,7 @@ static void getProcessingCost()
 
 static void mintTokens()
 {
-    const char *amount           = "1000";
+    uint64_t    amount           = 1000;
     const char *transaction_hash = "";
     const char *chain_id         = "";
     const char *token_id         = "";
