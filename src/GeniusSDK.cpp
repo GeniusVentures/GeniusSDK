@@ -150,7 +150,7 @@ void GeniusSDKProcess( const JsonData_t jsondata )
     GeniusNodeInstance->ProcessImage( std::string{ jsondata } );
 }
 
-uint64_t GeniusSDKGetBalance()
+double GeniusSDKGetBalance()
 {
     return GeniusNodeInstance->GetBalance();
 }
@@ -189,14 +189,14 @@ GeniusAddress GeniusSDKGetAddress()
     return ret;
 }
 
-bool GeniusSDKTransferTokens( uint64_t amount, GeniusAddress *dest )
+bool GeniusSDKTransferTokens( double amount, GeniusAddress *dest )
 {
     boost::multiprecision::uint256_t destination( dest->address );
 
     return GeniusNodeInstance->TransferFunds( amount, destination );
 }
 
-uint64_t GeniusSDKGetCost( const JsonData_t jsondata )
+double GeniusSDKGetCost( const JsonData_t jsondata )
 {
     return GeniusNodeInstance->GetProcessCost( jsondata );
 }

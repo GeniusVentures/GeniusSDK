@@ -348,20 +348,6 @@ set(gnus_upnp_DIR "${_THIRDPARTY_BUILD_DIR}/gnus_upnp/lib/cmake/gnus_upnp")
 find_package(gnus_upnp CONFIG REQUIRED)
 include_directories(${gnus_upnp_INCLUDE_DIR})
 
-#define zkllvm directory
-if(NOT DEFINED ZKLLVM_DIR)
-    if(EXISTS "${CMAKE_CURRENT_LIST_DIR}/../../zkLLVM")
-        print("Setting default zkLLVM directory")
-        get_filename_component(BUILD_PLATFORM_NAME ${CMAKE_CURRENT_SOURCE_DIR} NAME)
-        set(ZKLLVM_DIR "${CMAKE_CURRENT_LIST_DIR}/../../zkLLVM/build/${BUILD_PLATFORM_NAME}/Release/${ANDROID_ABI}" CACHE STRING "Default zkllvm Library")
-
-        # get absolute path
-        cmake_path(SET ZKLLVM_DIR NORMALIZE "${ZKLLVM_DIR}")
-    else()
-        message(FATAL_ERROR "Cannot find zkLLVM directory required to build")
-    endif()
-endif()
-
 # --------------------------------------------------------
 # Set config of crypto3
 add_library(crypto3::algebra INTERFACE IMPORTED)
@@ -423,7 +409,7 @@ set_target_properties(marshalling::crypto3_zk PROPERTIES
 )
 # zkLLVM
 set(zkLLVM_INCLUDE_DIR "${ZKLLVM_DIR}/zkLLVM/include")
-include_directories(${zkLLVM_INCLUDE_DIR})
+
 # Set config of llvm
 set(LLVM_DIR "${ZKLLVM_DIR}/zkLLVM/lib/cmake/llvm")
 find_package(LLVM CONFIG REQUIRED)
@@ -459,7 +445,7 @@ print("SuperGenius_DIR: ${SuperGenius_DIR}")
 find_package(ProofSystem CONFIG REQUIRED)
 find_package(SuperGenius CONFIG REQUIRED)
 include_directories(${SuperGenius_INCLUDE_DIR})
-include_directories("${ZKLLVM_DIR}/zkLLVM/include")
+include_directories(${zkLLVM_INCLUDE_DIR})
 
 include_directories(
     ${PROJECT_ROOT}/include

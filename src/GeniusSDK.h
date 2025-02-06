@@ -55,15 +55,15 @@ typedef uint64_t PayAmount_t;      ///< Amount to be paid for the processing
 GNUS_VISIBILITY_DEFAULT const char  *GeniusSDKInit( const char *base_path, const char *eth_private_key, bool autodht,
                                                     bool process, uint16_t baseport );
 GNUS_VISIBILITY_DEFAULT void         GeniusSDKProcess( const JsonData_t jsondata );
-GNUS_VISIBILITY_DEFAULT uint64_t     GeniusSDKGetBalance();
+GNUS_VISIBILITY_DEFAULT double       GeniusSDKGetBalance();
 GNUS_VISIBILITY_DEFAULT GeniusMatrix GeniusSDKGetOutTransactions();
 GNUS_VISIBILITY_DEFAULT GeniusMatrix GeniusSDKGetInTransactions();
 GNUS_VISIBILITY_DEFAULT void         GeniusSDKFreeTransactions( GeniusMatrix matrix );
 GNUS_VISIBILITY_DEFAULT void GeniusSDKMintTokens( double amount, const char *transaction_hash, const char *chain_id,
                                                   const char *token_id );
 GNUS_VISIBILITY_DEFAULT GeniusAddress GeniusSDKGetAddress();
-GNUS_VISIBILITY_DEFAULT bool          GeniusSDKTransferTokens( uint64_t amount, GeniusAddress *dest );
-GNUS_VISIBILITY_DEFAULT uint64_t      GeniusSDKGetCost( const JsonData_t jsondata );
+GNUS_VISIBILITY_DEFAULT bool          GeniusSDKTransferTokens( double amount, GeniusAddress *dest );
+GNUS_VISIBILITY_DEFAULT double        GeniusSDKGetCost( const JsonData_t jsondata );
 GNUS_VISIBILITY_DEFAULT void          GeniusSDKShutdown();
 
 GNUS_EXPORT_END
