@@ -5,18 +5,25 @@
  * @version 1.0
  * @date    2025-02-06
  */
-
+#ifdef _WIN32
+#include <io.h>
+#include <fcntl.h>
+#include <stdio.h>
+#else
+#include <unistd.h>
+#include <fcntl.h>
+#endif
 #include <cstdio>
 #include <cstdlib>
 #include <cstdint>
 #include <cstring>
 #include <cstdarg>
-#include <unistd.h>
 #include <fcntl.h>
 #include "GeniusSDK.h"
 
 static const int MAX_INPUT_SIZE = 256; ///< Maximum size for user input buffers.
 
+static void initSDK();
 static void getBalance();
 static void getAddress();
 static void getInTransactions();
@@ -42,43 +49,28 @@ static int original_stdout_fd = -1; ///< To preserve original stdout when suppre
 
 int main()
 {
-    char     base_path[MAX_INPUT_SIZE]       = "./";
-    char     eth_private_key[MAX_INPUT_SIZE] = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
-    int32_t  autodht                         = 1;
-    int32_t  process                         = 1;
-    uint16_t baseport                        = 40001;
+    static const struct MenuOption
+    {
+        int32_t     option;      ///< Option number
+        const char *description; ///< Option description
+        void ( *function )();    ///< Function to execute when the option is selected
+    } options[] = { { 1, "Initialize the SDK", initSDK },
+                    { 2, "Get Balance", getBalance },
+                    { 3, "Get Address", getAddress },
+                    { 4, "Get Incoming Transactions", getInTransactions },
+                    { 5, "Get Outgoing Transactions", getOutTransactions },
+                    { 6, "Process Sample Data", processSampleData },
+                    { 7, "Get Processing Cost", getProcessingCost },
+                    { 8, "Mint Tokens", mintTokens },
+                    { 9, "Transfer Tokens", transferTokens },
+                    { 10, "Shutdown SDK", shutdownSDK },
+                    { 0, "Exit", nullptr } };
 
     suppressSDKLogs();
-
-    getSDKConfig( base_path, eth_private_key, &autodht, &process, &baseport );
-
-    const char *init_result = GeniusSDKInit( base_path, eth_private_key, autodht, process, baseport );
-    if ( !init_result )
-    {
-        userPrint( "Failed to initialize GeniusSDK.\n" );
-        return -1;
-    }
-    userPrint( "GeniusSDK initialized successfully.\n" );
 
     int choice = -1;
     do
     {
-        static const struct MenuOption
-        {
-            int32_t     option;      ///< Option number
-            const char *description; ///< Option description
-            void ( *function )();    ///< Function to execute when the option is selected
-        } options[] = { { 1, "Get Balance", getBalance },
-                        { 2, "Get Address", getAddress },
-                        { 3, "Get Incoming Transactions", getInTransactions },
-                        { 4, "Get Outgoing Transactions", getOutTransactions },
-                        { 5, "Process Sample Data", processSampleData },
-                        { 6, "Get Processing Cost", getProcessingCost },
-                        { 7, "Mint Tokens", mintTokens },
-                        { 8, "Transfer Tokens", transferTokens },
-                        { 9, "Shutdown SDK", shutdownSDK },
-                        { 0, "Exit", nullptr } };
-
         userPrint( "\nSelect an option:\n" );
         for ( int32_t i = 0; options[i].option != 0; i++ )
         {
@@ -86,10 +78,12 @@ int main()
         }
         choice = promptInt( "Enter choice: ", -1 );
 
+        bool validChoice = false;
         for ( int32_t i = 0; options[i].option != 0; i++ )
         {
             if ( options[i].option == choice )
             {
+                validChoice = true;
                 if ( options[i].function )
                 {
                     options[i].function();
@@ -101,9 +95,38 @@ int main()
                 break;
             }
         }
+
+        if ( !validChoice && choice != 0 )
+        {
+            userPrint( "Invalid choice. Please select again.\n" );
+        }
     } while ( choice != 0 );
 
     return 0;
+}
+
+/**
+ * @brief Initializes the GeniusSDK
+ */
+static void initSDK()
+{
+    char     base_path[MAX_INPUT_SIZE]       = "./";
+    char     eth_private_key[MAX_INPUT_SIZE] = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
+    int32_t  autodht                         = 1;
+    int32_t  process                         = 1;
+    uint16_t baseport                        = 40001;
+
+    userPrint( "\n--- SDK Initialization ---\n" );
+    getSDKConfig( base_path, eth_private_key, &autodht, &process, &baseport );
+
+    const char *init_result = GeniusSDKInit( base_path, eth_private_key, autodht, process, baseport );
+    if ( !init_result || strncmp( init_result, "Initialized", strlen( "Initialized" ) ) != 0 )
+    {
+        userPrint( "Failed to initialize GeniusSDK. Error: %s\n", init_result ? init_result : "No response" );
+        return;
+    }
+
+    userPrint( "GeniusSDK initialized successfully.\n" );
 }
 
 /**
@@ -146,9 +169,6 @@ static void getOutTransactions()
 
 /**
  * @brief Processes a sample JSON data file using the GeniusSDK.
- *
- * This function prompts the user for the JSON file path (with a default value)
- * and loads the JSON data into a local buffer. It then passes that data to the SDK.
  */
 static void processSampleData()
 {
@@ -162,15 +182,13 @@ static void processSampleData()
         userPrint( "Failed to load JSON file.\n" );
         return;
     }
+
     GeniusSDKProcess( localSampleData );
     userPrint( "Processed sample JSON data.\n" );
 }
 
 /**
  * @brief Retrieves and prints the estimated processing cost for the JSON data.
- *
- * This function prompts the user for the JSON file path (with a default value),
- * loads the JSON data into a local buffer, and then retrieves the cost using the SDK.
  */
 static void getProcessingCost()
 {
@@ -233,13 +251,26 @@ static void shutdownSDK()
 static void suppressSDKLogs()
 {
     fflush( stdout );
+
+#ifdef _WIN32
+    original_stdout_fd = _dup( _fileno( stdout ) );
+
+    int null_fd = _open( "NUL", _O_WRONLY );
+    if ( null_fd != -1 )
+    {
+        _dup2( null_fd, _fileno( stdout ) );
+        _close( null_fd );
+    }
+#else
     original_stdout_fd = dup( STDOUT_FILENO );
-    int devnull_fd     = open( "/dev/null", O_WRONLY );
+
+    int devnull_fd = open( "/dev/null", O_WRONLY );
     if ( devnull_fd != -1 )
     {
         dup2( devnull_fd, STDOUT_FILENO );
         close( devnull_fd );
     }
+#endif
 }
 
 /**
@@ -253,12 +284,11 @@ static void suppressSDKLogs()
 static void getSDKConfig( char *base_path, char *eth_private_key, int32_t *autodht, int32_t *process,
                           uint16_t *baseport )
 {
-    userPrint( "Configure GeniusSDK Initialization:\n" );
+    userPrint( "\nConfigure GeniusSDK Initialization:\n" );
 
     promptString( "Enter base path (Press Enter for default: ./): ", base_path, MAX_INPUT_SIZE, "./" );
     promptString( "Enter Ethereum private key (Press Enter for default): ", eth_private_key, MAX_INPUT_SIZE,
                   "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef" );
-
     *autodht  = promptInt( "Enable AutoDHT? (1 = Yes, 0 = No, Press Enter for default: 1): ", 1 );
     *process  = promptInt( "Enable processing? (1 = Yes, 0 = No, Press Enter for default: 1): ", 1 );
     *baseport = promptUShort( "Enter base port (Press Enter for default: 40001): ", 40001 );
@@ -266,10 +296,6 @@ static void getSDKConfig( char *base_path, char *eth_private_key, int32_t *autod
 
 /**
  * @brief Loads the contents of a file into a provided JSON buffer.
- *
- * The JSON buffer is of type JsonData_t (a fixed-size char array of 2048 bytes).
- * Up to 2047 bytes will be read from the file so that the JSON data is null-terminated.
- *
  * @param filename The path to the file to load.
  * @param jsonBuffer The buffer (of type JsonData_t) where file data will be stored.
  * @return true if the file was successfully loaded, false otherwise.
@@ -369,10 +395,6 @@ static void readLine( char *buffer, size_t bufferSize )
 
 /**
  * @brief Custom print function that always writes to the original stdout.
- *
- * Despite the SDK suppressing global stdout, this function temporarily
- * restores it to display messages to the user.
- *
  * @param fmt Format string (printf-style).
  * @param ... Additional arguments.
  */
@@ -387,8 +409,22 @@ void userPrint( const char *fmt, ... )
         return;
     }
 
-    int current_fd = dup( STDOUT_FILENO );
+#ifdef _WIN32
+    int current_fd = _dup( _fileno( stdout ) );
 
+    _dup2( original_stdout_fd, _fileno( stdout ) );
+
+    va_list args;
+    va_start( args, fmt );
+    vprintf( fmt, args );
+    va_end( args );
+
+    fflush( stdout );
+
+    _dup2( current_fd, _fileno( stdout ) );
+    _close( current_fd );
+#else
+    int current_fd = dup( STDOUT_FILENO );
     dup2( original_stdout_fd, STDOUT_FILENO );
 
     va_list args;
@@ -399,4 +435,5 @@ void userPrint( const char *fmt, ... )
 
     dup2( current_fd, STDOUT_FILENO );
     close( current_fd );
+#endif
 }
