@@ -64,7 +64,26 @@ GNUS_VISIBILITY_DEFAULT void GeniusSDKMintTokens( uint64_t amount, const char *t
 GNUS_VISIBILITY_DEFAULT GeniusAddress GeniusSDKGetAddress();
 GNUS_VISIBILITY_DEFAULT bool          GeniusSDKTransferTokens( uint64_t amount, GeniusAddress *dest );
 GNUS_VISIBILITY_DEFAULT uint64_t      GeniusSDKGetCost( const JsonData_t jsondata );
-GNUS_VISIBILITY_DEFAULT void         GeniusSDKShutdown();
+GNUS_VISIBILITY_DEFAULT void          GeniusSDKShutdown();
+
+GNUS_VISIBILITY_DEFAULT void GeniusSDKTransferWithString( char *gnus, GeniusAddress *dest );
+GNUS_VISIBILITY_DEFAULT void GeniusSDKMintWithString( char *gnus, const char *transaction_hash, const char *chain_id, const char *token_id );
+
+/**
+ * @brief     Converts a GNUS token string to Minion Tokens (1e-9 GNUS).
+ * 
+ * @param[in] gnus A null-terminated C-style string representing the amount in GNUS.
+ *            The string must be properly formatted and include '\0' termination.
+ * @return    uint64_t The equivalent amount in Minion Tokens.
+ */
+GNUS_VISIBILITY_DEFAULT uint64_t GeniusSDKGeniusToMinions(char *gnus);
+/**
+ * @brief     Converts an amount in Minion Tokens to a human-readable GNUS token string.
+ * 
+ * @param[in] minions The amount in Minion Tokens (1e-9 GNUS).
+ * @return    char* A C-style string representing the amount in GNUS.
+ */
+GNUS_VISIBILITY_DEFAULT char *GeniusSDKMinionsToGenius(uint64_t minions);
 
 GNUS_EXPORT_END
 
