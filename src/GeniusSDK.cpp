@@ -185,6 +185,10 @@ void GeniusSDKMintTokens( uint64_t amount, const char *transaction_hash, const c
     );
 }
 
+void GeniusSDKMintWithString( char *gnus, const char *transaction_hash, const char *chain_id, const char *token_id )
+{
+    GeniusSDKMintTokens( GeniusSDKGeniusToMinions( gnus ), transaction_hash , chain_id,token_id);
+}
 GeniusAddress GeniusSDKGetAddress()
 {
     auto address = GeniusNodeInstance->GetAddress();
@@ -202,6 +206,11 @@ bool GeniusSDKTransferTokens( uint64_t amount, GeniusAddress *dest )
     return GeniusNodeInstance->TransferFunds( amount, destination );
 }
 
+void GeniusSDKTransferWithString( char *gnus, GeniusAddress *dest )
+{
+    GeniusSDKTransferTokens( GeniusSDKGeniusToMinions( gnus ), dest );
+}
+
 uint64_t GeniusSDKGetCost( const JsonData_t jsondata )
 {
     return GeniusNodeInstance->GetProcessCost( jsondata );
@@ -215,3 +224,19 @@ void GeniusSDKShutdown()
         std::cout << "GeniusNodeInstance has been shut down." << std::endl;
     }
 }
+uint64_t GeniusSDKGeniusToMinions(char * gnus)
+{
+    auto result = GeniusNodeInstance->ParseTokens(std::string(gnus));
+    if (result.has_value())
+    {
+        return result.value();
+    }
+    return 0; 
+
+}
+char * GeniusSDKMinionsToGenius(uint64_t minions)
+{
+    static std::string formatted = GeniusNodeInstance->FormatTokens(minions);
+    return const_cast<char *>(formatted.c_str());
+}
+
