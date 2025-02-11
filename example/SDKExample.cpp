@@ -148,7 +148,7 @@ static void initSDK()
  */
 static void getBalanceInString()
 {
-    GeniusTokenValue balance = GeniusSDKGetBalanceInString();
+    GeniusTokenValue balance = GeniusSDKGetBalanceAsString();
     printf( "Balance: %s\n", balance.value );
 }
 
@@ -187,7 +187,7 @@ static void transferTokensWithString()
 static void getProcessingCostInString()
 {
     JsonData_t       jsonData = "sample.json";
-    GeniusTokenValue cost     = GeniusSDKGetCostInString( jsonData );
+    GeniusTokenValue cost     = GeniusSDKGetCostAsString( jsonData );
     printf( "Processing cost: %s\n", cost.value );
 }
 
@@ -199,7 +199,7 @@ static void convertGeniusToMinions()
     GeniusTokenValue amount;
     printf( "Enter Genius amount: " );
     scanf( "%s", amount.value );
-    uint64_t minions = GeniusSDKGeniusToMinions( &amount );
+    uint64_t minions = GeniusSDKToMinions( &amount );
     printf( "Converted to Minions: %llu\n", minions );
 }
 
@@ -211,7 +211,7 @@ static void convertMinionsToGenius()
     uint64_t minions;
     printf( "Enter Minion amount: " );
     scanf( "%llu", &minions );
-    GeniusTokenValue genius = GeniusSDKMinionsToGenius( minions );
+    GeniusTokenValue genius = GeniusSDKToGenius( minions );
     printf( "Converted to Genius: %s\n", genius.value );
 }
 
