@@ -121,7 +121,8 @@ namespace
     std::shared_ptr<sgns::GeniusNode> GeniusNodeInstance;
 }
 
-const char *GeniusSDKInit( const char *base_path, const char *eth_private_key, bool autodht, bool process, uint16_t baseport )
+const char *GeniusSDKInit( const char *base_path, const char *eth_private_key, bool autodht, bool process,
+                           uint16_t baseport )
 {
     if ( base_path == nullptr )
     {
@@ -135,7 +136,7 @@ const char *GeniusSDKInit( const char *base_path, const char *eth_private_key, b
     if ( load_config_ret )
     {
         GeniusNodeInstance = std::make_shared<sgns::GeniusNode>( load_config_ret.value(), eth_private_key, autodht, process, baseport);
-        ret_val.append( load_config_ret.value().BaseWritePath );
+            ret_val.append( load_config_ret.value().BaseWritePath );
     }
     else
     {
@@ -154,6 +155,11 @@ void GeniusSDKProcess( const JsonData_t jsondata )
 uint64_t GeniusSDKGetBalance()
 {
     return GeniusNodeInstance->GetBalance();
+}
+
+GeniusTokenValue GeniusSDKGetBalanceInString()
+{
+    return GeniusSDKMinionsToGenius( GeniusNodeInstance->GetBalance() );
 }
 
 GeniusMatrix GeniusSDKGetOutTransactions()
@@ -175,20 +181,26 @@ void GeniusSDKFreeTransactions( GeniusMatrix matrix )
     free( matrix.ptr );
 }
 
-void GeniusSDKMintTokens( uint64_t amount, const char *transaction_hash, const char *chain_id, const char *token_id  )
+/**
+ * @brief     Mints new tokens in Minion Tokens.
+ * @param[in] amount            The amount of tokens to be minted, in Minion Tokens.
+ * @param[in] transaction_hash  A null-terminated string representing the transaction hash.
+ * @param[in] chain_id          A null-terminated string representing the blockchain chain ID.
+ * @param[in] token_id          A null-terminated string representing the token ID.
+ * @note      If the value is in Genius Tokens, use `GeniusSDKGeniusToMinions` to convert GNUS values to Minion Tokens before calling this function.
+ */
+void GeniusSDKMintTokens( uint64_t amount, const char *transaction_hash, const char *chain_id, const char *token_id )
 {
-    GeniusNodeInstance->MintTokens(
-        amount,
-        std::string(transaction_hash),
-        std::string(chain_id),
-        std::string(token_id)
-    );
+    GeniusNodeInstance->MintTokens( amount, std::string( transaction_hash ), std::string( chain_id ),
+                                    std::string( token_id ) );
 }
 
-void GeniusSDKMintWithString( char *gnus, const char *transaction_hash, const char *chain_id, const char *token_id )
+void GeniusSDKMintTokensWithString( const GeniusTokenValue *gnus, const char *transaction_hash, const char *chain_id,
+                                    const char *token_id )
 {
-    GeniusSDKMintTokens( GeniusSDKGeniusToMinions( gnus ), transaction_hash , chain_id,token_id);
+    GeniusSDKMintTokens( GeniusSDKGeniusToMinions( gnus ), transaction_hash, chain_id, token_id );
 }
+
 GeniusAddress GeniusSDKGetAddress()
 {
     auto address = GeniusNodeInstance->GetAddress();
@@ -200,13 +212,20 @@ GeniusAddress GeniusSDKGetAddress()
     return ret;
 }
 
+/**
+ * @brief     Transfers tokens in Minion Tokens to another address.
+ * @param[in] amount The amount of tokens to transfer, in Minion Tokens.
+ * @param[in] dest   Pointer to a `GeniusAddress` structure representing the recipient's address.
+ * @return    `true` if the transfer is successful, `false` otherwise.
+ * @note      If the value is in Genius Tokens, use `GeniusSDKGeniusToMinions` to convert GNUS values to Minion Tokens before calling this function.
+ */
 bool GeniusSDKTransferTokens( uint64_t amount, GeniusAddress *dest )
 {
     std::string destination( dest->address );
     return GeniusNodeInstance->TransferFunds( amount, destination );
 }
 
-void GeniusSDKTransferWithString( char *gnus, GeniusAddress *dest )
+void GeniusSDKTransferTokensWithString( const GeniusTokenValue *gnus, GeniusAddress *dest )
 {
     GeniusSDKTransferTokens( GeniusSDKGeniusToMinions( gnus ), dest );
 }
@@ -214,6 +233,11 @@ void GeniusSDKTransferWithString( char *gnus, GeniusAddress *dest )
 uint64_t GeniusSDKGetCost( const JsonData_t jsondata )
 {
     return GeniusNodeInstance->GetProcessCost( jsondata );
+}
+
+GeniusTokenValue GeniusSDKGetCostInString( const JsonData_t jsondata )
+{
+    return GeniusSDKMinionsToGenius( GeniusNodeInstance->GetProcessCost( jsondata ) );
 }
 
 void GeniusSDKShutdown()
@@ -224,19 +248,38 @@ void GeniusSDKShutdown()
         std::cout << "GeniusNodeInstance has been shut down." << std::endl;
     }
 }
-uint64_t GeniusSDKGeniusToMinions(char * gnus)
+
+/**
+ * @brief     Converts a GNUS token string to Minion Tokens (1e-9 GNUS).
+ * 
+ * @param     gnus Pointer to the structure containing the Genius token value as a string.
+ * @param[in] gnus A null-terminated C-style string representing the amount in GNUS.
+ *            The string must be properly formatted and include '\0' termination.
+ * @return    uint64_t The equivalent amount in Minion Tokens.
+ */
+uint64_t GeniusSDKGeniusToMinions( const GeniusTokenValue *gnus )
 {
-    auto result = GeniusNodeInstance->ParseTokens(std::string(gnus));
-    if (result.has_value())
+    auto result = GeniusNodeInstance->ParseTokens( std::string( gnus->value ) );
+    if ( result.has_value() )
     {
         return result.value();
     }
-    return 0; 
-
+    return 0;
 }
-char * GeniusSDKMinionsToGenius(uint64_t minions)
+
+/**
+ * @brief     Converts an amount in Minion Tokens to a human-readable GNUS token string.
+ * 
+ * @param[in] minions The amount in Minion Tokens (1e-9 GNUS).
+ * @return    char* A C-style string representing the amount in GNUS.
+ */
+GeniusTokenValue GeniusSDKMinionsToGenius( uint64_t minions )
 {
-    static std::string formatted = GeniusNodeInstance->FormatTokens(minions);
-    return const_cast<char *>(formatted.c_str());
-}
+    GeniusTokenValue tokenValue;
+    std::string      formatted = GeniusNodeInstance->FormatTokens( minions );
 
+    std::strncpy( tokenValue.value, formatted.c_str(), sizeof( tokenValue.value ) - 1 );
+    tokenValue.value[sizeof( tokenValue.value ) - 1] = '\0';
+
+    return tokenValue;
+}

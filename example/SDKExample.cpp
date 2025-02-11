@@ -24,15 +24,22 @@
 static const int MAX_INPUT_SIZE = 256; ///< Maximum size for user input buffers.
 
 static void initSDK();
+
 static void getBalance();
+static void getBalanceInString();
 static void getAddress();
 static void getInTransactions();
 static void getOutTransactions();
 static void processSampleData();
 static void getProcessingCost();
+static void getProcessingCostInString();
 static void mintTokens();
+static void mintTokensWithString();
 static void transferTokens();
+static void transferTokensWithString();
 static void shutdownSDK();
+static void convertGeniusToMinions();
+static void convertMinionsToGenius();
 
 static void     suppressSDKLogs();
 static void     getSDKConfig( char *base_path, char *eth_private_key, int32_t *autodht, int32_t *process,
@@ -55,15 +62,22 @@ int main()
         const char *description; ///< Option description
         void ( *function )();    ///< Function to execute when the option is selected
     } options[] = { { 1, "Initialize the SDK", initSDK },
-                    { 2, "Get Balance", getBalance },
-                    { 3, "Get Address", getAddress },
-                    { 4, "Get Incoming Transactions", getInTransactions },
-                    { 5, "Get Outgoing Transactions", getOutTransactions },
-                    { 6, "Process Sample Data", processSampleData },
-                    { 7, "Get Processing Cost", getProcessingCost },
-                    { 8, "Mint Tokens", mintTokens },
-                    { 9, "Transfer Tokens", transferTokens },
-                    { 10, "Shutdown SDK", shutdownSDK },
+                    { 2, "Shutdown SDK", shutdownSDK },
+                    { 3, "Get Balance", getBalance },
+                    { 4, "Get Balance (String)", getBalanceInString },
+                    { 5, "Get Address", getAddress },
+                    { 6, "Get Incoming Transactions", getInTransactions },
+                    { 7, "Get Outgoing Transactions", getOutTransactions },
+                    { 8, "Free Transactions", nullptr },
+                    { 9, "Mint Tokens", mintTokens },
+                    { 10, "Mint Tokens (String)", mintTokensWithString },
+                    { 11, "Transfer Tokens", transferTokens },
+                    { 12, "Transfer Tokens (String)", transferTokensWithString },
+                    { 13, "Get Processing Cost", getProcessingCost },
+                    { 14, "Get Processing Cost (String)", getProcessingCostInString },
+                    { 15, "Process Sample Data", processSampleData },
+                    { 16, "Convert Genius to Minions", convertGeniusToMinions },
+                    { 17, "Convert Minions to Genius", convertMinionsToGenius },
                     { 0, "Exit", nullptr } };
 
     suppressSDKLogs();
@@ -127,6 +141,78 @@ static void initSDK()
     }
 
     userPrint( "GeniusSDK initialized successfully.\n" );
+}
+
+/**
+ * @brief Retrieves balance as a string.
+ */
+static void getBalanceInString()
+{
+    GeniusTokenValue balance = GeniusSDKGetBalanceInString();
+    printf( "Balance: %s\n", balance.value );
+}
+
+/**
+ * @brief Mints tokens using the string-based function.
+ */
+static void mintTokensWithString()
+{
+    GeniusTokenValue amount;
+    printf( "Enter amount to mint: " );
+    scanf( "%s", amount.value );
+
+    GeniusSDKMintTokensWithString( &amount, "", "", "" );
+    printf( "Minted %s tokens.\n", amount.value );
+}
+
+/**
+ * @brief Transfers tokens using the string-based function.
+ */
+static void transferTokensWithString()
+{
+    GeniusTokenValue amount;
+    GeniusAddress    recipient;
+    printf( "Enter amount to transfer: " );
+    scanf( "%s", amount.value );
+    printf( "Enter recipient address: " );
+    scanf( "%s", recipient.address );
+
+    GeniusSDKTransferTokensWithString( &amount, &recipient );
+    printf( "Transferred %s tokens to %s.\n", amount.value, recipient.address );
+}
+
+/**
+ * @brief Gets processing cost as a string.
+ */
+static void getProcessingCostInString()
+{
+    JsonData_t       jsonData = "sample.json";
+    GeniusTokenValue cost     = GeniusSDKGetCostInString( jsonData );
+    printf( "Processing cost: %s\n", cost.value );
+}
+
+/**
+ * @brief Converts Genius tokens to Minions.
+ */
+static void convertGeniusToMinions()
+{
+    GeniusTokenValue amount;
+    printf( "Enter Genius amount: " );
+    scanf( "%s", amount.value );
+    uint64_t minions = GeniusSDKGeniusToMinions( &amount );
+    printf( "Converted to Minions: %llu\n", minions );
+}
+
+/**
+ * @brief Converts Minions to Genius tokens.
+ */
+static void convertMinionsToGenius()
+{
+    uint64_t minions;
+    printf( "Enter Minion amount: " );
+    scanf( "%llu", &minions );
+    GeniusTokenValue genius = GeniusSDKMinionsToGenius( minions );
+    printf( "Converted to Genius: %s\n", genius.value );
 }
 
 /**
