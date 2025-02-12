@@ -21,6 +21,7 @@ if(APPLE)
         set(Vulkan_LIBRARY "${THIRDPARTY_BUILD_DIR}/moltenvk/build/lib/MoltenVK.xcframework")
     endif()
 endif()
+
 find_package(Vulkan)
 
 if(NOT TARGET Vulkan::Vulkan)
@@ -30,6 +31,7 @@ if(NOT TARGET Vulkan::Vulkan)
 
     find_package(Vulkan REQUIRED)
 endif()
+
 if(SHARED_LIB_BUILD)
     set(LIB_TYPE SHARED)
 else()
@@ -370,6 +372,7 @@ target_include_directories(TrustWalletCore INTERFACE "${TrustWalletCore_INCLUDE_
 
 set(zkLLVM_INCLUDE_DIR "${ZKLLVM_DIR}/zkLLVM/include")
 include_directories(${zkLLVM_INCLUDE_DIR})
+
 # --------------------------------------------------------
 # Set config of crypto3
 add_library(crypto3::algebra INTERFACE IMPORTED)
@@ -429,6 +432,7 @@ set_target_properties(marshalling::crypto3_multiprecision PROPERTIES
 set_target_properties(marshalling::crypto3_zk PROPERTIES
     INTERFACE_INCLUDE_DIRECTORIES "${ZKLLVM_DIR}/zkLLVM/include"
 )
+
 # zkLLVM
 set(zkLLVM_INCLUDE_DIR "${ZKLLVM_DIR}/zkLLVM/include")
 
