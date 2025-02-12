@@ -90,7 +90,7 @@ GNUS_VISIBILITY_DEFAULT uint64_t GeniusSDKGetBalance();
  * @brief Retrieves the current balance in **Genius Tokens** as a formatted string.
  * @return The balance as a `GeniusTokenValue` struct, containing a GNUS value in string format.
  */
-GNUS_VISIBILITY_DEFAULT GeniusTokenValue GeniusSDKGetBalanceAsString();
+GNUS_VISIBILITY_DEFAULT GeniusTokenValue GeniusSDKGetBalanceGNUS();
 GNUS_VISIBILITY_DEFAULT GeniusAddress    GeniusSDKGetAddress();
 
 GNUS_VISIBILITY_DEFAULT GeniusMatrix GeniusSDKGetInTransactions();
@@ -106,8 +106,8 @@ GNUS_VISIBILITY_DEFAULT void         GeniusSDKFreeTransactions( GeniusMatrix mat
  * @note If you have a Genius Token amount, use `GeniusSDKToMinions` to convert
  *       GNUS to Minion Tokens before calling this function.
  */
-GNUS_VISIBILITY_DEFAULT void GeniusSDKMintTokens( uint64_t amount, const char *transaction_hash, const char *chain_id,
-                                                  const char *token_id );
+GNUS_VISIBILITY_DEFAULT void GeniusSDKMint( uint64_t amount, const char *transaction_hash, const char *chain_id,
+                                            const char *token_id );
 
 /**
  * @brief     Mints new tokens using a **Genius Token** string format.
@@ -116,8 +116,8 @@ GNUS_VISIBILITY_DEFAULT void GeniusSDKMintTokens( uint64_t amount, const char *t
  * @param[in] chain_id         A null-terminated string representing the blockchain chain ID.
  * @param[in] token_id         A null-terminated string representing the token ID.
  */
-GNUS_VISIBILITY_DEFAULT void GeniusSDKMintTokensWithString( const GeniusTokenValue *gnus, const char *transaction_hash,
-                                                            const char *chain_id, const char *token_id );
+GNUS_VISIBILITY_DEFAULT void GeniusSDKMintGNUS( const GeniusTokenValue *gnus, const char *transaction_hash,
+                                                const char *chain_id, const char *token_id );
 
 /**
  * @brief     Transfers tokens in **Minion Tokens** (1e-9 GNUS) to another address.
@@ -127,7 +127,7 @@ GNUS_VISIBILITY_DEFAULT void GeniusSDKMintTokensWithString( const GeniusTokenVal
  * @note If you have a Genius Token amount, use `GeniusSDKToMinions` to convert
  *       GNUS to Minion Tokens before calling this function.
  */
-GNUS_VISIBILITY_DEFAULT bool GeniusSDKTransferTokens( uint64_t amount, GeniusAddress *dest );
+GNUS_VISIBILITY_DEFAULT bool GeniusSDKTransfer( uint64_t amount, GeniusAddress *dest );
 
 /**
  * @brief     Transfers tokens using a **Genius Token** string representation.
@@ -135,7 +135,7 @@ GNUS_VISIBILITY_DEFAULT bool GeniusSDKTransferTokens( uint64_t amount, GeniusAdd
  * @param[in] dest Pointer to a `GeniusAddress` struct representing the recipient's address.
  * @return `true` if the transfer is successful, `false` otherwise.
  */
-GNUS_VISIBILITY_DEFAULT bool GeniusSDKTransferTokensWithString( const GeniusTokenValue *gnus, GeniusAddress *dest );
+GNUS_VISIBILITY_DEFAULT bool GeniusSDKTransferGNUS( const GeniusTokenValue *gnus, GeniusAddress *dest );
 
 /**
  * @brief Computes the cost of an operation based on the given JSON data (in **Minion Tokens**).
@@ -149,7 +149,7 @@ GNUS_VISIBILITY_DEFAULT uint64_t GeniusSDKGetCost( const JsonData_t jsondata );
  * @param[in] jsondata The JSON data to be processed.
  * @return A `GeniusTokenValue` struct representing the cost in Genius Tokens.
  */
-GNUS_VISIBILITY_DEFAULT GeniusTokenValue GeniusSDKGetCostAsString( const JsonData_t jsondata );
+GNUS_VISIBILITY_DEFAULT GeniusTokenValue GeniusSDKGetCostGNUS( const JsonData_t jsondata );
 GNUS_VISIBILITY_DEFAULT void             GeniusSDKProcess( const JsonData_t jsondata );
 
 /**
@@ -164,6 +164,7 @@ GNUS_VISIBILITY_DEFAULT uint64_t GeniusSDKToMinions( const GeniusTokenValue *gnu
  * @param[in] minions The amount in Minion Tokens.
  * @return    A `GeniusTokenValue` struct containing the amount in Genius Tokens.
  */
+GNUS_VISIBILITY_DEFAULT uint64_t         GeniusSDKToMinions( const GeniusTokenValue *gnus );
 GNUS_VISIBILITY_DEFAULT GeniusTokenValue GeniusSDKToGenius( uint64_t minions );
 
 GNUS_EXPORT_END

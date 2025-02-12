@@ -158,7 +158,7 @@ uint64_t GeniusSDKGetBalance()
     return GeniusNodeInstance->GetBalance();
 }
 
-GeniusTokenValue GeniusSDKGetBalanceAsString()
+GeniusTokenValue GeniusSDKGetBalanceGNUS()
 {
     return GeniusSDKToGenius( GeniusNodeInstance->GetBalance() );
 }
@@ -182,16 +182,16 @@ void GeniusSDKFreeTransactions( GeniusMatrix matrix )
     free( matrix.ptr );
 }
 
-void GeniusSDKMintTokens( uint64_t amount, const char *transaction_hash, const char *chain_id, const char *token_id )
+void GeniusSDKMint( uint64_t amount, const char *transaction_hash, const char *chain_id, const char *token_id )
 {
     GeniusNodeInstance->MintTokens( amount, std::string( transaction_hash ), std::string( chain_id ),
                                     std::string( token_id ) );
 }
 
-void GeniusSDKMintTokensWithString( const GeniusTokenValue *gnus, const char *transaction_hash, const char *chain_id,
+void GeniusSDKMintGNUS( const GeniusTokenValue *gnus, const char *transaction_hash, const char *chain_id,
                                     const char *token_id )
 {
-    GeniusSDKMintTokens( GeniusSDKToMinions( gnus ), transaction_hash, chain_id, token_id );
+    GeniusSDKMint( GeniusSDKToMinions( gnus ), transaction_hash, chain_id, token_id );
 }
 
 GeniusAddress GeniusSDKGetAddress()
@@ -205,15 +205,15 @@ GeniusAddress GeniusSDKGetAddress()
     return ret;
 }
 
-bool GeniusSDKTransferTokens( uint64_t amount, GeniusAddress *dest )
+bool GeniusSDKTransfer( uint64_t amount, GeniusAddress *dest )
 {
     std::string destination( dest->address );
     return GeniusNodeInstance->TransferFunds( amount, destination );
 }
 
-bool GeniusSDKTransferTokensWithString( const GeniusTokenValue *gnus, GeniusAddress *dest )
+bool GeniusSDKTransferGNUS( const GeniusTokenValue *gnus, GeniusAddress *dest )
 {
-    return GeniusSDKTransferTokens( GeniusSDKToMinions( gnus ), dest );
+    return GeniusSDKTransfer( GeniusSDKToMinions( gnus ), dest );
 }
 
 uint64_t GeniusSDKGetCost( const JsonData_t jsondata )
@@ -221,7 +221,7 @@ uint64_t GeniusSDKGetCost( const JsonData_t jsondata )
     return GeniusNodeInstance->GetProcessCost( jsondata );
 }
 
-GeniusTokenValue GeniusSDKGetCostAsString( const JsonData_t jsondata )
+GeniusTokenValue GeniusSDKGetCostGNUS( const JsonData_t jsondata )
 {
     return GeniusSDKToGenius( GeniusNodeInstance->GetProcessCost( jsondata ) );
 }

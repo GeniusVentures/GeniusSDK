@@ -148,7 +148,7 @@ static void initSDK()
  */
 static void getBalanceInString()
 {
-    GeniusTokenValue balance = GeniusSDKGetBalanceAsString();
+    GeniusTokenValue balance = GeniusSDKGetBalanceGNUS();
     printf( "Balance: %s\n", balance.value );
 }
 
@@ -161,7 +161,7 @@ static void mintTokensWithString()
     printf( "Enter amount to mint: " );
     scanf( "%s", amount.value );
 
-    GeniusSDKMintTokensWithString( &amount, "", "", "" );
+    GeniusSDKMintGNUS( &amount, "", "", "" );
     printf( "Minted %s tokens.\n", amount.value );
 }
 
@@ -177,7 +177,7 @@ static void transferTokensWithString()
     printf( "Enter recipient address: " );
     scanf( "%s", recipient.address );
 
-    GeniusSDKTransferTokensWithString( &amount, &recipient );
+    GeniusSDKTransferGNUS( &amount, &recipient );
     printf( "Transferred %s tokens to %s.\n", amount.value, recipient.address );
 }
 
@@ -187,7 +187,7 @@ static void transferTokensWithString()
 static void getProcessingCostInString()
 {
     JsonData_t       jsonData = "sample.json";
-    GeniusTokenValue cost     = GeniusSDKGetCostAsString( jsonData );
+    GeniusTokenValue cost     = GeniusSDKGetCostGNUS( jsonData );
     printf( "Processing cost: %s\n", cost.value );
 }
 
@@ -303,7 +303,7 @@ static void mintTokens()
     const char *chain_id         = "";
     const char *token_id         = "";
 
-    GeniusSDKMintTokens( amount, transaction_hash, chain_id, token_id );
+    GeniusSDKMint( amount, transaction_hash, chain_id, token_id );
     userPrint( "Minted %llu Minion Tokens successfully.\n", amount );
 }
 
@@ -318,7 +318,7 @@ static void transferTokens()
     userPrint( "Enter recipient wallet address: " );
     readLine( recipient.address, sizeof( recipient.address ) );
 
-    bool transferSuccess = GeniusSDKTransferTokens( amount, &recipient );
+    bool transferSuccess = GeniusSDKTransfer( amount, &recipient );
     userPrint( "Token transfer %s.\n", transferSuccess ? "successful" : "failed" );
 }
 
