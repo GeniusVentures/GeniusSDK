@@ -180,7 +180,7 @@ void GeniusSDKMintTokens( uint64_t amount, const char *transaction_hash, const c
 
 GeniusAddress GeniusSDKGetAddress()
 {
-    auto address = GeniusNodeInstance->GetAddress<std::string>();
+    auto address = GeniusNodeInstance->GetAddress();
 
     GeniusAddress ret;
 
@@ -191,9 +191,7 @@ GeniusAddress GeniusSDKGetAddress()
 
 bool GeniusSDKTransferTokens( uint64_t amount, GeniusAddress *dest )
 {
-    boost::multiprecision::uint256_t destination( dest->address );
-
-    return GeniusNodeInstance->TransferFunds( amount, destination );
+    return GeniusNodeInstance->TransferFunds( amount, dest->address );
 }
 
 uint64_t GeniusSDKGetCost( const JsonData_t jsondata )
