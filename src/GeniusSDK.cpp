@@ -193,7 +193,8 @@ GeniusAddress GeniusSDKGetAddress()
 
 bool GeniusSDKTransferTokens( uint64_t amount, GeniusAddress *dest )
 {
-    return GeniusNodeInstance->TransferFunds( amount, dest->address );
+    std::string destination( dest->address );
+    return GeniusNodeInstance->TransferFunds( amount, destination );
 }
 
 uint64_t GeniusSDKGetCost( const JsonData_t jsondata )
