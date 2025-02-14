@@ -63,7 +63,7 @@ namespace
         {
             return outcome::failure( JsonError( "Missing or invalid 'Address'" ) );
         }
-        if ( !document.HasMember( "Cut" ) || !document["Cut"].IsDouble() )
+        if ( !document.HasMember( "Cut" ) || !document["Cut"].IsString() )
         {
             return outcome::failure( JsonError( "Missing or invalid 'Cut'" ) );
         }
@@ -77,13 +77,14 @@ namespace
         }
 
         strncpy( config_from_file.Addr, document["Address"].GetString(), document["Address"].GetStringLength() );
-        config_from_file.Cut              = document["Cut"].GetDouble();
+        config_from_file.Cut              = document["Cut"].GetString();
         config_from_file.TokenValueInGNUS = document["TokenValue"].GetDouble();
         config_from_file.TokenID          = document["TokenID"].GetInt();
         strncpy( config_from_file.BaseWritePath, base_path.data(), base_path.size() );
 
         return outcome::success( config_from_file );
     }
+
 
     GeniusMatrix matrix_from_vector_of_vector( const std::vector<std::vector<uint8_t>> &vec )
     {
@@ -120,7 +121,7 @@ namespace
     std::shared_ptr<sgns::GeniusNode> GeniusNodeInstance;
 }
 
-const char *GeniusSDKInit( const char *base_path, const char *eth_private_key, bool autodht, bool process, int baseport )
+const char *GeniusSDKInit( const char *base_path, const char *eth_private_key, bool autodht, bool process, uint16_t baseport )
 {
     if ( base_path == nullptr )
     {
@@ -159,6 +160,7 @@ GeniusMatrix GeniusSDKGetOutTransactions()
 {
     return matrix_from_vector_of_vector( GeniusNodeInstance->GetOutTransactions() );
 }
+
 GeniusMatrix GeniusSDKGetInTransactions()
 {
     return matrix_from_vector_of_vector( GeniusNodeInstance->GetInTransactions() );
@@ -199,8 +201,10 @@ uint64_t GeniusSDKGetCost( const JsonData_t jsondata )
     return GeniusNodeInstance->GetProcessCost( jsondata );
 }
 
-void GeniusSDKShutdown() {
-    if (GeniusNodeInstance) {
+void GeniusSDKShutdown()
+{
+    if ( GeniusNodeInstance )
+    {
         GeniusNodeInstance.reset(); // Explicitly destroy the shared_ptr
         std::cout << "GeniusNodeInstance has been shut down." << std::endl;
     }
