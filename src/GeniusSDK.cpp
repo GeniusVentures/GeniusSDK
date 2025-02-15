@@ -211,6 +211,7 @@ bool GeniusSDKTransfer( uint64_t amount, GeniusAddress *dest )
     return GeniusNodeInstance->TransferFunds( amount, destination );
 }
 
+
 bool GeniusSDKTransferGNUS( const GeniusTokenValue *gnus, GeniusAddress *dest )
 {
     return GeniusSDKTransfer( GeniusSDKToMinions( gnus ), dest );
