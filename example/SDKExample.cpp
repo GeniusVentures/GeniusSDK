@@ -50,9 +50,15 @@ static int      promptInt( const char *prompt, int defaultValue );
 static uint16_t promptUShort( const char *prompt, uint16_t defaultValue );
 static uint64_t promptUInt64( const char *prompt, uint64_t defaultValue );
 static void     readLine( char *buffer, size_t bufferSize );
-void            userPrint( const char *fmt, ... );
 
+#define SUPPRESS_OUTPUT 1
+#if ( SUPPRESS_OUTPUT == 0 )
+#define userPrint printf
+#else
+void userPrint( const char *fmt, ... );
+#endif
 static int original_stdout_fd = -1; ///< To preserve original stdout when suppressing SDK logs.
+
 
 int main()
 {
@@ -80,7 +86,9 @@ int main()
                     { 17, "Convert Minions to Genius", convertMinionsToGenius },
                     { 0, "Exit", nullptr } };
 
+#if ( SUPPRESS_OUTPUT == 1 )
     suppressSDKLogs();
+#endif
 
     int choice = -1;
     do
@@ -149,7 +157,7 @@ static void initSDK()
 static void getBalanceInString()
 {
     GeniusTokenValue balance = GeniusSDKGetBalanceGNUS();
-    printf( "Balance: %s\n", balance.value );
+    userPrint( "Balance: %s\n", balance.value );
 }
 
 /**
@@ -158,11 +166,11 @@ static void getBalanceInString()
 static void mintTokensWithString()
 {
     GeniusTokenValue amount;
-    printf( "Enter amount to mint: " );
+    userPrint( "Enter amount to mint: " );
     scanf( "%s", amount.value );
 
     GeniusSDKMintGNUS( &amount, "", "", "" );
-    printf( "Minted %s tokens.\n", amount.value );
+    userPrint( "Minted %s tokens.\n", amount.value );
 }
 
 /**
@@ -172,13 +180,13 @@ static void transferTokensWithString()
 {
     GeniusTokenValue amount;
     GeniusAddress    recipient;
-    printf( "Enter amount to transfer: " );
+    userPrint( "Enter amount to transfer: " );
     scanf( "%s", amount.value );
-    printf( "Enter recipient address: " );
+    userPrint( "Enter recipient address: " );
     scanf( "%s", recipient.address );
 
     GeniusSDKTransferGNUS( &amount, &recipient );
-    printf( "Transferred %s tokens to %s.\n", amount.value, recipient.address );
+    userPrint( "Transferred %s tokens to %s.\n", amount.value, recipient.address );
 }
 
 /**
@@ -188,7 +196,7 @@ static void getProcessingCostInString()
 {
     JsonData_t       jsonData = "sample.json";
     GeniusTokenValue cost     = GeniusSDKGetCostGNUS( jsonData );
-    printf( "Processing cost: %s\n", cost.value );
+    userPrint( "Processing cost: %s\n", cost.value );
 }
 
 /**
@@ -197,10 +205,10 @@ static void getProcessingCostInString()
 static void convertGeniusToMinions()
 {
     GeniusTokenValue amount;
-    printf( "Enter Genius amount: " );
+    userPrint( "Enter Genius amount: " );
     scanf( "%s", amount.value );
     uint64_t minions = GeniusSDKToMinions( &amount );
-    printf( "Converted to Minions: %llu\n", minions );
+    userPrint( "Converted to Minions: %llu\n", minions );
 }
 
 /**
@@ -209,10 +217,10 @@ static void convertGeniusToMinions()
 static void convertMinionsToGenius()
 {
     uint64_t minions;
-    printf( "Enter Minion amount: " );
+    userPrint( "Enter Minion amount: " );
     scanf( "%llu", &minions );
     GeniusTokenValue genius = GeniusSDKToGenius( minions );
-    printf( "Converted to Genius: %s\n", genius.value );
+    userPrint( "Converted to Genius: %s\n", genius.value );
 }
 
 /**
@@ -479,6 +487,7 @@ static void readLine( char *buffer, size_t bufferSize )
     }
 }
 
+#if ( SUPPRESS_OUTPUT == 1 )
 /**
  * @brief Custom print function that always writes to the original stdout.
  * @param fmt Format string (printf-style).
@@ -486,15 +495,6 @@ static void readLine( char *buffer, size_t bufferSize )
  */
 void userPrint( const char *fmt, ... )
 {
-    if ( original_stdout_fd == -1 )
-    {
-        va_list args;
-        va_start( args, fmt );
-        vprintf( fmt, args );
-        va_end( args );
-        return;
-    }
-
 #ifdef _WIN32
     int current_fd = _dup( _fileno( stdout ) );
 
@@ -523,3 +523,4 @@ void userPrint( const char *fmt, ... )
     close( current_fd );
 #endif
 }
+#endif
