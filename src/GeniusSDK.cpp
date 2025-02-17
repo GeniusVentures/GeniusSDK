@@ -121,7 +121,8 @@ namespace
     std::shared_ptr<sgns::GeniusNode> GeniusNodeInstance;
 }
 
-const char *GeniusSDKInit( const char *base_path, const char *eth_private_key, bool autodht, bool process, uint16_t baseport )
+const char *GeniusSDKInit( const char *base_path, const char *eth_private_key, bool autodht, bool process,
+                           uint16_t baseport )
 {
     if ( base_path == nullptr )
     {
@@ -134,7 +135,8 @@ const char *GeniusSDKInit( const char *base_path, const char *eth_private_key, b
 
     if ( load_config_ret )
     {
-        GeniusNodeInstance = std::make_shared<sgns::GeniusNode>( load_config_ret.value(), eth_private_key, autodht, process, baseport );
+        GeniusNodeInstance =
+            std::make_shared<sgns::GeniusNode>( load_config_ret.value(), eth_private_key, autodht, process, baseport );
         ret_val.append( load_config_ret.value().BaseWritePath );
     }
     else
@@ -156,6 +158,11 @@ uint64_t GeniusSDKGetBalance()
     return GeniusNodeInstance->GetBalance();
 }
 
+GeniusTokenValue GeniusSDKGetBalanceGNUS()
+{
+    return GeniusSDKToGenius( GeniusNodeInstance->GetBalance() );
+}
+
 GeniusMatrix GeniusSDKGetOutTransactions()
 {
     return matrix_from_vector_of_vector( GeniusNodeInstance->GetOutTransactions() );
@@ -175,9 +182,16 @@ void GeniusSDKFreeTransactions( GeniusMatrix matrix )
     free( matrix.ptr );
 }
 
-void GeniusSDKMintTokens( uint64_t amount, const char *transaction_hash, const char *chain_id, const char *token_id  )
+void GeniusSDKMint( uint64_t amount, const char *transaction_hash, const char *chain_id, const char *token_id )
 {
-    GeniusNodeInstance->MintTokens( amount, transaction_hash, chain_id, token_id );
+    GeniusNodeInstance->MintTokens( amount, std::string( transaction_hash ), std::string( chain_id ),
+                                    std::string( token_id ) );
+}
+
+void GeniusSDKMintGNUS( const GeniusTokenValue *gnus, const char *transaction_hash, const char *chain_id,
+                                    const char *token_id )
+{
+    GeniusSDKMint( GeniusSDKToMinions( gnus ), transaction_hash, chain_id, token_id );
 }
 
 GeniusAddress GeniusSDKGetAddress()
@@ -191,15 +205,26 @@ GeniusAddress GeniusSDKGetAddress()
     return ret;
 }
 
-bool GeniusSDKTransferTokens( uint64_t amount, GeniusAddress *dest )
+bool GeniusSDKTransfer( uint64_t amount, GeniusAddress *dest )
 {
     std::string destination( dest->address );
     return GeniusNodeInstance->TransferFunds( amount, destination );
 }
 
+
+bool GeniusSDKTransferGNUS( const GeniusTokenValue *gnus, GeniusAddress *dest )
+{
+    return GeniusSDKTransfer( GeniusSDKToMinions( gnus ), dest );
+}
+
 uint64_t GeniusSDKGetCost( const JsonData_t jsondata )
 {
     return GeniusNodeInstance->GetProcessCost( jsondata );
+}
+
+GeniusTokenValue GeniusSDKGetCostGNUS( const JsonData_t jsondata )
+{
+    return GeniusSDKToGenius( GeniusNodeInstance->GetProcessCost( jsondata ) );
 }
 
 void GeniusSDKShutdown()
@@ -209,4 +234,24 @@ void GeniusSDKShutdown()
         GeniusNodeInstance.reset(); // Explicitly destroy the shared_ptr
         std::cout << "GeniusNodeInstance has been shut down." << std::endl;
     }
+}
+
+uint64_t GeniusSDKToMinions( const GeniusTokenValue *gnus )
+{
+    auto result = GeniusNodeInstance->ParseTokens( std::string( gnus->value ) );
+    if ( result.has_value() )
+    {
+        return result.value();
+    }
+    return 0;
+}
+
+GeniusTokenValue GeniusSDKToGenius( uint64_t minions )
+{
+    GeniusTokenValue tokenValue;
+    std::string      formatted = GeniusNodeInstance->FormatTokens( minions );
+    std::strncpy( tokenValue.value, formatted.c_str(), sizeof( tokenValue.value ) - 1 );
+    tokenValue.value[sizeof( tokenValue.value ) - 1] = '\0';
+
+    return tokenValue;
 }
