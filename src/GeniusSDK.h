@@ -164,7 +164,6 @@ GNUS_VISIBILITY_DEFAULT uint64_t GeniusSDKToMinions( const GeniusTokenValue *gnu
  * @param[in] minions The amount in Minion Tokens.
  * @return    A `GeniusTokenValue` struct containing the amount in Genius Tokens.
  */
-GNUS_VISIBILITY_DEFAULT uint64_t         GeniusSDKToMinions( const GeniusTokenValue *gnus );
 GNUS_VISIBILITY_DEFAULT GeniusTokenValue GeniusSDKToGenius( uint64_t minions );
 
 GNUS_EXPORT_END
