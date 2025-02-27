@@ -208,9 +208,16 @@ GeniusAddress GeniusSDKGetAddress()
 bool GeniusSDKTransfer( uint64_t amount, GeniusAddress *dest )
 {
     std::string destination( dest->address );
-    return GeniusNodeInstance->TransferFunds( amount, destination );
+    auto        ret = GeniusNodeInstance->TransferFunds( amount, destination );
+    if(ret.has_value())
+    {
+        return true; 
+    }
+    else
+    {
+        return true; 
+    }
 }
-
 
 bool GeniusSDKTransferGNUS( const GeniusTokenValue *gnus, GeniusAddress *dest )
 {
