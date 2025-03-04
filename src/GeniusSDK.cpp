@@ -85,7 +85,6 @@ namespace
         return outcome::success( config_from_file );
     }
 
-
     GeniusMatrix matrix_from_vector_of_vector( const std::vector<std::vector<uint8_t>> &vec )
     {
         uint64_t size = vec.size();
@@ -150,7 +149,12 @@ const char *GeniusSDKInit( const char *base_path, const char *eth_private_key, b
 
 void GeniusSDKProcess( const JsonData_t jsondata )
 {
-    GeniusNodeInstance->ProcessImage( std::string{ jsondata } );
+    auto result = GeniusNodeInstance->ProcessImage( std::string{ jsondata } );
+
+    if ( !result.has_value() )
+    {
+        std::cerr << "Error processing image: " << result.error() << std::endl;
+    }
 }
 
 uint64_t GeniusSDKGetBalance()
@@ -184,12 +188,17 @@ void GeniusSDKFreeTransactions( GeniusMatrix matrix )
 
 void GeniusSDKMint( uint64_t amount, const char *transaction_hash, const char *chain_id, const char *token_id )
 {
-    GeniusNodeInstance->MintTokens( amount, std::string( transaction_hash ), std::string( chain_id ),
-                                    std::string( token_id ) );
+    auto result = GeniusNodeInstance->MintTokens( amount, std::string( transaction_hash ), std::string( chain_id ),
+                                                  std::string( token_id ) );
+
+    if ( !result.has_value() )
+    {
+        std::cerr << "Error minting tokens: " << result.error() << std::endl;
+    }
 }
 
 void GeniusSDKMintGNUS( const GeniusTokenValue *gnus, const char *transaction_hash, const char *chain_id,
-                                    const char *token_id )
+                        const char *token_id )
 {
     GeniusSDKMint( GeniusSDKToMinions( gnus ), transaction_hash, chain_id, token_id );
 }
@@ -208,9 +217,17 @@ GeniusAddress GeniusSDKGetAddress()
 bool GeniusSDKTransfer( uint64_t amount, GeniusAddress *dest )
 {
     std::string destination( dest->address );
-    return GeniusNodeInstance->TransferFunds( amount, destination );
-}
+    auto        result = GeniusNodeInstance->TransferFunds( amount, destination );
 
+    if ( result.has_value() )
+    {
+        return true;
+    }
+    else
+    {
+        return false;
+    }
+}
 
 bool GeniusSDKTransferGNUS( const GeniusTokenValue *gnus, GeniusAddress *dest )
 {
