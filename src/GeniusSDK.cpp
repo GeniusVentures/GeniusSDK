@@ -172,6 +172,20 @@ GeniusTokenValue GeniusSDKGetBalanceGNUS()
     return GeniusSDKToGenius( GeniusNodeInstance->GetBalance() );
 }
 
+const char* GeniusSDKGetBalanceGNUSString()
+{
+    uint64_t balance = GeniusNodeInstance->GetBalance();
+    
+    // Use a static buffer to store the string (not thread-safe but should work for your needs)
+    static char buffer[64];
+    
+    std::string formatted = GeniusNodeInstance->FormatTokens(balance);
+    strncpy(buffer, formatted.c_str(), sizeof(buffer) - 1);
+    buffer[sizeof(buffer) - 1] = '\0';
+    
+    return buffer;
+}
+
 GeniusMatrix GeniusSDKGetOutTransactions()
 {
     return matrix_from_vector_of_vector( GeniusNodeInstance->GetOutTransactions() );

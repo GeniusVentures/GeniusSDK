@@ -93,6 +93,7 @@ GNUS_VISIBILITY_DEFAULT uint64_t GeniusSDKGetBalance();
  * @return The balance as a `GeniusTokenValue` struct, containing a GNUS value in string format.
  */
 GNUS_VISIBILITY_DEFAULT GeniusTokenValue GeniusSDKGetBalanceGNUS();
+GNUS_VISIBILITY_DEFAULT const char* GeniusSDKGetBalanceGNUSString();
 GNUS_VISIBILITY_DEFAULT GeniusAddress    GeniusSDKGetAddress();
 
 GNUS_VISIBILITY_DEFAULT GeniusMatrix GeniusSDKGetInTransactions();
