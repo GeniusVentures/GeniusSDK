@@ -147,6 +147,11 @@ const char *GeniusSDKInit( const char *base_path, const char *eth_private_key, b
     return ret_val.c_str();
 }
 
+const char *GeniusSDKInitMinimal( const char *base_path, const char *eth_private_key, uint16_t baseport )
+{
+    return GeniusSDKInit(base_path, eth_private_key, true, true, baseport);
+}
+
 void GeniusSDKProcess( const JsonData_t jsondata )
 {
     auto result = GeniusNodeInstance->ProcessImage( std::string{ jsondata } );
