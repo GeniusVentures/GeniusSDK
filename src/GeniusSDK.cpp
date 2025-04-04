@@ -63,7 +63,7 @@ namespace
         {
             return outcome::failure( JsonError( "Missing or invalid 'Address'" ) );
         }
-        if ( !document.HasMember( "Cut" ) || !document["Cut"].IsDouble() )
+        if ( !document.HasMember( "Cut" ) || !document["Cut"].IsString() )
         {
             return outcome::failure( JsonError( "Missing or invalid 'Cut'" ) );
         }
@@ -77,7 +77,7 @@ namespace
         }
 
         strncpy( config_from_file.Addr, document["Address"].GetString(), document["Address"].GetStringLength() );
-        config_from_file.Cut              = document["Cut"].GetDouble();
+        config_from_file.Cut              = document["Cut"].GetString();
         config_from_file.TokenValueInGNUS = document["TokenValue"].GetDouble();
         config_from_file.TokenID          = document["TokenID"].GetInt();
         strncpy( config_from_file.BaseWritePath, base_path.data(), base_path.size() );
@@ -120,7 +120,8 @@ namespace
     std::shared_ptr<sgns::GeniusNode> GeniusNodeInstance;
 }
 
-const char *GeniusSDKInit( const char *base_path, const char *eth_private_key, bool autodht, bool process, int baseport )
+const char *GeniusSDKInit( const char *base_path, const char *eth_private_key, bool autodht, bool process,
+                           uint16_t baseport )
 {
     if ( base_path == nullptr )
     {
@@ -133,7 +134,8 @@ const char *GeniusSDKInit( const char *base_path, const char *eth_private_key, b
 
     if ( load_config_ret )
     {
-        GeniusNodeInstance = std::make_shared<sgns::GeniusNode>( load_config_ret.value(), eth_private_key, autodht, process, baseport );
+        GeniusNodeInstance =
+            std::make_shared<sgns::GeniusNode>( load_config_ret.value(), eth_private_key, autodht, process, baseport );
         ret_val.append( load_config_ret.value().BaseWritePath );
     }
     else
@@ -145,9 +147,19 @@ const char *GeniusSDKInit( const char *base_path, const char *eth_private_key, b
     return ret_val.c_str();
 }
 
+const char *GeniusSDKInitMinimal( const char *base_path, const char *eth_private_key, uint16_t baseport )
+{
+    return GeniusSDKInit(base_path, eth_private_key, true, true, baseport);
+}
+
 void GeniusSDKProcess( const JsonData_t jsondata )
 {
-    GeniusNodeInstance->ProcessImage( std::string{ jsondata } );
+    auto result = GeniusNodeInstance->ProcessImage( std::string{ jsondata } );
+
+    if ( !result.has_value() )
+    {
+        std::cerr << "Error processing image: " << result.error() << std::endl;
+    }
 }
 
 uint64_t GeniusSDKGetBalance()
@@ -155,10 +167,30 @@ uint64_t GeniusSDKGetBalance()
     return GeniusNodeInstance->GetBalance();
 }
 
+GeniusTokenValue GeniusSDKGetBalanceGNUS()
+{
+    return GeniusSDKToGenius( GeniusNodeInstance->GetBalance() );
+}
+
+const char* GeniusSDKGetBalanceGNUSString()
+{
+    uint64_t balance = GeniusNodeInstance->GetBalance();
+    
+    // Use a static buffer to store the string (not thread-safe but should work for your needs)
+    static char buffer[64];
+    
+    std::string formatted = GeniusNodeInstance->FormatTokens(balance);
+    strncpy(buffer, formatted.c_str(), sizeof(buffer) - 1);
+    buffer[sizeof(buffer) - 1] = '\0';
+    
+    return buffer;
+}
+
 GeniusMatrix GeniusSDKGetOutTransactions()
 {
     return matrix_from_vector_of_vector( GeniusNodeInstance->GetOutTransactions() );
 }
+
 GeniusMatrix GeniusSDKGetInTransactions()
 {
     return matrix_from_vector_of_vector( GeniusNodeInstance->GetInTransactions() );
@@ -173,9 +205,21 @@ void GeniusSDKFreeTransactions( GeniusMatrix matrix )
     free( matrix.ptr );
 }
 
-void GeniusSDKMintTokens( uint64_t amount, const char *transaction_hash, const char *chain_id, const char *token_id  )
+void GeniusSDKMint( uint64_t amount, const char *transaction_hash, const char *chain_id, const char *token_id )
 {
-    GeniusNodeInstance->MintTokens( amount, transaction_hash, chain_id, token_id );
+    auto result = GeniusNodeInstance->MintTokens( amount, std::string( transaction_hash ), std::string( chain_id ),
+                                                  std::string( token_id ) );
+
+    if ( !result.has_value() )
+    {
+        std::cerr << "Error minting tokens: " << result.error() << std::endl;
+    }
+}
+
+void GeniusSDKMintGNUS( const GeniusTokenValue *gnus, const char *transaction_hash, const char *chain_id,
+                        const char *token_id )
+{
+    GeniusSDKMint( GeniusSDKToMinions( gnus ), transaction_hash, chain_id, token_id );
 }
 
 GeniusAddress GeniusSDKGetAddress()
@@ -189,9 +233,24 @@ GeniusAddress GeniusSDKGetAddress()
     return ret;
 }
 
-bool GeniusSDKTransferTokens( uint64_t amount, GeniusAddress *dest )
+bool GeniusSDKTransfer( uint64_t amount, GeniusAddress *dest )
 {
-    return GeniusNodeInstance->TransferFunds( amount, dest->address );
+    std::string destination( dest->address );
+    auto        result = GeniusNodeInstance->TransferFunds( amount, destination );
+
+    if ( result.has_value() )
+    {
+        return true;
+    }
+    else
+    {
+        return false;
+    }
+}
+
+bool GeniusSDKTransferGNUS( const GeniusTokenValue *gnus, GeniusAddress *dest )
+{
+    return GeniusSDKTransfer( GeniusSDKToMinions( gnus ), dest );
 }
 
 uint64_t GeniusSDKGetCost( const JsonData_t jsondata )
@@ -199,9 +258,36 @@ uint64_t GeniusSDKGetCost( const JsonData_t jsondata )
     return GeniusNodeInstance->GetProcessCost( jsondata );
 }
 
-void GeniusSDKShutdown() {
-    if (GeniusNodeInstance) {
+GeniusTokenValue GeniusSDKGetCostGNUS( const JsonData_t jsondata )
+{
+    return GeniusSDKToGenius( GeniusNodeInstance->GetProcessCost( jsondata ) );
+}
+
+void GeniusSDKShutdown()
+{
+    if ( GeniusNodeInstance )
+    {
         GeniusNodeInstance.reset(); // Explicitly destroy the shared_ptr
         std::cout << "GeniusNodeInstance has been shut down." << std::endl;
     }
+}
+
+uint64_t GeniusSDKToMinions( const GeniusTokenValue *gnus )
+{
+    auto result = GeniusNodeInstance->ParseTokens( std::string( gnus->value ) );
+    if ( result.has_value() )
+    {
+        return result.value();
+    }
+    return 0;
+}
+
+GeniusTokenValue GeniusSDKToGenius( uint64_t minions )
+{
+    GeniusTokenValue tokenValue;
+    std::string      formatted = GeniusNodeInstance->FormatTokens( minions );
+    std::strncpy( tokenValue.value, formatted.c_str(), sizeof( tokenValue.value ) - 1 );
+    tokenValue.value[sizeof( tokenValue.value ) - 1] = '\0';
+
+    return tokenValue;
 }

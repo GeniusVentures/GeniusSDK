@@ -5,7 +5,6 @@ set(BOOST_PATCH_VERSION "0" CACHE STRING "Boost Patch Version")
 
 # convenience settings
 set(BOOST_VERSION "${BOOST_MAJOR_VERSION}.${BOOST_MINOR_VERSION}.${BOOST_PATCH_VERSION}")
-set(BOOST_VERSION_3U "${BOOST_MAJOR_VERSION}_${BOOST_MINOR_VERSION}_${BOOST_PATCH_VERSION}")
 set(BOOST_VERSION_2U "${BOOST_MAJOR_VERSION}_${BOOST_MINOR_VERSION}")
 
 set(SHARED_LIB_BUILD OFF CACHE BOOL "Shared library option for GeniusSDK")
@@ -21,6 +20,7 @@ if(APPLE)
         set(Vulkan_LIBRARY "${THIRDPARTY_BUILD_DIR}/moltenvk/build/lib/MoltenVK.xcframework")
     endif()
 endif()
+
 find_package(Vulkan)
 
 if(NOT TARGET Vulkan::Vulkan)
@@ -30,6 +30,7 @@ if(NOT TARGET Vulkan::Vulkan)
 
     find_package(Vulkan REQUIRED)
 endif()
+
 if(SHARED_LIB_BUILD)
     set(LIB_TYPE SHARED)
 else()
@@ -210,18 +211,22 @@ set(_BOOST_ROOT "${THIRDPARTY_BUILD_DIR}/boost/build/${CMAKE_SYSTEM_NAME}${ABI_S
 set(Boost_LIB_DIR "${_BOOST_ROOT}/lib")
 set(Boost_INCLUDE_DIR "${_BOOST_ROOT}/include/boost-${BOOST_VERSION_2U}")
 set(Boost_DIR "${Boost_LIB_DIR}/cmake/Boost-${BOOST_VERSION}")
-set(boost_headers_DIR "${Boost_LIB_DIR}/cmake/boost_headers-${BOOST_VERSION}")
-set(boost_random_DIR "${Boost_LIB_DIR}/cmake/boost_random-${BOOST_VERSION}")
-set(boost_system_DIR "${Boost_LIB_DIR}/cmake/boost_system-${BOOST_VERSION}")
-set(boost_filesystem_DIR "${Boost_LIB_DIR}/cmake/boost_filesystem-${BOOST_VERSION}")
-set(boost_program_options_DIR "${Boost_LIB_DIR}/cmake/boost_program_options-${BOOST_VERSION}")
-set(boost_date_time_DIR "${Boost_LIB_DIR}/cmake/boost_date_time-${BOOST_VERSION}")
-set(boost_regex_DIR "${Boost_LIB_DIR}/cmake/boost_regex-${BOOST_VERSION}")
 set(boost_atomic_DIR "${Boost_LIB_DIR}/cmake/boost_atomic-${BOOST_VERSION}")
 set(boost_chrono_DIR "${Boost_LIB_DIR}/cmake/boost_chrono-${BOOST_VERSION}")
+set(boost_container_DIR "${Boost_LIB_DIR}/cmake/boost_container-${BOOST_VERSION}")
+set(boost_date_time_DIR "${Boost_LIB_DIR}/cmake/boost_date_time-${BOOST_VERSION}")
+set(boost_filesystem_DIR "${Boost_LIB_DIR}/cmake/boost_filesystem-${BOOST_VERSION}")
+set(boost_headers_DIR "${Boost_LIB_DIR}/cmake/boost_headers-${BOOST_VERSION}")
+set(boost_json_DIR "${Boost_LIB_DIR}/cmake/boost_json-${BOOST_VERSION}")
 set(boost_log_DIR "${Boost_LIB_DIR}/cmake/boost_log-${BOOST_VERSION}")
 set(boost_log_setup_DIR "${Boost_LIB_DIR}/cmake/boost_log_setup-${BOOST_VERSION}")
+set(boost_program_options_DIR "${Boost_LIB_DIR}/cmake/boost_program_options-${BOOST_VERSION}")
+set(boost_random_DIR "${Boost_LIB_DIR}/cmake/boost_random-${BOOST_VERSION}")
+set(boost_regex_DIR "${Boost_LIB_DIR}/cmake/boost_regex-${BOOST_VERSION}")
+set(boost_system_DIR "${Boost_LIB_DIR}/cmake/boost_system-${BOOST_VERSION}")
 set(boost_thread_DIR "${Boost_LIB_DIR}/cmake/boost_thread-${BOOST_VERSION}")
+set(boost_json_DIR "${Boost_LIB_DIR}/cmake/boost_json-${BOOST_VERSION}")
+set(boost_unit_test_framework_DIR "${Boost_LIB_DIR}/cmake/boost_unit_test_framework-${BOOST_VERSION}")
 set(Boost_USE_MULTITHREADED ON)
 set(Boost_USE_STATIC_LIBS ON)
 set(Boost_NO_SYSTEM_PATHS ON)
@@ -238,7 +243,7 @@ if(SGNS_STACKTRACE_BACKTRACE)
 endif()
 
 # header only libraries must not be added here
-find_package(Boost REQUIRED COMPONENTS date_time filesystem random regex system thread log log_setup program_options unit_test_framework)
+find_package(Boost REQUIRED COMPONENTS container date_time filesystem json random regex system thread log log_setup program_options unit_test_framework)
 include_directories(${Boost_INCLUDE_DIRS})
 
 # Set config of SQLiteModernCpp project
@@ -368,6 +373,7 @@ target_include_directories(TrustWalletCore INTERFACE "${TrustWalletCore_INCLUDE_
 
 set(zkLLVM_INCLUDE_DIR "${ZKLLVM_DIR}/zkLLVM/include")
 include_directories(${zkLLVM_INCLUDE_DIR})
+
 # --------------------------------------------------------
 # Set config of crypto3
 add_library(crypto3::algebra INTERFACE IMPORTED)
@@ -427,6 +433,7 @@ set_target_properties(marshalling::crypto3_multiprecision PROPERTIES
 set_target_properties(marshalling::crypto3_zk PROPERTIES
     INTERFACE_INCLUDE_DIRECTORIES "${ZKLLVM_DIR}/zkLLVM/include"
 )
+
 # zkLLVM
 set(zkLLVM_INCLUDE_DIR "${ZKLLVM_DIR}/zkLLVM/include")
 
