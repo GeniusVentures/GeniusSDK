@@ -162,6 +162,19 @@ void GeniusSDKProcess( const JsonData_t jsondata )
     }
 }
 
+double GeniusSDKGetGNUSPrice()
+{
+    auto result = GeniusNodeInstance->GetGNUSPrice();
+
+    if ( !result.has_value() )
+    {
+        std::cerr << "Error getting gnus price: " << result.error() << std::endl;
+        return 0;
+    } 
+    return result.value();
+}
+
+
 uint64_t GeniusSDKGetBalance()
 {
     return GeniusNodeInstance->GetBalance();
@@ -251,6 +264,20 @@ bool GeniusSDKTransfer( uint64_t amount, GeniusAddress *dest )
 bool GeniusSDKTransferGNUS( const GeniusTokenValue *gnus, GeniusAddress *dest )
 {
     return GeniusSDKTransfer( GeniusSDKToMinions( gnus ), dest );
+}
+
+bool GeniusSDKPayDev( uint64_t amount )
+{
+    auto        result = GeniusNodeInstance->PayDev( amount );
+
+    if ( result.has_value() )
+    {
+        return true;
+    }
+    else
+    {
+        return false;
+    }
 }
 
 uint64_t GeniusSDKGetCost( const JsonData_t jsondata )

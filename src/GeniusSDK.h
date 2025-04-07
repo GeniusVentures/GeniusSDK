@@ -89,6 +89,12 @@ GNUS_VISIBILITY_DEFAULT void        GeniusSDKShutdown();
 GNUS_VISIBILITY_DEFAULT uint64_t GeniusSDKGetBalance();
 
 /**
+ * @brief Retrieves the current USD price of gnus
+ * @return The price as a `double` value representing Minion Tokens.
+ */
+GNUS_VISIBILITY_DEFAULT double GeniusSDKGetGNUSPrice();
+
+/**
  * @brief Retrieves the current balance in **Genius Tokens** as a formatted string.
  * @return The balance as a `GeniusTokenValue` struct, containing a GNUS value in string format.
  */
@@ -139,6 +145,15 @@ GNUS_VISIBILITY_DEFAULT bool GeniusSDKTransfer( uint64_t amount, GeniusAddress *
  * @return `true` if the transfer is successful, `false` otherwise.
  */
 GNUS_VISIBILITY_DEFAULT bool GeniusSDKTransferGNUS( const GeniusTokenValue *gnus, GeniusAddress *dest );
+
+/**
+ * @brief     Pay the dev for in in-game transactions
+ * @param[in] amount The amount to transfer in Minion Tokens.
+ * @return `true` if the transfer is successful, `false` otherwise.
+ * @note If you have a Genius Token amount, use `GeniusSDKToMinions` to convert
+ *       GNUS to Minion Tokens before calling this function.
+ */
+GNUS_VISIBILITY_DEFAULT bool GeniusSDKPayDev( uint64_t amount );
 
 /**
  * @brief Computes the cost of an operation based on the given JSON data (in **Minion Tokens**).
