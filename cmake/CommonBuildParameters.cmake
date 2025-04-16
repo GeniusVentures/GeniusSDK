@@ -326,10 +326,10 @@ find_package(libsecp256k1 CONFIG REQUIRED)
 include_directories(${libsecp256k1_INCLUDE_DIR})
 
 # Set config of xxhash
-set(xxhash_INCLUDE_DIR "${THIRDPARTY_BUILD_DIR}/xxhash/include")
-set(xxhash_LIBRARY_DIR "${THIRDPARTY_BUILD_DIR}/xxhash/lib")
-set(xxhash_DIR "${THIRDPARTY_BUILD_DIR}/xxhash/lib/cmake/xxhash")
-find_package(xxhash CONFIG REQUIRED)
+set(xxHash_INCLUDE_DIR "${THIRDPARTY_BUILD_DIR}/xxhash/include")
+set(xxHash_LIBRARY_DIR "${THIRDPARTY_BUILD_DIR}/xxhash/lib")
+set(xxHash_DIR "${THIRDPARTY_BUILD_DIR}/xxhash/lib/cmake/xxHash")
+find_package(xxHash CONFIG REQUIRED)
 include_directories(${xxhash_INCLUDE_DIR})
 
 # Set config of libssh2
