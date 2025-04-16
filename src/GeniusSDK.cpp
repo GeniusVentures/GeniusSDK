@@ -85,6 +85,42 @@ namespace
         return outcome::success( config_from_file );
     }
 
+    outcome::result<DevConfig_st, JsonError> ReadDevConfigFromJSONStr( const std::string &base_path, const std::string &jsonStr )
+    {
+        DevConfig_st      config_from_file = {};
+        rapidjson::Document    document;
+        rapidjson::ParseResult parseResult = document.Parse( jsonStr.c_str() );
+        if ( parseResult == nullptr )
+        {
+            return outcome::failure( JsonError( "Parse error " ) );
+        }
+
+        if ( !document.HasMember( "Address" ) || !document["Address"].IsString() )
+        {
+            return outcome::failure( JsonError( "Missing or invalid 'Address'" ) );
+        }
+        if ( !document.HasMember( "Cut" ) || !document["Cut"].IsString() )
+        {
+            return outcome::failure( JsonError( "Missing or invalid 'Cut'" ) );
+        }
+        if ( !document.HasMember( "TokenValue" ) || !document["TokenValue"].IsDouble() )
+        {
+            return outcome::failure( JsonError( "Missing or invalid 'TokenValue'" ) );
+        }
+        if ( !document.HasMember( "TokenID" ) || !document["TokenID"].IsInt() )
+        {
+            return outcome::failure( JsonError( "Missing or invalid 'TokenID'" ) );
+        }
+
+        strncpy( config_from_file.Addr, document["Address"].GetString(), document["Address"].GetStringLength() );
+        config_from_file.Cut              = document["Cut"].GetString();
+        config_from_file.TokenValueInGNUS = document["TokenValue"].GetDouble();
+        config_from_file.TokenID          = document["TokenID"].GetInt();
+        strncpy( config_from_file.BaseWritePath, base_path.data(), base_path.size() );
+
+        return outcome::success( config_from_file );
+    }
+
     GeniusMatrix matrix_from_vector_of_vector( const std::vector<std::vector<uint8_t>> &vec )
     {
         uint64_t size = vec.size();
@@ -136,6 +172,37 @@ const char *GeniusSDKInit( const char *base_path, const char *eth_private_key, b
     {
         GeniusNodeInstance =
             std::make_shared<sgns::GeniusNode>( load_config_ret.value(), eth_private_key, autodht, process, baseport );
+        ret_val.append( load_config_ret.value().BaseWritePath );
+    }
+    else
+    {
+        ret_val.assign( load_config_ret.error().what() );
+        std::cout << load_config_ret.error().what() << std::endl;
+    }
+
+    return ret_val.c_str();
+}
+
+const char *GeniusSDKInitSecure( const char *base_path, const char *dev_config, const char *eth_private_key, bool autodht, bool process,
+    uint16_t baseport )
+{
+    if ( base_path == nullptr )
+    {
+        std::cerr << "base_path should not be empty!" << std::endl;
+        return nullptr;
+    }
+    if ( dev_config == nullptr )
+    {
+        std::cerr << "dev_config should not be empty!" << std::endl;
+        return nullptr;
+    }
+    auto               load_config_ret = ReadDevConfigFromJSONStr( base_path, dev_config );
+    static std::string ret_val         = "Initialized on ";
+
+    if ( load_config_ret )
+    {
+        GeniusNodeInstance =
+        std::make_shared<sgns::GeniusNode>( load_config_ret.value(), eth_private_key, autodht, process, baseport );
         ret_val.append( load_config_ret.value().BaseWritePath );
     }
     else

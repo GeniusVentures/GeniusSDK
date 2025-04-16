@@ -78,6 +78,8 @@ typedef uint64_t PayAmount_t;      ///< Amount to be paid for the processing
 
 GNUS_VISIBILITY_DEFAULT const char *GeniusSDKInit( const char *base_path, const char *eth_private_key, bool autodht,
                                                    bool process, uint16_t baseport );
+GNUS_VISIBILITY_DEFAULT const char *GeniusSDKInitSecure( const char *base_path, const char *dev_config, const char *eth_private_key, bool autodht,
+                                                    bool process, uint16_t baseport );
 GNUS_VISIBILITY_DEFAULT const char *GeniusSDKInitMinimal( const char *base_path, const char *eth_private_key,
                                                     uint16_t baseport );
 GNUS_VISIBILITY_DEFAULT void        GeniusSDKShutdown();
