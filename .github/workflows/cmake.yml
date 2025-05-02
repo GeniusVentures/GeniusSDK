@@ -26,6 +26,12 @@ jobs:
         include:
           - target: Linux
             host: ubuntu-latest
+            abi: x86_64
+            build-type: Release
+          - target: Linux
+            host: ubuntu-24.04-arm
+            abi: aarch64
+            build-type: Release
           - target: Windows
             host: windows-latest
           - target: OSX
@@ -42,6 +48,8 @@ jobs:
             host: macos-latest
         exclude:
           - target: Android
+            abi: ""
+          - target: Linux
             abi: ""
     steps:
       - name: Configure Linux host
@@ -67,12 +75,6 @@ jobs:
           PATH="$HOMEBREW_PREFIX/opt/gnu-tar/libexec/gnubin:$PATH"
           echo "PATH=$PATH" >> $GITHUB_ENV
           echo "CMAKE_GENERATOR=Ninja" >> $GITHUB_ENV
-
-      - name: Install bindgen
-        run: cargo install cbindgen
-
-      - name: Add Rust wasm target
-        run: rustup target add wasm32-unknown-emscripten
 
       - name: Set build directory
         run: |
@@ -206,7 +208,7 @@ jobs:
       - name: Configure CMake for Linux
         if: ${{matrix.target == 'Linux'}}
         working-directory: ${{github.workspace}}/GeniusSDK
-        run: cmake -S build/${{matrix.target}} -B $BUILD_DIRECTORY -DCMAKE_BUILD_TYPE=${{matrix.build-type}} -DTHIRDPARTY_BUILD_DIR=${{github.workspace}}/thirdparty -DTHIRDPARTY_DIR=${{github.workspace}}/thirdparty -DZKLLVM_DIR=${{env.ZKLLVM_DIR}} -DSUPERGENIUS_SRC_DIR=${{github.workspace}}/SuperGenius
+        run: cmake -S build/${{matrix.target}} -B $BUILD_DIRECTORY -DCMAKE_BUILD_TYPE=${{matrix.build-type}} -DTHIRDPARTY_BUILD_DIR=${{github.workspace}}/thirdparty -DTHIRDPARTY_DIR=${{github.workspace}}/thirdparty -DZKLLVM_DIR=${{env.ZKLLVM_DIR}} -DSUPERGENIUS_SRC_DIR=${{github.workspace}}/SuperGenius -DABI_SUBFOLDER_NAME='/${{matrix.abi}}'
 
       - name: Configure CMake for Windows
         if: ${{matrix.target == 'Windows'}}
@@ -242,7 +244,7 @@ jobs:
           file_name="${OS_NAME}-${CURRENT_BRANCH}-${{matrix.build-type}}.tar.gz"
           RELEASE_TAG=${OS_NAME}-${CURRENT_BRANCH}-${{matrix.build-type}}
 
-          mv SuperGenius.tar.gz $file_name
+          mv GeniusSDK.tar.gz $file_name
 
           if ! gh release view $RELEASE_TAG; then
               echo "Release not found, creating tag ${RELEASE_TAG}"
