@@ -1,0 +1,70 @@
+syntax = "proto3";
+
+package genius;
+
+service GeniusNodeAPI {
+  rpc GetBalance(Empty) returns (BalanceReply);
+  rpc GetGNUSPrice(Empty) returns (GNUSPriceReply);
+  rpc Transfer(TransferRequest) returns (TransferReply);
+  rpc GetAddress(Empty) returns (AddressReply);
+  rpc Shutdown(Empty) returns (Empty);
+
+  rpc ToMinions(GeniusTokenValue) returns (MinionReply);
+  rpc ToGenius(MinionRequest) returns (GeniusTokenValue);
+  rpc PayDev(MinionRequest) returns (TransferReply);
+  rpc GetCost(JsonData) returns (MinionReply);
+  rpc Process(JsonData) returns (Empty);
+  rpc Mint(MintRequest) returns (Empty);
+  rpc GetInTransactions(Empty) returns (TransactionMatrix);
+  rpc GetOutTransactions(Empty) returns (TransactionMatrix);
+}
+
+message Empty {}
+
+message BalanceReply {
+  uint64 balance = 1;
+}
+
+message GNUSPriceReply {
+  double price = 1;
+}
+
+message TransferRequest {
+  uint64 amount = 1;
+  string destination = 2;
+}
+
+message TransferReply {
+  bool success = 1;
+}
+
+message AddressReply {
+  string address = 1;
+}
+
+message GeniusTokenValue {
+  string value = 1;
+}
+
+message MinionRequest {
+  uint64 minions = 1;
+}
+
+message MinionReply {
+  uint64 minions = 1;
+}
+
+message JsonData {
+  string json = 1;
+}
+
+message MintRequest {
+  uint64 amount = 1;
+  string transaction_hash = 2;
+  string chain_id = 3;
+  string token_id = 4;
+}
+
+message TransactionMatrix {
+  repeated bytes transactions = 1;
+}

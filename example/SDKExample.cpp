@@ -141,7 +141,7 @@ static void initSDK()
     userPrint( "\n--- SDK Initialization ---\n" );
     getSDKConfig( base_path, eth_private_key, &autodht, &process, &baseport );
 
-    const char *init_result = GeniusSDKInit( base_path, eth_private_key, autodht, process, baseport );
+    const char *init_result = GeniusSDKInitSecure( base_path,"", eth_private_key, autodht, process, baseport );
     if ( !init_result || strncmp( init_result, "Initialized", strlen( "Initialized" ) ) != 0 )
     {
         userPrint( "Failed to initialize GeniusSDK. Error: %s\n", init_result ? init_result : "No response" );

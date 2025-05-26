@@ -67,3 +67,98 @@ function(geniussdk_install target)
         )
 endfunction()
 
+
+function(compile_proto_to_cpp_sdk PB_H PB_CC PB_REL_PATH PROTO)
+  get_target_property(Protobuf_INCLUDE_DIR protobuf::libprotobuf INTERFACE_INCLUDE_DIRECTORIES)
+  get_target_property(Protobuf_PROTOC_EXECUTABLE protobuf::protoc IMPORTED_LOCATION)
+  find_program(GRPC_CPP_PLUGIN_EXECUTABLE grpc_cpp_plugin)
+
+  if (NOT Protobuf_PROTOC_EXECUTABLE)
+    message(FATAL_ERROR "Protobuf_PROTOC_EXECUTABLE is empty")
+  endif ()
+  if (NOT Protobuf_INCLUDE_DIR)
+    message(FATAL_ERROR "Protobuf_INCLUDE_DIR is empty")
+  endif ()
+  if (NOT GRPC_CPP_PLUGIN_EXECUTABLE)
+    message(FATAL_ERROR "grpc_cpp_plugin not found in PATH")
+  endif ()
+
+  get_filename_component(PROTO_ABS "${PROTO}" REALPATH)
+
+  # Determine schema output directory
+  file(RELATIVE_PATH SCHEMA_REL "${CMAKE_BINARY_DIR}/src" "${CMAKE_CURRENT_BINARY_DIR}")
+  set(SCHEMA_OUT_DIR ${CMAKE_BINARY_DIR}/generated)
+  file(MAKE_DIRECTORY ${SCHEMA_OUT_DIR})
+
+  # Filenames
+  string(REGEX REPLACE "\\.proto$" ".pb.h" GEN_PB_HEADER ${PROTO})
+  string(REGEX REPLACE "\\.proto$" ".pb.cc" GEN_PB ${PROTO})
+  string(REGEX REPLACE "\\.proto$" ".grpc.pb.h" GEN_GRPC_HEADER ${PROTO})
+  string(REGEX REPLACE "\\.proto$" ".grpc.pb.cc" GEN_GRPC ${PROTO})
+
+  # Full paths to outputs
+  set(GEN_PB_HEADER_PATH ${SCHEMA_OUT_DIR}/${SCHEMA_REL}/${GEN_PB_HEADER})
+  set(GEN_PB_PATH        ${SCHEMA_OUT_DIR}/${SCHEMA_REL}/${GEN_PB})
+  set(GEN_GRPC_HEADER_PATH ${SCHEMA_OUT_DIR}/${SCHEMA_REL}/${GEN_GRPC_HEADER})
+  set(GEN_GRPC_PATH        ${SCHEMA_OUT_DIR}/${SCHEMA_REL}/${GEN_GRPC})
+
+  add_custom_command(
+      OUTPUT ${GEN_PB_HEADER_PATH} ${GEN_PB_PATH} ${GEN_GRPC_HEADER_PATH} ${GEN_GRPC_PATH}
+      COMMAND ${Protobuf_PROTOC_EXECUTABLE}
+      ARGS -I${PROJECT_ROOT}/src -I${Protobuf_INCLUDE_DIR}
+           --cpp_out=${SCHEMA_OUT_DIR}
+           --grpc_out=${SCHEMA_OUT_DIR}
+           --plugin=protoc-gen-grpc=${GRPC_CPP_PLUGIN_EXECUTABLE}
+           ${PROTO_ABS}
+      WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+      DEPENDS protobuf::protoc
+      VERBATIM
+  )
+
+  set(${PB_H} "${GEN_PB_HEADER_PATH};${GEN_GRPC_HEADER_PATH}" PARENT_SCOPE)
+  set(${PB_CC} "${GEN_PB_PATH};${GEN_GRPC_PATH}" PARENT_SCOPE)
+  set(${PB_REL_PATH} ${SCHEMA_REL} PARENT_SCOPE)
+endfunction()
+
+if(NOT TARGET generated)
+add_custom_target(generated
+    COMMENT "Building generated files..."
+    )
+endif()
+
+function(add_proto_library_sdk NAME)
+  set(SOURCES "")
+  set(HEADERS "")
+  set(PB_REL_PATH "")
+  foreach (PROTO IN ITEMS ${ARGN})
+    compile_proto_to_cpp_sdk(H C PB_REL_PATH ${PROTO})
+    list(APPEND SOURCES ${H} ${C})
+    list(APPEND HEADERS ${H})
+  endforeach ()
+
+  add_library(${NAME}
+      ${SOURCES}
+      )
+  target_link_libraries(${NAME}
+      protobuf::libprotobuf
+      )
+  target_include_directories(${NAME} PUBLIC
+      $<BUILD_INTERFACE:${CMAKE_BINARY_DIR}/generated/>
+      $<INSTALL_INTERFACE:include>
+  )
+  #target_include_directories(${NAME} PUBLIC
+  #    ${CMAKE_BINARY_DIR}/generated/
+  #    )
+  foreach (H IN ITEMS ${HEADERS})
+    set_target_properties(${NAME} PROPERTIES PUBLIC_HEADER "${H}")
+  endforeach ()
+
+  install(TARGETS ${NAME} EXPORT GeniusSDKTargets
+      PUBLIC_HEADER DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/${PB_REL_PATH}
+      )
+
+  disable_clang_tidy(${NAME})
+
+  add_dependencies(generated ${NAME})
+endfunction()
+

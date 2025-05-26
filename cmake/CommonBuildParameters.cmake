@@ -115,6 +115,12 @@ endif()
 
 find_package(Protobuf CONFIG REQUIRED)
 
+if(NOT DEFINED gRPC_DIR)
+    set(gRPC_DIR "${_THIRDPARTY_BUILD_DIR}/grpc/lib/cmake/grpc")
+endif()
+find_package(gRPC CONFIG REQUIRED) # for some reason this leads to multiple definitions if configured first
+#probably some issue with the grpc_host compilation I did on thirdparty temporarily 
+
 if(NOT DEFINED PROTOC_EXECUTABLE)
     set(PROTOC_EXECUTABLE "${THIRDPARTY_BUILD_DIR}/grpc/bin/protoc${CMAKE_EXECUTABLE_SUFFIX}")
 endif()
@@ -137,6 +143,21 @@ print("PROTOC_LOCATION: ${PROTOC_LOCATION}")
 if(Protobuf_FOUND)
     message(STATUS "Protobuf version : ${Protobuf_VERSION}")
     message(STATUS "Protobuf compiler : ${Protobuf_PROTOC_EXECUTABLE}")
+endif()
+
+if(NOT DEFINED GRPC_CPP_PLUGIN_EXECUTABLE)
+    set(GRPC_CPP_PLUGIN_EXECUTABLE "${THIRDPARTY_BUILD_DIR}/grpc_host_tools/bin/grpc_cpp_plugin${CMAKE_EXECUTABLE_SUFFIX}")
+endif()
+
+set(gRPC_CPP_PLUGIN_EXECUTABLE ${GRPC_CPP_PLUGIN_EXECUTABLE} CACHE PATH "Initial cache" FORCE)
+
+if(NOT TARGET gRPC::grpc_cpp_plugin)
+    add_executable(gRPC::grpc_cpp_plugin IMPORTED)
+endif()
+
+if(EXISTS "${gRPC_CPP_PLUGIN_EXECUTABLE}")
+    set_target_properties(gRPC::grpc_cpp_plugin PROPERTIES
+        IMPORTED_LOCATION ${gRPC_CPP_PLUGIN_EXECUTABLE})
 endif()
 
 include(${PROJECT_ROOT}/build/cmake/functions.cmake)
