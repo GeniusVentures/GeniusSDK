@@ -454,6 +454,7 @@ add_subdirectory(${PROJECT_ROOT}/src ${CMAKE_BINARY_DIR}/src)
 
 if(TESTING)
     # Set config of GTest project
+    set(GTest_DIR "${_THIRDPARTY_BUILD_DIR}/GTest/lib/cmake/GTest")
     find_package(GTest CONFIG REQUIRED)
     include_directories(${GTest_INCLUDE_DIR})
 
