@@ -217,8 +217,8 @@ jobs:
         shell: bash
 
       - name: Release SDK
+        working-directory: ${{github.workspace}}/GeniusSDK
         if: github.ref_name == 'main' || github.ref_name == 'develop'
-        working-directory: ${{github.workspace}}/GeniusSDK/${{env.BUILD_DIRECTORY}}
         shell: bash
         run: |
           RELEASE_TAG='${{matrix.target}}-${{github.ref_name}}-${{matrix.build-type}}'
@@ -242,4 +242,4 @@ jobs:
           fi
 
           echo -e "Uploading ${FILE_NAME}"
-          gh release upload --clobber ${RELEASE_TAG} ${FILE_NAME}
+          gh release upload --clobber ${RELEASE_TAG} "${{env.BUILD_DIRECTORY}}/${FILE_NAME}"
