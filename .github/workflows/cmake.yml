@@ -137,9 +137,9 @@ jobs:
           cd zkLLVM
 
           if [ '${{matrix.abi}}' ]; then
-              tag_name=${{matrix.target}}-${{matrix.abi}}-${zkLLVM_branch}-Release
+              tag_name=${{matrix.target}}-${{matrix.abi}}-${zkLLVM_branch}-${{matrix.build-type}}
           else
-              tag_name=${{matrix.target}}-${zkLLVM_branch}-Release
+              tag_name=${{matrix.target}}-${zkLLVM_branch}-${{matrix.build-type}}
           fi
 
           gh release download ${tag_name} --repo GeniusVentures/zkLLVM -p "*.tar.gz"
@@ -154,27 +154,19 @@ jobs:
           if [ "$CURRENT_BRANCH" == "main" ]; then
               sgns_branch="main"
           else
-              sgns_branch=develop
+              sgns_branch="develop"
           fi
+
+          echo "Using ${sgns_branch} branch from SuperGenius"
 
           mkdir SuperGenius
           cd SuperGenius
 
-          if [ '${{matrix.abi}}' ]; then
-              tag_name=${{matrix.target}}-${{matrix.abi}}-$sgns_branch-Release
-          else
-              tag_name=${{matrix.target}}-$sgns_branch-Release
-          fi
-          echo "Using ${sgns_branch} branch from SuperGenius"
+          tag_name="${{matrix.target}}-${sgns_branch}-${{matrix.build-type}}"
 
-          gh release download ${tag_name} --repo GeniusVentures/SuperGenius -p "*.tar.gz"
+          gh release download ${tag_name} --repo GeniusVentures/SuperGenius -p "${FILE_NAME}"
 
-          echo "Found libraries:"
-
-          for library in *.tar.gz; do
-              echo "${library}"
-              tar -xzf "${library}"
-          done
+          tar -xzf "${FILE_NAME}"
         shell: bash
 
       - name: Checkout
