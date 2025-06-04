@@ -37,22 +37,6 @@ else()
     set(LIB_TYPE STATIC)
 endif()
 
-# define third party directory
-# if (NOT DEFINED THIRDPARTY_DIR)
-# print("Setting default third party directory")
-# set(THIRDPARTY_DIR "${CMAKE_CURRENT_LIST_DIR}/../../thirdparty")
-# # get absolute path
-# cmake_path(SET THIRDPARTY_DIR NORMALIZE "${THIRDPARTY_DIR}")
-# endif()
-#
-# if (NOT DEFINED THIRDPARTY_BUILD_DIR)
-# print("Setting third party build directory default")
-# set(THIRDPARTY_BUILD_DIR "${THIRDPARTY_DIR}/build/${CMAKE_SYSTEM_NAME}/${CMAKE_BUILD_TYPE}")
-# endif()
-#
-# print("THIRDPARTY BUILD DIR: ${THIRDPARTY_BUILD_DIR}")
-# print("THIRDPARTY SRC DIR: ${THIRDPARTY_DIR}")
-
 # Set config of GTest
 set(GTest_DIR "${THIRDPARTY_BUILD_DIR}/GTest/lib/cmake/GTest")
 set(GTest_INCLUDE_DIR "${THIRDPARTY_BUILD_DIR}/GTest/include")
