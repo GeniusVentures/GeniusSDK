@@ -21,7 +21,7 @@ jobs:
       fail-fast: false
       matrix:
         target: [Android, iOS, OSX, Linux, Windows]
-        build-type: [Release]
+        build-type: [Debug,Release]
         abi: [""]
         include:
           - target: Linux
@@ -29,9 +29,17 @@ jobs:
             abi: x86_64
             build-type: Release
           - target: Linux
+            host: ubuntu-latest
+            abi: x86_64
+            build-type: Debug
+          - target: Linux
             host: ubuntu-24.04-arm
             abi: aarch64
             build-type: Release
+          - target: Linux
+            host: ubuntu-24.04-arm
+            abi: aarch64
+            build-type: Debug
           - target: Windows
             host: windows-latest
           - target: OSX
@@ -42,8 +50,16 @@ jobs:
             build-type: Release
           - target: Android
             host: ubuntu-latest
+            abi: arm64-v8a
+            build-type: Debug
+          - target: Android
+            host: ubuntu-latest
             abi: armeabi-v7a
             build-type: Release
+          - target: Android
+            host: ubuntu-latest
+            abi: armeabi-v7a
+            build-type: Debug
           - target: iOS
             host: macos-latest
         exclude:
