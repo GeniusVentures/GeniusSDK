@@ -67,19 +67,19 @@ namespace
         {
             return outcome::failure( JsonError( "Missing or invalid 'Cut'" ) );
         }
-        if ( !document.HasMember( "TokenValue" ) || !document["TokenValue"].IsDouble() )
+        if ( !document.HasMember( "TokenValue" ) || !document["TokenValue"].IsString() )
         {
             return outcome::failure( JsonError( "Missing or invalid 'TokenValue'" ) );
         }
-        if ( !document.HasMember( "TokenID" ) || !document["TokenID"].IsInt() )
+        if ( !document.HasMember( "TokenID" ) || !document["TokenID"].IsString() )
         {
             return outcome::failure( JsonError( "Missing or invalid 'TokenID'" ) );
         }
 
         strncpy( config_from_file.Addr, document["Address"].GetString(), document["Address"].GetStringLength() );
         config_from_file.Cut              = document["Cut"].GetString();
-        config_from_file.TokenValueInGNUS = document["TokenValue"].GetDouble();
-        config_from_file.TokenID          = document["TokenID"].GetInt();
+        config_from_file.TokenValueInGNUS = document["TokenValue"].GetString();
+        config_from_file.TokenID          = document["TokenID"].GetString();
         strncpy( config_from_file.BaseWritePath, base_path.data(), base_path.size() );
 
         return outcome::success( config_from_file );
@@ -103,19 +103,19 @@ namespace
         {
             return outcome::failure( JsonError( "Missing or invalid 'Cut'" ) );
         }
-        if ( !document.HasMember( "TokenValue" ) || !document["TokenValue"].IsDouble() )
+        if ( !document.HasMember( "TokenValue" ) || !document["TokenValue"].IsString() )
         {
             return outcome::failure( JsonError( "Missing or invalid 'TokenValue'" ) );
         }
-        if ( !document.HasMember( "TokenID" ) || !document["TokenID"].IsInt() )
+        if ( !document.HasMember( "TokenID" ) || !document["TokenID"].IsString() )
         {
             return outcome::failure( JsonError( "Missing or invalid 'TokenID'" ) );
         }
 
         strncpy( config_from_file.Addr, document["Address"].GetString(), document["Address"].GetStringLength() );
         config_from_file.Cut              = document["Cut"].GetString();
-        config_from_file.TokenValueInGNUS = document["TokenValue"].GetDouble();
-        config_from_file.TokenID          = document["TokenID"].GetInt();
+        config_from_file.TokenValueInGNUS = document["TokenValue"].GetString();
+        config_from_file.TokenID          = document["TokenID"].GetString();
         strncpy( config_from_file.BaseWritePath, base_path.data(), base_path.size() );
 
         return outcome::success( config_from_file );
