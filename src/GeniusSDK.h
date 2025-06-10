@@ -78,6 +78,8 @@ typedef uint64_t PayAmount_t;      ///< Amount to be paid for the processing
 
 GNUS_VISIBILITY_DEFAULT const char *GeniusSDKInit( const char *base_path, const char *eth_private_key, bool autodht,
                                                    bool process, uint16_t baseport );
+GNUS_VISIBILITY_DEFAULT const char *GeniusSDKInitSecure( const char *base_path, const char *dev_config, const char *eth_private_key, bool autodht,
+                                                    bool process, uint16_t baseport );
 GNUS_VISIBILITY_DEFAULT const char *GeniusSDKInitMinimal( const char *base_path, const char *eth_private_key,
                                                     uint16_t baseport );
 GNUS_VISIBILITY_DEFAULT void        GeniusSDKShutdown();
@@ -87,6 +89,12 @@ GNUS_VISIBILITY_DEFAULT void        GeniusSDKShutdown();
  * @return The balance amount as a `uint64_t` value representing Minion Tokens.
  */
 GNUS_VISIBILITY_DEFAULT uint64_t GeniusSDKGetBalance();
+
+/**
+ * @brief Retrieves the current USD price of gnus
+ * @return The price as a `double` value representing Minion Tokens.
+ */
+GNUS_VISIBILITY_DEFAULT double GeniusSDKGetGNUSPrice();
 
 /**
  * @brief Retrieves the current balance in **Genius Tokens** as a formatted string.
@@ -139,6 +147,15 @@ GNUS_VISIBILITY_DEFAULT bool GeniusSDKTransfer( uint64_t amount, GeniusAddress *
  * @return `true` if the transfer is successful, `false` otherwise.
  */
 GNUS_VISIBILITY_DEFAULT bool GeniusSDKTransferGNUS( const GeniusTokenValue *gnus, GeniusAddress *dest );
+
+/**
+ * @brief     Pay the dev for in in-game transactions
+ * @param[in] amount The amount to transfer in Minion Tokens.
+ * @return `true` if the transfer is successful, `false` otherwise.
+ * @note If you have a Genius Token amount, use `GeniusSDKToMinions` to convert
+ *       GNUS to Minion Tokens before calling this function.
+ */
+GNUS_VISIBILITY_DEFAULT bool GeniusSDKPayDev( uint64_t amount );
 
 /**
  * @brief Computes the cost of an operation based on the given JSON data (in **Minion Tokens**).
