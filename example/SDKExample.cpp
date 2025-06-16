@@ -263,8 +263,15 @@ static void mintTokensWithString()
     userPrint( "Enter amount to mint: " );
     scanf( "%s", amount.value );
 
-    GeniusSDKMintGNUS( &amount, "", "", "" );
-    userPrint( "Minted %s tokens.\n", amount.value );
+    char txHash[MAX_INPUT_SIZE]  = "";
+    char chainId[MAX_INPUT_SIZE] = "";
+    char tokenId[MAX_INPUT_SIZE] = "";
+    promptString( "Transaction hash (optional): ", txHash, MAX_INPUT_SIZE, "" );
+    promptString( "Chain ID (optional): ", chainId, MAX_INPUT_SIZE, "" );
+    promptString( "Token ID (child token name): ", tokenId, MAX_INPUT_SIZE, "" );
+
+    GeniusSDKMintGNUS( &amount, txHash, chainId, tokenId );
+    userPrint( "Minted %s tokens of “%s”.\n", amount.value, tokenId[0] ? tokenId : "<default>" );
 }
 
 /**
@@ -417,12 +424,15 @@ static void mintTokens()
 {
     uint64_t amount = promptUInt64( "Enter the amount of Minion Tokens to mint: ", 0 );
 
-    const char *transaction_hash = "";
-    const char *chain_id         = "";
-    const char *token_id         = "";
+    char txHash[MAX_INPUT_SIZE]  = "";
+    char chainId[MAX_INPUT_SIZE] = "";
+    char tokenId[MAX_INPUT_SIZE] = "";
+    promptString( "Transaction hash (optional): ", txHash, MAX_INPUT_SIZE, "" );
+    promptString( "Chain ID (optional): ", chainId, MAX_INPUT_SIZE, "" );
+    promptString( "Token ID (child token name): ", tokenId, MAX_INPUT_SIZE, "" );
 
-    GeniusSDKMint( amount, transaction_hash, chain_id, token_id );
-    userPrint( "Minted %llu Minion Tokens successfully.\n", amount );
+    GeniusSDKMint( amount, txHash, chainId, tokenId );
+    userPrint( "Minted %llu tokens of “%s” successfully.\n", amount, tokenId[0] ? tokenId : "<default>" );
 }
 
 /**
