@@ -27,6 +27,8 @@ static void initSDK();
 
 static void getBalance();
 static void getBalanceInString();
+static void getBalanceByChildString();
+static void getBalanceByChildRaw();
 static void getAddress();
 static void getInTransactions();
 static void getOutTransactions();
@@ -40,6 +42,8 @@ static void transferTokensWithString();
 static void shutdownSDK();
 static void convertGeniusToMinions();
 static void convertMinionsToGenius();
+static void convertMinionsToChild();
+static void convertChildToMinions();
 
 static void     suppressSDKLogs();
 static void     getSDKConfig( char *base_path, char *eth_private_key, int32_t *autodht, int32_t *process,
@@ -52,77 +56,142 @@ static uint64_t promptUInt64( const char *prompt, uint64_t defaultValue );
 static void     readLine( char *buffer, size_t bufferSize );
 
 #define SUPPRESS_OUTPUT 1
-#if ( SUPPRESS_OUTPUT == 0 )
+#if (SUPPRESS_OUTPUT == 0)
 #define userPrint printf
 #else
 void userPrint( const char *fmt, ... );
 #endif
 static int original_stdout_fd = -1; ///< To preserve original stdout when suppressing SDK logs.
 
+typedef void ( *MenuFunc )();
+
+struct MenuOption
+{
+    int         option;
+    const char *description;
+    MenuFunc    function; // nullptr means “Back” or “Exit”
+};
+
+// Generic submenu runner
+static void runSubMenu( const char *title, const MenuOption *menu )
+{
+    while (true)
+    {
+        userPrint( "\n--- %s ---\n", title );
+        for (const MenuOption *opt = menu; opt->description; ++opt)
+        {
+            userPrint( "%2d - %s\n", opt->option, opt->description );
+        }
+        userPrint( " 0 - Back\n" );
+
+        int  choice  = promptInt( "Enter choice: ", -1 );
+        bool handled = false;
+        for (const MenuOption *opt = menu; opt->description; ++opt)
+        {
+            if (opt->option == choice)
+            {
+                handled = true;
+                opt->function(); // call routine
+                return;          // back to main menu
+            }
+        }
+        if (choice == 0)
+        {
+            return; // Back
+        }
+        if (!handled)
+        {
+            userPrint( "Invalid choice. Please select again.\n" );
+        }
+    }
+}
 
 int main()
 {
-    static const struct MenuOption
-    {
-        int32_t     option;      ///< Option number
-        const char *description; ///< Option description
-        void ( *function )();    ///< Function to execute when the option is selected
-    } options[] = { { 1, "Initialize the SDK", initSDK },
-                    { 2, "Shutdown SDK", shutdownSDK },
-                    { 3, "Get Balance", getBalance },
-                    { 4, "Get Balance (String)", getBalanceInString },
-                    { 5, "Get Address", getAddress },
-                    { 6, "Get Incoming Transactions", getInTransactions },
-                    { 7, "Get Outgoing Transactions", getOutTransactions },
-                    { 8, "Free Transactions", nullptr },
-                    { 9, "Mint Tokens", mintTokens },
-                    { 10, "Mint Tokens (String)", mintTokensWithString },
-                    { 11, "Transfer Tokens", transferTokens },
-                    { 12, "Transfer Tokens (String)", transferTokensWithString },
-                    { 13, "Get Processing Cost", getProcessingCost },
-                    { 14, "Get Processing Cost (String)", getProcessingCostInString },
-                    { 15, "Process Sample Data", processSampleData },
-                    { 16, "Convert Genius to Minions", convertGeniusToMinions },
-                    { 17, "Convert Minions to Genius", convertMinionsToGenius },
-                    { 0, "Exit", nullptr } };
-
-#if ( SUPPRESS_OUTPUT == 1 )
+#if (SUPPRESS_OUTPUT == 1)
     suppressSDKLogs();
 #endif
 
-    int choice = -1;
-    do
-    {
-        userPrint( "\nSelect an option:\n" );
-        for ( int32_t i = 0; options[i].option != 0; i++ )
-        {
-            userPrint( "%d - %s\n", options[i].option, options[i].description );
-        }
-        choice = promptInt( "Enter choice: ", -1 );
+    // define all submenus
+    static const MenuOption sdkMenu[] = {
+        { 1, "Initialize SDK", initSDK }, { 2, "Shutdown SDK", shutdownSDK }, { 0, nullptr, nullptr } };
+    static const MenuOption walletMenu[] = { { 1, "Get Address", getAddress },
+                                             { 2, "Get Balance (all tokens)", getBalance },
+                                             { 3, "Get Balance (by token fmt)", getBalanceByChildString },
+                                             { 4, "Get Balance (by token raw)", getBalanceByChildRaw },
+                                             { 0, nullptr, nullptr } };
+    static const MenuOption txMenu[]     = { { 1, "Incoming Transactions", getInTransactions },
+                                             { 2, "Outgoing Transactions", getOutTransactions },
+                                             { 3, "Mint (minions)", mintTokens },
+                                             { 4, "Mint (formatted)", mintTokensWithString },
+                                             { 5, "Transfer (minions)", transferTokens },
+                                             { 6, "Transfer (formatted)", transferTokensWithString },
+                                             { 0, nullptr, nullptr } };
+    static const MenuOption convMenu[]   = { { 1, "Minions → Genius", convertMinionsToGenius },
+                                             { 2, "Genius → Minions", convertGeniusToMinions },
+                                             { 3, "Minions → Child formatted", convertMinionsToChild },
+                                             { 4, "Child formatted → Minions", convertChildToMinions },
+                                             { 0, nullptr, nullptr } };
+    static const MenuOption procMenu[]   = { { 1, "Process Sample JSON", processSampleData },
+                                             { 2, "Get Cost (raw)", getProcessingCost },
+                                             { 3, "Get Cost (formatted)", getProcessingCostInString },
+                                             { 0, nullptr, nullptr } };
 
-        bool validChoice = false;
-        for ( int32_t i = 0; options[i].option != 0; i++ )
+    // Main menu
+    static const MenuOption mainMenu[] = { { 1, "SDK", nullptr }, // placeholder: call submenu
+                                           { 2, "Wallet", nullptr },     { 3, "Transactions", nullptr },
+                                           { 4, "Conversion", nullptr }, { 5, "Processing", nullptr },
+                                           { 0, nullptr, nullptr } };
+
+    while (true)
+    {
+        // locally define the main menu structure
+        struct MenuOption
         {
-            if ( options[i].option == choice )
+            int         option;
+            const char *description;
+            void ( *function )();
+        };
+
+        static const MenuOption mainMenu[] = { { 1, "SDK", []() { runSubMenu( "SDK", sdkMenu ); } },
+                                               { 2, "Wallet", []() { runSubMenu( "Wallet", walletMenu ); } },
+                                               { 3, "Transactions", []() { runSubMenu( "Transactions", txMenu ); } },
+                                               { 4, "Conversion", []() { runSubMenu( "Conversion", convMenu ); } },
+                                               { 5, "Processing", []() { runSubMenu( "Processing", procMenu ); } },
+                                               { 0, "Exit", nullptr } };
+
+        userPrint( "\n=== Main Menu ===\n" );
+        for (const auto &opt : mainMenu)
+        {
+            userPrint( "%2d - %s\n", opt.option, opt.description );
+        }
+
+        int  choice  = promptInt( "Enter choice: ", -1 );
+        bool handled = false;
+
+        for (const auto &opt : mainMenu)
+        {
+            if (opt.option == choice)
             {
-                validChoice = true;
-                if ( options[i].function )
+                handled = true;
+                if (opt.function)
                 {
-                    options[i].function();
+                    opt.function();
                 }
                 else
                 {
-                    userPrint( "Exiting...\n" );
+                    userPrint( "Exiting application.\n" );
+                    return 0;
                 }
                 break;
             }
         }
 
-        if ( !validChoice && choice != 0 )
+        if (!handled)
         {
             userPrint( "Invalid choice. Please select again.\n" );
         }
-    } while ( choice != 0 );
+    }
 
     return 0;
 }
@@ -142,7 +211,7 @@ static void initSDK()
     getSDKConfig( base_path, eth_private_key, &autodht, &process, &baseport );
 
     const char *init_result = GeniusSDKInit( base_path, eth_private_key, autodht, process, baseport );
-    if ( !init_result || strncmp( init_result, "Initialized", strlen( "Initialized" ) ) != 0 )
+    if (!init_result || strncmp( init_result, "Initialized", strlen( "Initialized" ) ) != 0)
     {
         userPrint( "Failed to initialize GeniusSDK. Error: %s\n", init_result ? init_result : "No response" );
         return;
@@ -158,6 +227,31 @@ static void getBalanceInString()
 {
     GeniusTokenValue balance = GeniusSDKGetBalanceGNUS();
     userPrint( "Balance: %s\n", balance.value );
+}
+
+/**
+ * @brief Retrieves the balance for a child-token string (formatted).
+ */
+static void getBalanceByChildString()
+{
+    char tokenId[MAX_INPUT_SIZE] = { 0 };
+    promptString( "Enter child-token ID: ", tokenId, MAX_INPUT_SIZE, "" );
+
+    // Calls the SDK wrapper you added in GeniusSDK.cpp :contentReference[oaicite:0]{index=0}
+    const char *str = GeniusSDKGetBalanceByTokenString( tokenId );
+    userPrint( "Balance of %s: %s\n", tokenId, str );
+}
+
+/**
+ * @brief Retrieves the balance for a child-token in raw minions.
+ */
+static void getBalanceByChildRaw()
+{
+    char tokenId[MAX_INPUT_SIZE] = { 0 };
+    promptString( "Enter child-token ID: ", tokenId, MAX_INPUT_SIZE, "" );
+
+    uint64_t raw = GeniusSDKGetBalanceByToken( tokenId );
+    userPrint( "Balance of %s: %llu minions\n", tokenId, raw );
 }
 
 /**
@@ -223,6 +317,22 @@ static void convertMinionsToGenius()
     userPrint( "Converted to Genius: %s\n", genius.value );
 }
 
+static void convertMinionsToChild()
+{
+    uint64_t         m = promptUInt64( "Enter Minion amount: ", 0 );
+    GeniusTokenValue c = GeniusSDKToChild( m );
+    userPrint( "Child-token format: %s\n", c.value );
+}
+
+static void convertChildToMinions()
+{
+    GeniusTokenValue c;
+    userPrint( "Enter child-token string: " );
+    scanf( "%s", c.value );
+    uint64_t m = GeniusSDKFromChild( &c );
+    userPrint( "Minions: %llu\n", m );
+}
+
 /**
  * @brief Retrieves and prints the current balance.
  */
@@ -271,7 +381,7 @@ static void processSampleData()
                   MAX_INPUT_SIZE, "sample.json" );
 
     JsonData_t localSampleData;
-    if ( !loadJsonFromFile( jsonFilePath, localSampleData ) )
+    if (!loadJsonFromFile( jsonFilePath, localSampleData ))
     {
         userPrint( "Failed to load JSON file.\n" );
         return;
@@ -291,7 +401,7 @@ static void getProcessingCost()
                   MAX_INPUT_SIZE, "sample.json" );
 
     JsonData_t localSampleData;
-    if ( !loadJsonFromFile( jsonFilePath, localSampleData ) )
+    if (!loadJsonFromFile( jsonFilePath, localSampleData ))
     {
         userPrint( "Failed to load JSON file.\n" );
         return;
@@ -350,7 +460,7 @@ static void suppressSDKLogs()
     original_stdout_fd = _dup( _fileno( stdout ) );
 
     int null_fd = _open( "NUL", _O_WRONLY );
-    if ( null_fd != -1 )
+    if (null_fd != -1)
     {
         _dup2( null_fd, _fileno( stdout ) );
         _close( null_fd );
@@ -359,7 +469,7 @@ static void suppressSDKLogs()
     original_stdout_fd = dup( STDOUT_FILENO );
 
     int devnull_fd = open( "/dev/null", O_WRONLY );
-    if ( devnull_fd != -1 )
+    if (devnull_fd != -1)
     {
         dup2( devnull_fd, STDOUT_FILENO );
         close( devnull_fd );
@@ -397,7 +507,7 @@ static void getSDKConfig( char *base_path, char *eth_private_key, int32_t *autod
 static bool loadJsonFromFile( const char *filename, JsonData_t jsonBuffer )
 {
     FILE *fp = fopen( filename, "rb" );
-    if ( !fp )
+    if (!fp)
     {
         userPrint( "Error: Could not open JSON file: %s\n", filename );
         return false;
@@ -420,7 +530,7 @@ static void promptString( const char *prompt, char *destination, size_t maxLen, 
     char buffer[MAX_INPUT_SIZE] = { 0 };
     userPrint( "%s", prompt );
     readLine( buffer, sizeof( buffer ) );
-    if ( strlen( buffer ) > 0 )
+    if (strlen( buffer ) > 0)
     {
         strncpy( destination, buffer, maxLen );
         destination[maxLen - 1] = '\0';
@@ -481,13 +591,13 @@ static uint64_t promptUInt64( const char *prompt, uint64_t defaultValue )
  */
 static void readLine( char *buffer, size_t bufferSize )
 {
-    if ( fgets( buffer, bufferSize, stdin ) != nullptr )
+    if (fgets( buffer, bufferSize, stdin ) != nullptr)
     {
         buffer[strcspn( buffer, "\n" )] = '\0';
     }
 }
 
-#if ( SUPPRESS_OUTPUT == 1 )
+#if (SUPPRESS_OUTPUT == 1)
 /**
  * @brief Custom print function that always writes to the original stdout.
  * @param fmt Format string (printf-style).
