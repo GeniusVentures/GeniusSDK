@@ -14,6 +14,11 @@ jobs:
       GRPC_BUILD_ENABLE_CCACHE: "ON"
       GH_TOKEN: ${{ secrets.GNUS_TOKEN_1 }}
     runs-on: ${{matrix.host}}
+    container:
+      image: ${{matrix.container}}
+      credentials:
+        username: ${{github.actor}}
+        password: ${{secrets.GNUS_TOKEN_1}}
     strategy:
       fail-fast: false
       matrix:
@@ -33,10 +38,12 @@ jobs:
             host: ubuntu-24.04-arm
             abi: aarch64
             build-type: Release
+            container: ghcr.io/geniusventures/debian-bullseye:latest
           - target: Linux
             host: ubuntu-24.04-arm
             abi: aarch64
             build-type: Debug
+            container: ghcr.io/geniusventures/debian-bullseye:latest
           - target: Windows
             host: windows-latest
           - target: OSX
@@ -120,6 +127,13 @@ jobs:
 
           gh release download ${TAG_NAME} --repo GeniusVentures/thirdparty -p "${FILE_NAME}"
           tar -zxf "${FILE_NAME}"
+
+          if [ "${{ matrix.target }}" = "Windows" ]; then
+            # Convert Unix path to Windows path for Windows builds
+            echo "THIRDPARTY_BUILD_DIR=$(pwd -W)/${BUILD_DIRECTORY}" >> $GITHUB_ENV
+          else
+            echo "THIRDPARTY_BUILD_DIR=$(pwd)/${BUILD_DIRECTORY}" >> $GITHUB_ENV
+          fi
         shell: bash
 
       - name: Download zkLLVM release
@@ -144,11 +158,19 @@ jobs:
               ZKLLVM_BUILD_DIR=build/${{matrix.target}}/Release
           fi
 
-          echo "ZKLLVM_BUILD_DIR=${ZKLLVM_BUILD_DIR}" >> $GITHUB_ENV
-
           gh release download ${TAG_NAME} --repo GeniusVentures/zkLLVM -p "${ZKLLVM_FILE_NAME}"
 
           tar --exclude='*bin/assigner' --exclude='*bin/clang-zkllvm' --exclude='*bin/llvm-link-zkllvm' --exclude='*bin/transpiler' -xzf "${ZKLLVM_FILE_NAME}"
+
+          # Set ZKLLVM_BUILD_DIR to the actual location where files were extracted
+          
+          if [ "${{ matrix.target }}" = "Windows" ]; then
+            # Convert Unix path to Windows path for Windows builds
+            echo "ZKLLVM_BUILD_DIR=$(pwd -W)/${ZKLLVM_BUILD_DIR}" >> $GITHUB_ENV
+          else
+            echo "ZKLLVM_BUILD_DIR=$(pwd)/${ZKLLVM_BUILD_DIR}" >> $GITHUB_ENV
+          fi
+
         shell: bash
 
       - name: Download SuperGenius
@@ -175,6 +197,12 @@ jobs:
               rmdir "$INNER_DIR" || true
             fi
           fi
+          if [ "${{ matrix.target }}" = "Windows" ]; then
+            # Convert Unix path to Windows path for Windows builds
+            echo "SUPERGENIUS_DIR=$(pwd -W)" >> $GITHUB_ENV
+          else
+            echo "SUPERGENIUS_DIR=$(pwd)" >> $GITHUB_ENV
+          fi
         shell: bash
 
       - name: Checkout
@@ -187,27 +215,27 @@ jobs:
       - name: Configure CMake for Android
         if: ${{ matrix.target == 'Android'}}
         working-directory: ${{github.workspace}}/GeniusSDK
-        run: cmake -S build/${{matrix.target}} -B $BUILD_DIRECTORY -DCMAKE_BUILD_TYPE=${{matrix.build-type}} -DANDROID_ABI=${{matrix.abi}} -DTHIRDPARTY_DIR=${{github.workspace}}/thirdparty -DTHIRDPARTY_BUILD_DIR=${{github.workspace}}/thirdparty/${BUILD_DIRECTORY} -DZKLLVM_DIR=${{github.workspace}}/zkLLVM/${ZKLLVM_BUILD_DIR} -DSUPERGENIUS_SRC_DIR=${{github.workspace}}/SuperGenius -DSUPERGENIUS_BUILD_DIR=${{github.workspace}}/SuperGenius/${BUILD_DIRECTORY}
+        run: cmake -S build/${{matrix.target}} -B $BUILD_DIRECTORY -DCMAKE_BUILD_TYPE=${{matrix.build-type}} -DANDROID_ABI=${{matrix.abi}} -DTHIRDPARTY_DIR=${{github.workspace}}/thirdparty -DTHIRDPARTY_BUILD_DIR=${{env.THIRDPARTY_BUILD_DIR}} -DZKLLVM_DIR=${{env.ZKLLVM_BUILD_DIR}} -DZKLLVM_BUILD_DIR=${{env.ZKLLVM_BUILD_DIR}} -DSUPERGENIUS_SRC_DIR=${{env.SUPERGENIUS_DIR}} -DSUPERGENIUS_DIR=${{env.SUPERGENIUS_DIR}}
 
       - name: Configure CMake for Mac
         if: ${{ matrix.target == 'OSX'}}
         working-directory: ${{github.workspace}}/GeniusSDK
-        run: cmake -S build/${{matrix.target}} -B $BUILD_DIRECTORY -DCMAKE_BUILD_TYPE=${{matrix.build-type}} -DPLATFORM=MAC_UNIVERSAL -DTHIRDPARTY_DIR=${{github.workspace}}/thirdparty -DTHIRDPARTY_BUILD_DIR=${{github.workspace}}/thirdparty/${BUILD_DIRECTORY} -DZKLLVM_DIR=${{github.workspace}}/zkLLVM/${ZKLLVM_BUILD_DIR} -DSUPERGENIUS_SRC_DIR=${{github.workspace}}/SuperGenius -DSUPERGENIUS_BUILD_DIR=${{github.workspace}}/SuperGenius/${BUILD_DIRECTORY}
+        run: cmake -S build/${{matrix.target}} -B $BUILD_DIRECTORY -DCMAKE_BUILD_TYPE=${{matrix.build-type}} -DPLATFORM=MAC_UNIVERSAL -DTHIRDPARTY_DIR=${{github.workspace}}/thirdparty -DTHIRDPARTY_BUILD_DIR=${{env.THIRDPARTY_BUILD_DIR}} -DZKLLVM_DIR=${{env.ZKLLVM_BUILD_DIR}} -DZKLLVM_BUILD_DIR=${{env.ZKLLVM_BUILD_DIR}} -DSUPERGENIUS_SRC_DIR=${{env.SUPERGENIUS_DIR}} -DSUPERGENIUS_DIR=${{env.SUPERGENIUS_DIR}}
 
       - name: Configure CMake for iOS
         if: ${{ matrix.target == 'iOS'}}
         working-directory: ${{github.workspace}}/GeniusSDK
-        run: cmake -S build/${{matrix.target}} -B $BUILD_DIRECTORY -DCMAKE_BUILD_TYPE=${{matrix.build-type}} -DPLATFORM=OS64 -DTHIRDPARTY_DIR=${{github.workspace}}/thirdparty -DTHIRDPARTY_BUILD_DIR=${{github.workspace}}/thirdparty/${BUILD_DIRECTORY} -DZKLLVM_DIR=${{github.workspace}}/zkLLVM/${ZKLLVM_BUILD_DIR} -DSUPERGENIUS_SRC_DIR=${{github.workspace}}/SuperGenius -DSUPERGENIUS_BUILD_DIR=${{github.workspace}}/SuperGenius/${BUILD_DIRECTORY}
+        run: cmake -S build/${{matrix.target}} -B $BUILD_DIRECTORY -DCMAKE_BUILD_TYPE=${{matrix.build-type}} -DPLATFORM=OS64 -DTHIRDPARTY_DIR=${{github.workspace}}/thirdparty -DTHIRDPARTY_BUILD_DIR=${{env.THIRDPARTY_BUILD_DIR}} -DZKLLVM_DIR=${{env.ZKLLVM_BUILD_DIR}} -DZKLLVM_BUILD_DIR=${{env.ZKLLVM_BUILD_DIR}} -DSUPERGENIUS_SRC_DIR=${{env.SUPERGENIUS_DIR}} -DSUPERGENIUS_DIR=${{env.SUPERGENIUS_DIR}}
 
       - name: Configure CMake for Linux
         if: ${{matrix.target == 'Linux'}}
         working-directory: ${{github.workspace}}/GeniusSDK
-        run: cmake -S build/${{matrix.target}} -B $BUILD_DIRECTORY -DCMAKE_BUILD_TYPE=${{matrix.build-type}} -DTHIRDPARTY_DIR=${{github.workspace}}/thirdparty -DTHIRDPARTY_BUILD_DIR=${{github.workspace}}/thirdparty/${BUILD_DIRECTORY} -DZKLLVM_DIR=${{github.workspace}}/zkLLVM/${ZKLLVM_BUILD_DIR} -DSUPERGENIUS_SRC_DIR=${{github.workspace}}/SuperGenius -DABI_SUBFOLDER_NAME='/${{matrix.abi}}' -DSUPERGENIUS_BUILD_DIR=${{github.workspace}}/SuperGenius/${BUILD_DIRECTORY}
+        run: cmake -S build/${{matrix.target}} -B $BUILD_DIRECTORY -DCMAKE_BUILD_TYPE=${{matrix.build-type}} -DTHIRDPARTY_DIR=${{github.workspace}}/thirdparty -DTHIRDPARTY_BUILD_DIR=${{env.THIRDPARTY_BUILD_DIR}} -DZKLLVM_DIR=${{env.ZKLLVM_BUILD_DIR}} -DZKLLVM_BUILD_DIR=${{env.ZKLLVM_BUILD_DIR}} -DSUPERGENIUS_SRC_DIR=${{env.SUPERGENIUS_DIR}} -DSUPERGENIUS_DIR=${{env.SUPERGENIUS_DIR}} -DABI_SUBFOLDER_NAME='/${{matrix.abi}}'
 
       - name: Configure CMake for Windows
         if: ${{matrix.target == 'Windows'}}
         working-directory: ${{github.workspace}}/GeniusSDK
-        run: cmake -S build/${{matrix.target}} -B $env:BUILD_DIRECTORY -DCMAKE_BUILD_TYPE=${{matrix.build-type}} -DTHIRDPARTY_DIR=${{github.workspace}}/thirdparty -DTHIRDPARTY_BUILD_DIR=${{github.workspace}}/thirdparty/$env:BUILD_DIRECTORY -DZKLLVM_DIR=${{github.workspace}}/zkLLVM/$env:ZKLLVM_BUILD_DIR -DSUPERGENIUS_SRC_DIR=${{github.workspace}}/SuperGenius -DSUPERGENIUS_BUILD_DIR=${{github.workspace}}/SuperGenius/$env:BUILD_DIRECTORY
+        run: cmake -S build/${{matrix.target}} -B $env:BUILD_DIRECTORY -DCMAKE_BUILD_TYPE=${{matrix.build-type}} -DTHIRDPARTY_DIR=${{github.workspace}}/thirdparty -DTHIRDPARTY_BUILD_DIR=${{env.THIRDPARTY_BUILD_DIR}} -DZKLLVM_DIR=${{env.ZKLLVM_BUILD_DIR}} -DZKLLVM_BUILD_DIR=${{env.ZKLLVM_BUILD_DIR}} -DSUPERGENIUS_SRC_DIR=${{env.SUPERGENIUS_DIR}} -DSUPERGENIUS_DIR=${{env.SUPERGENIUS_DIR}}
 
       - name: Build GeniusSDK
         working-directory: ${{github.workspace}}/GeniusSDK/${{env.BUILD_DIRECTORY}}
