@@ -428,8 +428,8 @@ GeniusTokenValue GeniusSDKToGenius( uint64_t minions )
 
 uint64_t GeniusSDKFromChild( const GeniusTokenValue *child )
 {
-    std::string str;
-    auto        result = GeniusNodeInstance->ParseTokens( str, std::string( child->value ) );
+    auto        result = GeniusNodeInstance->ParseTokens( GeniusSDKGetBalanceByTokenString( child->value ),
+                                                   std::string( child->value ) );
     if (result.has_value())
     {
         return result.value();
