@@ -325,7 +325,7 @@ set_target_properties(TrustWalletCore PROPERTIES IMPORTED_LOCATION "${TrustWalle
 
 target_include_directories(TrustWalletCore INTERFACE "${TrustWalletCore_INCLUDE_DIR}")
 
-set(zkLLVM_INCLUDE_DIR "${ZKLLVM_DIR}/zkLLVM/include")
+set(zkLLVM_INCLUDE_DIR "${ZKLLVM_BUILD_DIR}/zkLLVM/include")
 include_directories(${zkLLVM_INCLUDE_DIR})
 
 # --------------------------------------------------------
@@ -346,74 +346,74 @@ add_library(marshalling::crypto3_multiprecision INTERFACE IMPORTED)
 add_library(marshalling::crypto3_zk INTERFACE IMPORTED)
 
 set_target_properties(crypto3::algebra PROPERTIES
-    INTERFACE_INCLUDE_DIRECTORIES "${ZKLLVM_DIR}/zkLLVM/include"
+    INTERFACE_INCLUDE_DIRECTORIES "${ZKLLVM_BUILD_DIR}/zkLLVM/include"
 )
 set_target_properties(crypto3::block PROPERTIES
-    INTERFACE_INCLUDE_DIRECTORIES "${ZKLLVM_DIR}/zkLLVM/include"
+    INTERFACE_INCLUDE_DIRECTORIES "${ZKLLVM_BUILD_DIR}/zkLLVM/include"
 )
 set_target_properties(crypto3::blueprint PROPERTIES
-    INTERFACE_INCLUDE_DIRECTORIES "${ZKLLVM_DIR}/zkLLVM/include"
+    INTERFACE_INCLUDE_DIRECTORIES "${ZKLLVM_BUILD_DIR}/zkLLVM/include"
 )
 set_target_properties(crypto3::codec PROPERTIES
-    INTERFACE_INCLUDE_DIRECTORIES "${ZKLLVM_DIR}/zkLLVM/include"
+    INTERFACE_INCLUDE_DIRECTORIES "${ZKLLVM_BUILD_DIR}/zkLLVM/include"
 )
 set_target_properties(crypto3::math PROPERTIES
-    INTERFACE_INCLUDE_DIRECTORIES "${ZKLLVM_DIR}/zkLLVM/include"
+    INTERFACE_INCLUDE_DIRECTORIES "${ZKLLVM_BUILD_DIR}/zkLLVM/include"
 )
 set_target_properties(crypto3::multiprecision PROPERTIES
-    INTERFACE_INCLUDE_DIRECTORIES "${ZKLLVM_DIR}/zkLLVM/include"
+    INTERFACE_INCLUDE_DIRECTORIES "${ZKLLVM_BUILD_DIR}/zkLLVM/include"
 )
 set_target_properties(crypto3::pkpad PROPERTIES
-    INTERFACE_INCLUDE_DIRECTORIES "${ZKLLVM_DIR}/zkLLVM/include"
+    INTERFACE_INCLUDE_DIRECTORIES "${ZKLLVM_BUILD_DIR}/zkLLVM/include"
 )
 set_target_properties(crypto3::pubkey PROPERTIES
-    INTERFACE_INCLUDE_DIRECTORIES "${ZKLLVM_DIR}/zkLLVM/include"
+    INTERFACE_INCLUDE_DIRECTORIES "${ZKLLVM_BUILD_DIR}/zkLLVM/include"
 )
 set_target_properties(crypto3::random PROPERTIES
-    INTERFACE_INCLUDE_DIRECTORIES "${ZKLLVM_DIR}/zkLLVM/include"
+    INTERFACE_INCLUDE_DIRECTORIES "${ZKLLVM_BUILD_DIR}/zkLLVM/include"
 )
 set_target_properties(crypto3::zk PROPERTIES
-    INTERFACE_INCLUDE_DIRECTORIES "${ZKLLVM_DIR}/zkLLVM/include"
+    INTERFACE_INCLUDE_DIRECTORIES "${ZKLLVM_BUILD_DIR}/zkLLVM/include"
 )
 set_target_properties(marshalling::core PROPERTIES
-    INTERFACE_INCLUDE_DIRECTORIES "${ZKLLVM_DIR}/zkLLVM/include"
+    INTERFACE_INCLUDE_DIRECTORIES "${ZKLLVM_BUILD_DIR}/zkLLVM/include"
 )
 set_target_properties(marshalling::crypto3_algebra PROPERTIES
-    INTERFACE_INCLUDE_DIRECTORIES "${ZKLLVM_DIR}/zkLLVM/include"
+    INTERFACE_INCLUDE_DIRECTORIES "${ZKLLVM_BUILD_DIR}/zkLLVM/include"
 )
 set_target_properties(marshalling::crypto3_multiprecision PROPERTIES
-    INTERFACE_INCLUDE_DIRECTORIES "${ZKLLVM_DIR}/zkLLVM/include"
+    INTERFACE_INCLUDE_DIRECTORIES "${ZKLLVM_BUILD_DIR}/zkLLVM/include"
 )
 set_target_properties(marshalling::crypto3_zk PROPERTIES
-    INTERFACE_INCLUDE_DIRECTORIES "${ZKLLVM_DIR}/zkLLVM/include"
+    INTERFACE_INCLUDE_DIRECTORIES "${ZKLLVM_BUILD_DIR}/zkLLVM/include"
 )
 
 # zkLLVM
-set(zkLLVM_INCLUDE_DIR "${ZKLLVM_DIR}/zkLLVM/include")
+set(zkLLVM_INCLUDE_DIR "${ZKLLVM_BUILD_DIR}/zkLLVM/include")
 
 # Set config of llvm
-set(LLVM_DIR "${ZKLLVM_DIR}/zkLLVM/lib/cmake/llvm")
+set(LLVM_DIR "${ZKLLVM_BUILD_DIR}/zkLLVM/lib/cmake/llvm")
 find_package(LLVM CONFIG REQUIRED)
 
-# Set config of SuperGenius project
-if(NOT DEFINED SUPERGENIUS_SRC_DIR)
-    if(EXISTS "${CMAKE_CURRENT_LIST_DIR}/../../SuperGenius/README.md" OR EXISTS "${CMAKE_CURRENT_LIST_DIR}/../../SuperGenius/Readme.md")
-        print("Setting default SuperGenius directory")
-        set(SUPERGENIUS_SRC_DIR "${CMAKE_CURRENT_LIST_DIR}/../../SuperGenius" CACHE STRING "Default SuperGenius Library")
+if(NOT DEFINED SUPERGENIUS_BUILD_DIR)
+    # define third party directory
+    if(NOT DEFINED SUPERGENIUS_DIR)
+        if(EXISTS "${CMAKE_CURRENT_LIST_DIR}/../../SuperGenius")
+            print("Setting default SuperGenius directory")
+            set(SUPERGENIUS_DIR "${CMAKE_CURRENT_LIST_DIR}/../../SuperGenius" CACHE STRING "Default SuperGenius Library")
 
-        # # get absolute path
-        cmake_path(SET SUPERGENIUS_SRC_DIR NORMALIZE "${SUPERGENIUS_SRC_DIR}")
-    else()
-        message(FATAL_ERROR "Cannot find SuperGenius directory required to build")
+            # # get absolute path
+            cmake_path(SET SUPERGENIUS_DIR NORMALIZE "${SUPERGENIUS_DIR}")
+        else()
+            message(FATAL_ERROR "Cannot find SuperGenius directory required to build")
+        endif()
     endif()
+    print("Setting SuperGenius build directory default")
+    get_filename_component(BUILD_PLATFORM_NAME ${CMAKE_CURRENT_SOURCE_DIR} NAME)
+    set(SUPERGENIUS_BUILD_DIR "${SUPERGENIUS_DIR}/build/${BUILD_PLATFORM_NAME}/${CMAKE_BUILD_TYPE}${ABI_SUBFOLDER_NAME}" CACHE STRING "Default Third Party Build Directory")
 endif()
 
-if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
-    set(SUPERGENIUS_BUILD_DIR "${SUPERGENIUS_SRC_DIR}/build/OSX/${CMAKE_BUILD_TYPE}")
-else()
-    set(SUPERGENIUS_BUILD_DIR "${SUPERGENIUS_SRC_DIR}/build/${CMAKE_SYSTEM_NAME}/${CMAKE_BUILD_TYPE}${ABI_SUBFOLDER_NAME}")
-endif()
-
+# Set config of SuperGenius project
 set(SuperGenius_DIR "${SUPERGENIUS_BUILD_DIR}/SuperGenius/lib/cmake/SuperGenius/")
 set(ProofSystem_DIR "${SUPERGENIUS_BUILD_DIR}/SuperGenius/lib/cmake/ProofSystem/")
 
@@ -422,7 +422,7 @@ print("SuperGenius_DIR: ${SuperGenius_DIR}")
 find_package(ProofSystem CONFIG REQUIRED)
 find_package(SuperGenius CONFIG REQUIRED)
 include_directories(${SuperGenius_INCLUDE_DIR})
-include_directories("${ZKLLVM_DIR}/zkLLVM/include")
+include_directories("${ZKLLVM_BUILD_DIR}/zkLLVM/include")
 
 include_directories(
     ${PROJECT_ROOT}/include
