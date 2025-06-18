@@ -81,7 +81,7 @@ GNUS_VISIBILITY_DEFAULT const char *GeniusSDKInit( const char *base_path, const 
 GNUS_VISIBILITY_DEFAULT const char *GeniusSDKInitSecure( const char *base_path, const char *dev_config, const char *eth_private_key, bool autodht,
                                                     bool process, uint16_t baseport );
 GNUS_VISIBILITY_DEFAULT const char *GeniusSDKInitMinimal( const char *base_path, const char *eth_private_key,
-                                                    uint16_t baseport );
+                                                          uint16_t baseport );
 GNUS_VISIBILITY_DEFAULT void        GeniusSDKShutdown();
 
 /**
@@ -96,8 +96,8 @@ GNUS_VISIBILITY_DEFAULT uint64_t GeniusSDKGetBalance();
  */
 GNUS_VISIBILITY_DEFAULT double GeniusSDKGetGNUSPrice();
 
-GNUS_VISIBILITY_DEFAULT GeniusTokenValue GeniusSDKToChild( uint64_t minions, const GeniusTokenValue *child );
-GNUS_VISIBILITY_DEFAULT uint64_t GeniusSDKFromChild(const GeniusTokenValue* child);
+GNUS_VISIBILITY_DEFAULT GeniusTokenValue GeniusSDKToChild( uint64_t minions, const char *token_id );
+GNUS_VISIBILITY_DEFAULT uint64_t         GeniusSDKFromChild( const GeniusTokenValue *child, const char *token_id );
 
 /**
  * @brief Retrieves the current balance in **Genius Tokens** as a formatted string.
@@ -108,7 +108,7 @@ GNUS_VISIBILITY_DEFAULT const char      *GeniusSDKGetBalanceGNUSString();
 GNUS_VISIBILITY_DEFAULT uint64_t         GeniusSDKGetBalanceByToken( const char *token_id );
 GNUS_VISIBILITY_DEFAULT const char      *GeniusSDKGetBalanceByTokenString( const char *token_id );
 
-GNUS_VISIBILITY_DEFAULT GeniusAddress    GeniusSDKGetAddress();
+GNUS_VISIBILITY_DEFAULT GeniusAddress GeniusSDKGetAddress();
 
 GNUS_VISIBILITY_DEFAULT GeniusMatrix GeniusSDKGetInTransactions();
 GNUS_VISIBILITY_DEFAULT GeniusMatrix GeniusSDKGetOutTransactions();
@@ -157,11 +157,12 @@ GNUS_VISIBILITY_DEFAULT bool GeniusSDKTransferGNUS( const GeniusTokenValue *gnus
 /**
  * @brief     Pay the dev for in in-game transactions
  * @param[in] amount The amount to transfer in Minion Tokens.
+ * @param[in] token_id token identifier.
  * @return `true` if the transfer is successful, `false` otherwise.
  * @note If you have a Genius Token amount, use `GeniusSDKToMinions` to convert
  *       GNUS to Minion Tokens before calling this function.
  */
-GNUS_VISIBILITY_DEFAULT bool GeniusSDKPayDev( uint64_t amount );
+GNUS_VISIBILITY_DEFAULT bool GeniusSDKPayDev( uint64_t amount, const char *token_id  );
 
 /**
  * @brief Computes the cost of an operation based on the given JSON data (in **Minion Tokens**).
@@ -191,7 +192,6 @@ GNUS_VISIBILITY_DEFAULT uint64_t GeniusSDKToMinions( const GeniusTokenValue *gnu
  * @return    A `GeniusTokenValue` struct containing the amount in Genius Tokens.
  */
 GNUS_VISIBILITY_DEFAULT GeniusTokenValue GeniusSDKToGenius( uint64_t minions );
-
 
 GNUS_EXPORT_END
 
