@@ -326,8 +326,9 @@ static void convertMinionsToGenius()
 
 static void convertMinionsToChild()
 {
+    GeniusTokenValue tokenValue = { "2" };
     uint64_t         m = promptUInt64( "Enter Minion amount: ", 0 );
-    GeniusTokenValue c = GeniusSDKToChild( m );
+    GeniusTokenValue c          = GeniusSDKToChild( m, &tokenValue );
     userPrint( "Child-token format: %s\n", c.value );
 }
 

@@ -96,7 +96,7 @@ GNUS_VISIBILITY_DEFAULT uint64_t GeniusSDKGetBalance();
  */
 GNUS_VISIBILITY_DEFAULT double GeniusSDKGetGNUSPrice();
 
-GNUS_VISIBILITY_DEFAULT GeniusTokenValue GeniusSDKToChild(uint64_t minions);
+GNUS_VISIBILITY_DEFAULT GeniusTokenValue GeniusSDKToChild( uint64_t minions, const GeniusTokenValue *child );
 GNUS_VISIBILITY_DEFAULT uint64_t GeniusSDKFromChild(const GeniusTokenValue* child);
 
 /**
@@ -105,8 +105,8 @@ GNUS_VISIBILITY_DEFAULT uint64_t GeniusSDKFromChild(const GeniusTokenValue* chil
  */
 GNUS_VISIBILITY_DEFAULT GeniusTokenValue GeniusSDKGetBalanceGNUS();
 GNUS_VISIBILITY_DEFAULT const char      *GeniusSDKGetBalanceGNUSString();
-uint64_t                                 GeniusSDKGetBalanceByToken( const char *token_id );
-const char                              *GeniusSDKGetBalanceByTokenString( const char *token_id );
+GNUS_VISIBILITY_DEFAULT uint64_t         GeniusSDKGetBalanceByToken( const char *token_id );
+GNUS_VISIBILITY_DEFAULT const char      *GeniusSDKGetBalanceByTokenString( const char *token_id );
 
 GNUS_VISIBILITY_DEFAULT GeniusAddress    GeniusSDKGetAddress();
 
