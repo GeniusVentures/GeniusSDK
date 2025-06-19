@@ -326,17 +326,29 @@ static void convertMinionsToGenius()
 
 static void convertMinionsToChild()
 {
-    uint64_t         m = promptUInt64( "Enter Minion amount: ", 0 );
-    GeniusTokenValue c          = GeniusSDKToChild( m, "" );
+    uint64_t m = promptUInt64( "Enter Minion amount: ", 0 );
+
+    char tokenId[MAX_INPUT_SIZE] = "";
+    promptString( "Enter Token ID (leave empty for default): ", tokenId, MAX_INPUT_SIZE, "" );
+
+    GeniusTokenValue c = GeniusSDKToChild( m, tokenId );
     userPrint( "Child-token format: %s\n", c.value );
 }
 
 static void convertChildToMinions()
 {
-    GeniusTokenValue c;
-    userPrint( "Enter child-token string: " );
-    scanf( "%s", c.value );
-    uint64_t m = GeniusSDKFromChild( &c, "" );
+    char childStr[MAX_INPUT_SIZE] = "";
+    promptString( "Enter child-token string: ", childStr, MAX_INPUT_SIZE, "" );
+
+    char tokenId[MAX_INPUT_SIZE] = "";
+    promptString( "Enter Token ID (leave empty for default): ", tokenId, MAX_INPUT_SIZE, "" );
+
+    // Copy into GeniusTokenValue and parse
+    GeniusTokenValue c = {};
+    std::strncpy( c.value, childStr, sizeof( c.value ) - 1 );
+    c.value[sizeof( c.value ) - 1] = '\0';
+
+    uint64_t m = GeniusSDKFromChild( &c, tokenId );
     userPrint( "Minions: %llu\n", m );
 }
 
