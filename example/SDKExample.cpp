@@ -49,6 +49,7 @@ static void     suppressSDKLogs();
 static void     getSDKConfig( char *base_path, char *eth_private_key, int32_t *autodht, int32_t *process,
                               uint16_t *baseport );
 static bool     loadJsonFromFile( const char *filename, JsonData_t jsonBuffer );
+static bool     parseGeniusTokenID( const char *hex, GeniusTokenID *out );
 static void     promptString( const char *prompt, char *destination, size_t maxLen, const char *defaultValue );
 static int      promptInt( const char *prompt, int defaultValue );
 static uint16_t promptUShort( const char *prompt, uint16_t defaultValue );
@@ -237,8 +238,14 @@ static void getBalanceByChildString()
     char tokenId[MAX_INPUT_SIZE] = { 0 };
     promptString( "Enter child-token ID: ", tokenId, MAX_INPUT_SIZE, "" );
 
-    // Calls the SDK wrapper you added in GeniusSDK.cpp :contentReference[oaicite:0]{index=0}
-    const char *str = GeniusSDKGetBalanceByTokenString( tokenId );
+    GeniusTokenID tid;
+    if (!parseGeniusTokenID( tokenId, &tid ))
+    {
+        userPrint( "Invalid token ID\n" );
+        return;
+    }
+
+    const char *str = GeniusSDKGetBalanceByTokenString( tid );
     userPrint( "Balance of %s: %s\n", tokenId, str );
 }
 
@@ -250,7 +257,14 @@ static void getBalanceByChildRaw()
     char tokenId[MAX_INPUT_SIZE] = { 0 };
     promptString( "Enter child-token ID: ", tokenId, MAX_INPUT_SIZE, "" );
 
-    uint64_t raw = GeniusSDKGetBalanceByToken( tokenId );
+    GeniusTokenID tid;
+    if (!parseGeniusTokenID( tokenId, &tid ))
+    {
+        userPrint( "Invalid token ID\n" );
+        return;
+    }
+
+    uint64_t raw = GeniusSDKGetBalanceByToken( tid );
     userPrint( "Balance of %s: %llu minions\n", tokenId, raw );
 }
 
@@ -270,7 +284,14 @@ static void mintTokensWithString()
     promptString( "Chain ID (optional): ", chainId, MAX_INPUT_SIZE, "" );
     promptString( "Token ID (child token name): ", tokenId, MAX_INPUT_SIZE, "" );
 
-    GeniusSDKMintGNUS( &amount, txHash, chainId, tokenId );
+    GeniusTokenID tid;
+    if (!parseGeniusTokenID( tokenId, &tid ))
+    {
+        userPrint( "Invalid token ID\n" );
+        return;
+    }
+
+    GeniusSDKMintGNUS( &amount, txHash, chainId, tid );
     userPrint( "Minted %s tokens of “%s”.\n", amount.value, tokenId[0] ? tokenId : "<default>" );
 }
 
@@ -281,12 +302,22 @@ static void transferTokensWithString()
 {
     GeniusTokenValue amount;
     GeniusAddress    recipient;
+    char             tokenId[MAX_INPUT_SIZE] = "";
+
     userPrint( "Enter amount to transfer: " );
     scanf( "%s", amount.value );
     userPrint( "Enter recipient address: " );
     scanf( "%s", recipient.address );
+    promptString( "Token ID (child token name): ", tokenId, MAX_INPUT_SIZE, "" );
 
-    GeniusSDKTransferGNUS( &amount, &recipient );
+    GeniusTokenID tid;
+    if (!parseGeniusTokenID( tokenId, &tid ))
+    {
+        userPrint( "Invalid token ID\n" );
+        return;
+    }
+
+    GeniusSDKTransferGNUS( &amount, &recipient, tid );
     userPrint( "Transferred %s tokens to %s.\n", amount.value, recipient.address );
 }
 
@@ -326,12 +357,18 @@ static void convertMinionsToGenius()
 
 static void convertMinionsToChild()
 {
-    uint64_t m = promptUInt64( "Enter Minion amount: ", 0 );
-
-    char tokenId[MAX_INPUT_SIZE] = "";
+    uint64_t m                       = promptUInt64( "Enter Minion amount: ", 0 );
+    char     tokenId[MAX_INPUT_SIZE] = "";
     promptString( "Enter Token ID (leave empty for default): ", tokenId, MAX_INPUT_SIZE, "" );
 
-    GeniusTokenValue c = GeniusSDKToChild( m, tokenId );
+    GeniusTokenID tid;
+    if (!parseGeniusTokenID( tokenId, &tid ))
+    {
+        userPrint( "Invalid token ID\n" );
+        return;
+    }
+
+    GeniusTokenValue c = GeniusSDKToChild( m, tid );
     userPrint( "Child-token format: %s\n", c.value );
 }
 
@@ -348,7 +385,14 @@ static void convertChildToMinions()
     std::strncpy( c.value, childStr, sizeof( c.value ) - 1 );
     c.value[sizeof( c.value ) - 1] = '\0';
 
-    uint64_t m = GeniusSDKFromChild( &c, tokenId );
+    GeniusTokenID tid;
+    if (!parseGeniusTokenID( tokenId, &tid ))
+    {
+        userPrint( "Invalid token ID\n" );
+        return;
+    }
+
+    uint64_t m = GeniusSDKFromChild( &c, tid );
     userPrint( "Minions: %llu\n", m );
 }
 
@@ -443,7 +487,14 @@ static void mintTokens()
     promptString( "Chain ID (optional): ", chainId, MAX_INPUT_SIZE, "" );
     promptString( "Token ID (child token name): ", tokenId, MAX_INPUT_SIZE, "" );
 
-    GeniusSDKMint( amount, txHash, chainId, tokenId );
+    GeniusTokenID tid;
+    if (!parseGeniusTokenID( tokenId, &tid ))
+    {
+        userPrint( "Invalid token ID\n" );
+        return;
+    }
+
+    GeniusSDKMint( amount, txHash, chainId, tid );
     userPrint( "Minted %llu tokens of “%s” successfully.\n", amount, tokenId[0] ? tokenId : "<default>" );
 }
 
@@ -452,13 +503,22 @@ static void mintTokens()
  */
 static void transferTokens()
 {
-    uint64_t amount = promptUInt64( "Enter the amount of Minion Tokens to transfer: ", 0 );
+    uint64_t amount                  = promptUInt64( "Enter the amount of Minion Tokens to transfer: ", 0 );
+    char     tokenId[MAX_INPUT_SIZE] = "";
+    promptString( "Enter Token ID (leave empty for default): ", tokenId, MAX_INPUT_SIZE, "" );
 
     GeniusAddress recipient;
     userPrint( "Enter recipient wallet address: " );
     readLine( recipient.address, sizeof( recipient.address ) );
 
-    bool transferSuccess = GeniusSDKTransfer( amount, &recipient );
+    GeniusTokenID tid;
+    if (!parseGeniusTokenID( tokenId, &tid ))
+    {
+        userPrint( "Invalid token ID\n" );
+        return;
+    }
+
+    bool transferSuccess = GeniusSDKTransfer( amount, &recipient, tid );
     userPrint( "Token transfer %s.\n", transferSuccess ? "successful" : "failed" );
 }
 
@@ -537,6 +597,96 @@ static bool loadJsonFromFile( const char *filename, JsonData_t jsonBuffer )
     size_t bytesRead      = fread( jsonBuffer, 1, sizeof( JsonData_t ) - 1, fp );
     jsonBuffer[bytesRead] = '\0';
     fclose( fp );
+    return true;
+}
+
+/**
+ * @brief Parse a hex string (with optional "0x" prefix) into a 32-byte TokenID.
+ * @param hex   Null-terminated hex string (upper/lower case). May be shorter or longer than 64 digits.
+ * @param out   Pointer to GeniusTokenID to fill.
+ * @return      true on success (out is filled), false on invalid hex.
+ */
+static bool parseGeniusTokenID( const char *hex, GeniusTokenID *out )
+{
+    size_t i;
+
+    if (out == NULL)
+    {
+        return false;
+    }
+
+    memset( out->data, 0, sizeof( out->data ) );
+
+    if (hex == NULL || *hex == '\0')
+    {
+        return true;
+    }
+
+    if (hex[0] == '0' && ( hex[1] == 'x' || hex[1] == 'X' ))
+    {
+        hex += 2;
+    }
+
+    size_t      len = strlen( hex );
+    const char *s   = hex;
+    if (len > 64)
+    {
+        s   = hex + ( len - 64 );
+        len = 64;
+    }
+
+    char   tmp[65];
+    size_t pad = 64 - len;
+    for (i = 0; i < pad; ++i)
+    {
+        tmp[i] = '0';
+    }
+    memcpy( tmp + pad, s, len );
+    tmp[64] = '\0';
+
+    for (i = 0; i < 32; ++i)
+    {
+        char c1 = tmp[2 * i];
+        char c2 = tmp[2 * i + 1];
+        int  hi, lo;
+
+        if (c1 >= '0' && c1 <= '9')
+        {
+            hi = c1 - '0';
+        }
+        else if (c1 >= 'a' && c1 <= 'f')
+        {
+            hi = c1 - 'a' + 10;
+        }
+        else if (c1 >= 'A' && c1 <= 'F')
+        {
+            hi = c1 - 'A' + 10;
+        }
+        else
+        {
+            return false;
+        }
+
+        if (c2 >= '0' && c2 <= '9')
+        {
+            lo = c2 - '0';
+        }
+        else if (c2 >= 'a' && c2 <= 'f')
+        {
+            lo = c2 - 'a' + 10;
+        }
+        else if (c2 >= 'A' && c2 <= 'F')
+        {
+            lo = c2 - 'A' + 10;
+        }
+        else
+        {
+            return false;
+        }
+
+        out->data[i] = (uint8_t)( ( hi << 4 ) | lo );
+    }
+
     return true;
 }
 

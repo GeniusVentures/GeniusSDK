@@ -40,6 +40,48 @@ private:
 
 namespace
 {
+    outcome::result<sgns::TokenID, JsonError> ParseTokenID( const rapidjson::Value &v )
+    {
+        if (!v.IsString())
+        {
+            return outcome::failure( JsonError( "Invalid TokenID field: expected hex string" ) );
+        }
+
+        std::string s = v.GetString();
+        // strip optional 0x/0X prefix
+        if (s.rfind( "0x", 0 ) == 0 || s.rfind( "0X", 0 ) == 0)
+        {
+            s.erase( 0, 2 );
+        }
+
+        // must be at most 64 hex digits; pad on left if shorter
+        if (s.size() > 64)
+        {
+            s = s.substr( s.size() - 64 );
+        }
+        else if (s.size() < 64)
+        {
+            s = std::string( 64 - s.size(), '0' ) + s;
+        }
+
+        // now parse every two hex chars into one byte
+        std::array<uint8_t, 32> buf{};
+        try
+        {
+            for (size_t i = 0; i < 32; ++i)
+            {
+                auto byteStr = s.substr( i * 2, 2 );
+                buf[i]       = static_cast<uint8_t>( std::stoul( byteStr, nullptr, 16 ) );
+            }
+        }
+        catch (const std::exception &e)
+        {
+            return outcome::failure( JsonError( std::string( "TokenID contains invalid hex: " ) + e.what() ) );
+        }
+
+        return outcome::success( sgns::TokenID::FromBytes( buf.data(), buf.size() ) );
+    }
+
     outcome::result<DevConfig_st, JsonError> ReadDevConfigFromJSON( const std::string &base_path )
     {
         std::ifstream file( base_path + "dev_config.json" );
@@ -71,15 +113,20 @@ namespace
         {
             return outcome::failure( JsonError( "Missing or invalid 'TokenValue'" ) );
         }
-        if ( !document.HasMember( "TokenID" ) || !document["TokenID"].IsString() )
+        if (!document.HasMember( "TokenID" ) || !document["TokenID"].IsString())
         {
             return outcome::failure( JsonError( "Missing or invalid 'TokenID'" ) );
+        }
+        auto tidRes = ParseTokenID( document["TokenID"] );
+        if (!tidRes)
+        {
+            return outcome::failure( JsonError( std::string( "Failed to parse TokenID: " ) + tidRes.error().what() ) );
         }
 
         strncpy( config_from_file.Addr, document["Address"].GetString(), document["Address"].GetStringLength() );
         config_from_file.Cut              = document["Cut"].GetString();
         config_from_file.TokenValueInGNUS = document["TokenValue"].GetString();
-        config_from_file.TokenID          = document["TokenID"].GetString();
+        config_from_file.TokenID          = tidRes.value();
         strncpy( config_from_file.BaseWritePath, base_path.data(), base_path.size() );
 
         return outcome::success( config_from_file );
@@ -107,15 +154,20 @@ namespace
         {
             return outcome::failure( JsonError( "Missing or invalid 'TokenValue'" ) );
         }
-        if ( !document.HasMember( "TokenID" ) || !document["TokenID"].IsString() )
+        if (!document.HasMember( "TokenID" ) || !document["TokenID"].IsString())
         {
             return outcome::failure( JsonError( "Missing or invalid 'TokenID'" ) );
+        }
+        auto tidRes = ParseTokenID( document["TokenID"] );
+        if (!tidRes)
+        {
+            return outcome::failure( JsonError( std::string( "Failed to parse TokenID: " ) + tidRes.error().what() ) );
         }
 
         strncpy( config_from_file.Addr, document["Address"].GetString(), document["Address"].GetStringLength() );
         config_from_file.Cut              = document["Cut"].GetString();
         config_from_file.TokenValueInGNUS = document["TokenValue"].GetString();
-        config_from_file.TokenID          = document["TokenID"].GetString();
+        config_from_file.TokenID          = tidRes.value();
         strncpy( config_from_file.BaseWritePath, base_path.data(), base_path.size() );
 
         return outcome::success( config_from_file );
@@ -244,7 +296,7 @@ double GeniusSDKGetGNUSPrice()
 
 uint64_t GeniusSDKGetBalance()
 {
-    return GeniusNodeInstance->GetBalance();
+    return GeniusNodeInstance->GetBalance( sgns::TokenID{} );
 }
 
 GeniusTokenValue GeniusSDKGetBalanceGNUS()
@@ -259,7 +311,7 @@ const char *GeniusSDKGetBalanceGNUSString()
     // Use a static buffer to store the string (not thread-safe but should work for your needs)
     static char buffer[64];
 
-    auto fmtRes = GeniusNodeInstance->FormatTokens( balance, "" );
+    auto fmtRes = GeniusNodeInstance->FormatTokens( balance, sgns::TokenID{} );
 
     std::string formatted;
     if (fmtRes.has_value())
@@ -276,31 +328,24 @@ const char *GeniusSDKGetBalanceGNUSString()
     return buffer;
 }
 
-uint64_t GeniusSDKGetBalanceByToken( const char *token_id )
+uint64_t GeniusSDKGetBalanceByToken( GeniusTokenID token_id )
 {
-    if (token_id == nullptr)
-    {
-        return 0;
-    }
-    return GeniusNodeInstance->GetBalance( std::string( token_id ) );
+    return GeniusNodeInstance->GetBalance( sgns::TokenID::FromBytes(token_id.data, sizeof(token_id.data)) );
 }
 
-const char *GeniusSDKGetBalanceByTokenString( const char *token_id )
+const char *GeniusSDKGetBalanceByTokenString( GeniusTokenID token_id )
 {
     // Use a static buffer to store the string, copying the implementation of GeniusSDKGetBalanceGNUSString
     static char buffer[64];
-    uint64_t    balance = GeniusNodeInstance->GetBalance( std::string( token_id ) );
+    uint64_t    balance = GeniusNodeInstance->GetBalance( sgns::TokenID::FromBytes(token_id.data, sizeof(token_id.data))  );
 
     memset( buffer, '\0', sizeof( buffer ) );
 
-    if (token_id != nullptr)
+    auto formatted = GeniusNodeInstance->FormatTokens( balance, sgns::TokenID::FromBytes(token_id.data, sizeof(token_id.data))  );
+    if (formatted)
     {
-        auto formatted = GeniusNodeInstance->FormatTokens( balance, std::string( token_id ) );
-        if (formatted)
-        {
-            strncpy( buffer, formatted.value().c_str(), sizeof( buffer ) - 1 );
-            buffer[sizeof( buffer ) - 1] = '\0';    
-        }
+        strncpy( buffer, formatted.value().c_str(), sizeof( buffer ) - 1 );
+        buffer[sizeof( buffer ) - 1] = '\0';    
     }
 
     return buffer;
@@ -325,10 +370,10 @@ void GeniusSDKFreeTransactions( GeniusMatrix matrix )
     free( matrix.ptr );
 }
 
-void GeniusSDKMint( uint64_t amount, const char *transaction_hash, const char *chain_id, const char *token_id )
+void GeniusSDKMint( uint64_t amount, const char *transaction_hash, const char *chain_id, GeniusTokenID token_id )
 {
     auto result = GeniusNodeInstance->MintTokens( amount, std::string( transaction_hash ), std::string( chain_id ),
-                                                  std::string( token_id ) );
+                                                  sgns::TokenID::FromBytes(token_id.data, sizeof(token_id.data))  );
 
     if ( !result.has_value() )
     {
@@ -337,7 +382,7 @@ void GeniusSDKMint( uint64_t amount, const char *transaction_hash, const char *c
 }
 
 void GeniusSDKMintGNUS( const GeniusTokenValue *gnus, const char *transaction_hash, const char *chain_id,
-                        const char *token_id )
+                        GeniusTokenID token_id )
 {
     GeniusSDKMint( GeniusSDKToMinions( gnus ), transaction_hash, chain_id, token_id );
 }
@@ -353,10 +398,10 @@ GeniusAddress GeniusSDKGetAddress()
     return ret;
 }
 
-bool GeniusSDKTransfer( uint64_t amount, GeniusAddress *dest )
+bool GeniusSDKTransfer( uint64_t amount, GeniusAddress *dest, GeniusTokenID token_id  )
 {
     std::string destination( dest->address );
-    auto        result = GeniusNodeInstance->TransferFunds( amount, destination, "");
+    auto        result = GeniusNodeInstance->TransferFunds( amount, destination, sgns::TokenID::FromBytes(token_id.data, sizeof(token_id.data)));
 
     if ( result.has_value() )
     {
@@ -368,15 +413,14 @@ bool GeniusSDKTransfer( uint64_t amount, GeniusAddress *dest )
     }
 }
 
-bool GeniusSDKTransferGNUS( const GeniusTokenValue *gnus, GeniusAddress *dest )
+bool GeniusSDKTransferGNUS( const GeniusTokenValue *gnus, GeniusAddress *dest, GeniusTokenID token_id )
 {
-    return GeniusSDKTransfer( GeniusSDKToMinions( gnus ), dest );
+    return GeniusSDKTransfer( GeniusSDKToMinions( gnus ), dest, token_id );
 }
 
-bool GeniusSDKPayDev( uint64_t amount, char *token_id )
+bool GeniusSDKPayDev( uint64_t amount, GeniusTokenID token_id )
 {
-    std::string tid    = token_id ? token_id : "";
-    auto        result = GeniusNodeInstance->PayDev( amount, tid );
+    auto result = GeniusNodeInstance->PayDev( amount, sgns::TokenID::FromBytes(token_id.data, sizeof(token_id.data))  );
 
     if (result.has_value())
     {
@@ -409,7 +453,7 @@ void GeniusSDKShutdown()
 
 uint64_t GeniusSDKToMinions( const GeniusTokenValue *gnus )
 {
-    auto result = GeniusNodeInstance->ParseTokens( std::string( gnus->value ) );
+    auto result = GeniusNodeInstance->ParseTokens( std::string( gnus->value ), sgns::TokenID{} );
     if ( result.has_value() )
     {
         return result.value();
@@ -434,22 +478,20 @@ GeniusTokenValue GeniusSDKToGenius( uint64_t minions )
     return tokenValue;
 }
 
-uint64_t GeniusSDKFromChild( const GeniusTokenValue *child, const char *token_id )
+uint64_t GeniusSDKFromChild( const GeniusTokenValue *child, GeniusTokenID token_id )
 {
     if (!child)
     {
         return 0;
     }
-    std::string tid      = token_id ? token_id : "";
-    auto        parseRes = GeniusNodeInstance->ParseTokens( std::string( child->value ), tid );
+    auto        parseRes = GeniusNodeInstance->ParseTokens( std::string( child->value ), sgns::TokenID::FromBytes(token_id.data, sizeof(token_id.data)) );
     return parseRes ? parseRes.value() : 0;
 }
 
-GeniusTokenValue GeniusSDKToChild( uint64_t minions, const char *token_id )
+GeniusTokenValue GeniusSDKToChild( uint64_t minions, GeniusTokenID token_id )
 {
     GeniusTokenValue tokenValue = {};
-    std::string      tid        = token_id ? token_id : "";
-    auto             fmtRes     = GeniusNodeInstance->FormatTokens( minions, tid );
+    auto             fmtRes     = GeniusNodeInstance->FormatTokens( minions, sgns::TokenID::FromBytes(token_id.data, sizeof(token_id.data)) );
     std::string      formatted  = fmtRes ? fmtRes.value() : std::string{};
     std::strncpy( tokenValue.value, formatted.c_str(), sizeof( tokenValue.value ) - 1 );
     tokenValue.value[sizeof( tokenValue.value ) - 1] = '\0';
