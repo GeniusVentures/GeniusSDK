@@ -6,11 +6,11 @@
  */
 
 #include "GeniusSDK.h"
-
 #include "account/GeniusNode.hpp"
 #include <algorithm>
 #include <base/buffer.hpp>
 #include <boost/multiprecision/cpp_int/import_export.hpp>
+#include <boost/algorithm/hex.hpp>
 #include <memory>
 #include <rapidjson/document.h>
 #include <rapidjson/writer.h>
@@ -48,40 +48,24 @@ namespace
         }
 
         std::string s = v.GetString();
-        // strip optional 0x/0X prefix
-        if (s.rfind( "0x", 0 ) == 0 || s.rfind( "0X", 0 ) == 0)
+        if (s.size() != 2 + 64 || ( s.rfind( "0x", 0 ) != 0 && s.rfind( "0X", 0 ) != 0 ))
         {
-            s.erase( 0, 2 );
+            return outcome::failure( JsonError( "Invalid TokenID: must be '0x' followed by exactly 64 hex digits" ) );
         }
 
-        // must be at most 64 hex digits; pad on left if shorter
-        if (s.size() > 64)
-        {
-            s = s.substr( s.size() - 64 );
-        }
-        else if (s.size() < 64)
-        {
-            s = std::string( 64 - s.size(), '0' ) + s;
-        }
-
-        // now parse every two hex chars into one byte
-        std::array<uint8_t, 32> buf{};
+        std::string hex = s.substr( 2 );
+        std::array<uint8_t, 32> buf;
         try
         {
-            for (size_t i = 0; i < 32; ++i)
-            {
-                auto byteStr = s.substr( i * 2, 2 );
-                buf[i]       = static_cast<uint8_t>( std::stoul( byteStr, nullptr, 16 ) );
-            }
+            boost::algorithm::unhex( hex.begin(), hex.end(), buf.begin() );
         }
-        catch (const std::exception &e)
+        catch (...)
         {
-            return outcome::failure( JsonError( std::string( "TokenID contains invalid hex: " ) + e.what() ) );
+            return outcome::failure( JsonError( "TokenID contains invalid hex digits" ) );
         }
 
         return outcome::success( sgns::TokenID::FromBytes( buf.data(), buf.size() ) );
     }
-
     outcome::result<DevConfig_st, JsonError> ReadDevConfigFromJSON( const std::string &base_path )
     {
         std::ifstream file( base_path + "dev_config.json" );
