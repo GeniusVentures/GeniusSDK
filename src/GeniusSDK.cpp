@@ -42,30 +42,31 @@ namespace
 {
     outcome::result<sgns::TokenID, JsonError> ParseTokenID( const rapidjson::Value &v )
     {
-        if (!v.IsString())
+        if ( !v.IsString() )
         {
             return outcome::failure( JsonError( "Invalid TokenID field: expected hex string" ) );
         }
 
         std::string s = v.GetString();
-        if (s.size() != 2 + 64 || ( s.rfind( "0x", 0 ) != 0 && s.rfind( "0X", 0 ) != 0 ))
+        if ( s.size() != 2 + 64 || ( s.rfind( "0x", 0 ) != 0 && s.rfind( "0X", 0 ) != 0 ) )
         {
             return outcome::failure( JsonError( "Invalid TokenID: must be '0x' followed by exactly 64 hex digits" ) );
         }
 
-        std::string hex = s.substr( 2 );
+        std::string             hex = s.substr( 2 );
         std::array<uint8_t, 32> buf;
         try
         {
             boost::algorithm::unhex( hex.begin(), hex.end(), buf.begin() );
         }
-        catch (...)
+        catch ( ... )
         {
             return outcome::failure( JsonError( "TokenID contains invalid hex digits" ) );
         }
 
         return outcome::success( sgns::TokenID::FromBytes( buf.data(), buf.size() ) );
     }
+
     outcome::result<DevConfig_st, JsonError> ReadDevConfigFromJSON( const std::string &base_path )
     {
         std::ifstream file( base_path + "dev_config.json" );
@@ -97,12 +98,12 @@ namespace
         {
             return outcome::failure( JsonError( "Missing or invalid 'TokenValue'" ) );
         }
-        if (!document.HasMember( "TokenID" ) || !document["TokenID"].IsString())
+        if ( !document.HasMember( "TokenID" ) || !document["TokenID"].IsString() )
         {
             return outcome::failure( JsonError( "Missing or invalid 'TokenID'" ) );
         }
         auto tidRes = ParseTokenID( document["TokenID"] );
-        if (!tidRes)
+        if ( !tidRes )
         {
             return outcome::failure( JsonError( std::string( "Failed to parse TokenID: " ) + tidRes.error().what() ) );
         }
@@ -116,9 +117,10 @@ namespace
         return outcome::success( config_from_file );
     }
 
-    outcome::result<DevConfig_st, JsonError> ReadDevConfigFromJSONStr( const std::string &base_path, const std::string &jsonStr )
+    outcome::result<DevConfig_st, JsonError> ReadDevConfigFromJSONStr( const std::string &base_path,
+                                                                       const std::string &jsonStr )
     {
-        DevConfig_st      config_from_file = {};
+        DevConfig_st           config_from_file = {};
         rapidjson::Document    document;
         rapidjson::ParseResult parseResult = document.Parse( jsonStr.c_str() );
         if ( parseResult == nullptr )
@@ -138,12 +140,12 @@ namespace
         {
             return outcome::failure( JsonError( "Missing or invalid 'TokenValue'" ) );
         }
-        if (!document.HasMember( "TokenID" ) || !document["TokenID"].IsString())
+        if ( !document.HasMember( "TokenID" ) || !document["TokenID"].IsString() )
         {
             return outcome::failure( JsonError( "Missing or invalid 'TokenID'" ) );
         }
         auto tidRes = ParseTokenID( document["TokenID"] );
-        if (!tidRes)
+        if ( !tidRes )
         {
             return outcome::failure( JsonError( std::string( "Failed to parse TokenID: " ) + tidRes.error().what() ) );
         }
@@ -219,8 +221,8 @@ const char *GeniusSDKInit( const char *base_path, const char *eth_private_key, b
     return ret_val.c_str();
 }
 
-const char *GeniusSDKInitSecure( const char *base_path, const char *dev_config, const char *eth_private_key, bool autodht, bool process,
-    uint16_t baseport )
+const char *GeniusSDKInitSecure( const char *base_path, const char *dev_config, const char *eth_private_key,
+                                 bool autodht, bool process, uint16_t baseport )
 {
     if ( base_path == nullptr )
     {
@@ -252,7 +254,7 @@ const char *GeniusSDKInitSecure( const char *base_path, const char *dev_config, 
 
 const char *GeniusSDKInitMinimal( const char *base_path, const char *eth_private_key, uint16_t baseport )
 {
-    return GeniusSDKInit(base_path, eth_private_key, true, true, baseport);
+    return GeniusSDKInit( base_path, eth_private_key, true, true, baseport );
 }
 
 void GeniusSDKProcess( const JsonData_t jsondata )
@@ -277,28 +279,27 @@ double GeniusSDKGetGNUSPrice()
     return result.value();
 }
 
-
 uint64_t GeniusSDKGetBalance( GeniusTokenID token_id )
 {
-    return GeniusNodeInstance->GetBalance( sgns::TokenID::FromBytes(token_id.data, sizeof(token_id.data)) );
+    return GeniusNodeInstance->GetBalance( sgns::TokenID::FromBytes( token_id.data, sizeof( token_id.data ) ) );
 }
 
 GeniusTokenValue GeniusSDKGetBalanceGNUS()
 {
-    return GeniusSDKToGenius( GeniusNodeInstance->GetBalance( sgns::TokenID{} ) );
+    return GeniusSDKToGenius( GeniusNodeInstance->GetBalance( sgns::TokenID::FromBytes( { 0x00 } ) ) );
 }
 
 const char *GeniusSDKGetBalanceGNUSString()
 {
-    uint64_t balance = GeniusNodeInstance->GetBalance( sgns::TokenID{} );
+    uint64_t balance = GeniusNodeInstance->GetBalance( sgns::TokenID::FromBytes( { 0x00 } ) );
 
     // Use a static buffer to store the string (not thread-safe but should work for your needs)
     static char buffer[64];
 
-    auto fmtRes = GeniusNodeInstance->FormatTokens( balance, sgns::TokenID{} );
+    auto fmtRes = GeniusNodeInstance->FormatTokens( balance, sgns::TokenID::FromBytes( { 0x00 } ) );
 
     std::string formatted;
-    if (fmtRes.has_value())
+    if ( fmtRes.has_value() )
     {
         formatted = fmtRes.value();
     }
@@ -336,7 +337,7 @@ void GeniusSDKMint( uint64_t amount, const char *transaction_hash, const char *c
     auto result = GeniusNodeInstance->MintTokens( amount, std::string( transaction_hash ), std::string( chain_id ),
                                                   sgns::TokenID::FromBytes( token_id.data, sizeof( token_id.data ) ) );
 
-    if (!result.has_value())
+    if ( !result.has_value() )
     {
         std::cerr << "Error minting tokens: " << result.error() << std::endl;
     }
@@ -345,9 +346,9 @@ void GeniusSDKMint( uint64_t amount, const char *transaction_hash, const char *c
 void GeniusSDKMintGNUS( const GeniusTokenValue *amount, const char *transaction_hash, const char *chain_id )
 {
     auto result = GeniusNodeInstance->MintTokens( GeniusSDKToMinions( amount ), std::string( transaction_hash ),
-                                                  std::string( chain_id ), sgns::TokenID{} );
+                                                  std::string( chain_id ), sgns::TokenID::FromBytes( { 0x00 } ) );
 
-    if (!result.has_value())
+    if ( !result.has_value() )
     {
         std::cerr << "Error minting tokens: " << result.error() << std::endl;
     }
@@ -364,10 +365,11 @@ GeniusAddress GeniusSDKGetAddress()
     return ret;
 }
 
-bool GeniusSDKTransfer( uint64_t amount, GeniusAddress *dest, GeniusTokenID token_id  )
+bool GeniusSDKTransfer( uint64_t amount, GeniusAddress *dest, GeniusTokenID token_id )
 {
     std::string destination( dest->address );
-    auto        result = GeniusNodeInstance->TransferFunds( amount, destination, sgns::TokenID::FromBytes(token_id.data, sizeof(token_id.data)));
+    auto        result = GeniusNodeInstance->TransferFunds(
+        amount, destination, sgns::TokenID::FromBytes( token_id.data, sizeof( token_id.data ) ) );
 
     if ( result.has_value() )
     {
@@ -382,7 +384,7 @@ bool GeniusSDKTransfer( uint64_t amount, GeniusAddress *dest, GeniusTokenID toke
 bool GeniusSDKTransferGNUS( const GeniusTokenValue *amount, GeniusAddress *dest )
 {
     std::string destination( dest->address );
-    auto        result = GeniusNodeInstance->TransferFunds( GeniusSDKToMinions( amount ), destination,  sgns::TokenID{});
+    auto result = GeniusNodeInstance->TransferFunds( GeniusSDKToMinions( amount ), destination, sgns::TokenID::FromBytes( { 0x00 } ) );
 
     if ( result.has_value() )
     {
@@ -396,9 +398,10 @@ bool GeniusSDKTransferGNUS( const GeniusTokenValue *amount, GeniusAddress *dest 
 
 bool GeniusSDKPayDev( uint64_t amount, GeniusTokenID token_id )
 {
-    auto result = GeniusNodeInstance->PayDev( amount, sgns::TokenID::FromBytes(token_id.data, sizeof(token_id.data))  );
+    auto result =
+        GeniusNodeInstance->PayDev( amount, sgns::TokenID::FromBytes( token_id.data, sizeof( token_id.data ) ) );
 
-    if (result.has_value())
+    if ( result.has_value() )
     {
         return true;
     }
@@ -429,7 +432,7 @@ void GeniusSDKShutdown()
 
 uint64_t GeniusSDKToMinions( const GeniusTokenValue *gnus )
 {
-    auto result = GeniusNodeInstance->ParseTokens( std::string( gnus->value ), sgns::TokenID{} );
+    auto result = GeniusNodeInstance->ParseTokens( std::string( gnus->value ), sgns::TokenID::FromBytes( { 0x00 } ) );
     if ( result.has_value() )
     {
         return result.value();
@@ -440,7 +443,7 @@ uint64_t GeniusSDKToMinions( const GeniusTokenValue *gnus )
 GeniusTokenValue GeniusSDKToGenius( uint64_t minions )
 {
     GeniusTokenValue tokenValue;
-    auto      formatted = GeniusNodeInstance->FormatTokens( minions, sgns::TokenID{} );
+    auto             formatted = GeniusNodeInstance->FormatTokens( minions, sgns::TokenID::FromBytes( { 0x00 } ) );
     if ( !formatted )
     {
         std::strncpy( tokenValue.value, "0", sizeof( tokenValue.value ) - 1 );
@@ -449,26 +452,28 @@ GeniusTokenValue GeniusSDKToGenius( uint64_t minions )
     else
     {
         std::strncpy( tokenValue.value, formatted.value().c_str(), sizeof( tokenValue.value ) - 1 );
-        tokenValue.value[sizeof( tokenValue.value ) - 1] = '\0';   
+        tokenValue.value[sizeof( tokenValue.value ) - 1] = '\0';
     }
     return tokenValue;
 }
 
 uint64_t GeniusSDKFromChild( const GeniusTokenValue *child, GeniusTokenID token_id )
 {
-    if (!child)
+    if ( !child )
     {
         return 0;
     }
-    auto        parseRes = GeniusNodeInstance->ParseTokens( std::string( child->value ), sgns::TokenID::FromBytes(token_id.data, sizeof(token_id.data)) );
+    auto parseRes = GeniusNodeInstance->ParseTokens(
+        std::string( child->value ), sgns::TokenID::FromBytes( token_id.data, sizeof( token_id.data ) ) );
     return parseRes ? parseRes.value() : 0;
 }
 
 GeniusTokenValue GeniusSDKToChild( uint64_t minions, GeniusTokenID token_id )
 {
     GeniusTokenValue tokenValue = {};
-    auto             fmtRes     = GeniusNodeInstance->FormatTokens( minions, sgns::TokenID::FromBytes(token_id.data, sizeof(token_id.data)) );
-    std::string      formatted  = fmtRes ? fmtRes.value() : std::string{};
+    auto             fmtRes =
+        GeniusNodeInstance->FormatTokens( minions, sgns::TokenID::FromBytes( token_id.data, sizeof( token_id.data ) ) );
+    std::string formatted = fmtRes ? fmtRes.value() : std::string{};
     std::strncpy( tokenValue.value, formatted.c_str(), sizeof( tokenValue.value ) - 1 );
     tokenValue.value[sizeof( tokenValue.value ) - 1] = '\0';
     return tokenValue;
