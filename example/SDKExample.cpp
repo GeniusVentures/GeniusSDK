@@ -25,20 +25,19 @@ static const int MAX_INPUT_SIZE = 256; ///< Maximum size for user input buffers.
 
 static void initSDK();
 
-static void getBalance();
-static void getBalanceInString();
-static void getBalanceByChildString();
-static void getBalanceByChildRaw();
-static void getAddress();
+static void ExampleGetAddress();
+static void ExampleGetBalance();
+static void ExampleGetBalanceGNUS();
+static void ExampleGetBalanceGNUSString();
 static void getInTransactions();
 static void getOutTransactions();
 static void processSampleData();
 static void getProcessingCost();
 static void getProcessingCostInString();
-static void mintTokens();
-static void mintTokensWithString();
-static void transferTokens();
-static void transferTokensWithString();
+static void ExampleMint();
+static void ExampleMintGNUS();
+static void ExampleTransfer();
+static void ExampleTransferGNUS();
 static void shutdownSDK();
 static void convertGeniusToMinions();
 static void convertMinionsToGenius();
@@ -56,7 +55,7 @@ static uint16_t promptUShort( const char *prompt, uint16_t defaultValue );
 static uint64_t promptUInt64( const char *prompt, uint64_t defaultValue );
 static void     readLine( char *buffer, size_t bufferSize );
 
-#define SUPPRESS_OUTPUT 1
+#define SUPPRESS_OUTPUT 0
 #if (SUPPRESS_OUTPUT == 0)
 #define userPrint printf
 #else
@@ -116,17 +115,17 @@ int main()
     // define all submenus
     static const MenuOption sdkMenu[] = {
         { 1, "Initialize SDK", initSDK }, { 2, "Shutdown SDK", shutdownSDK }, { 0, nullptr, nullptr } };
-    static const MenuOption walletMenu[] = { { 1, "Get Address", getAddress },
-                                             { 2, "Get Balance (all tokens)", getBalance },
-                                             { 3, "Get Balance (by token fmt)", getBalanceByChildString },
-                                             { 4, "Get Balance (by token raw)", getBalanceByChildRaw },
+    static const MenuOption walletMenu[] = { { 1, "Get Address", ExampleGetAddress },
+                                             { 2, "GetBalance", ExampleGetBalance },
+                                             { 3, "GetBalanceGNUS", ExampleGetBalanceGNUS },
+                                             { 4, "GetBalanceGNUSString", ExampleGetBalanceGNUSString },
                                              { 0, nullptr, nullptr } };
     static const MenuOption txMenu[]     = { { 1, "Incoming Transactions", getInTransactions },
                                              { 2, "Outgoing Transactions", getOutTransactions },
-                                             { 3, "Mint (minions)", mintTokens },
-                                             { 4, "Mint (formatted)", mintTokensWithString },
-                                             { 5, "Transfer (minions)", transferTokens },
-                                             { 6, "Transfer (formatted)", transferTokensWithString },
+                                             { 3, "ExampleMint", ExampleMint },
+                                             { 4, "MintGNUS", ExampleMintGNUS },
+                                             { 5, "Transfer", ExampleTransfer },
+                                             { 6, "TransferGNUS", ExampleTransferGNUS },
                                              { 0, nullptr, nullptr } };
     static const MenuOption convMenu[]   = { { 1, "Minions → Genius", convertMinionsToGenius },
                                              { 2, "Genius → Minions", convertGeniusToMinions },
@@ -222,21 +221,58 @@ static void initSDK()
 }
 
 /**
- * @brief Retrieves balance as a string.
+ * @brief Retrieves and prints the wallet address.
  */
-static void getBalanceInString()
+static void ExampleGetAddress()
+{
+    GeniusAddress address = GeniusSDKGetAddress();
+    userPrint( "Wallet Address: %s\n", address.address );
+}
+
+static void ExampleGetBalance()
+{
+    char tokenId[MAX_INPUT_SIZE] = { 0 };
+    promptString( "Enter child-token ID (hex, or press enter for default): ", tokenId, MAX_INPUT_SIZE, "" );
+
+    GeniusTokenID tid = {};
+    if (strlen( tokenId ) > 0)
+    {
+        if (!parseGeniusTokenID( tokenId, &tid ))
+        {
+            printf( "Invalid token ID\n" );
+            return;
+        }
+    }
+
+    uint64_t balance = GeniusSDKGetBalance( tid );
+    printf( "Balance (minions): %llu\n", (unsigned long long)balance );
+}
+
+static void ExampleGetBalanceGNUS()
 {
     GeniusTokenValue balance = GeniusSDKGetBalanceGNUS();
-    userPrint( "Balance: %s\n", balance.value );
+    printf( "Balance (GNUS value): %s\n", balance.value );
+}
+
+static void ExampleGetBalanceGNUSString()
+{
+    const char *balanceStr = GeniusSDKGetBalanceGNUSString();
+    printf( "Balance (GNUS string): %s\n", balanceStr );
 }
 
 /**
- * @brief Retrieves the balance for a child-token string (formatted).
+ * @brief Mints tokens by prompting the user for an amount.
  */
-static void getBalanceByChildString()
+static void ExampleMint()
 {
-    char tokenId[MAX_INPUT_SIZE] = { 0 };
-    promptString( "Enter child-token ID: ", tokenId, MAX_INPUT_SIZE, "" );
+    uint64_t amount = promptUInt64( "Enter the amount to mint: ", 0 );
+
+    char txHash[MAX_INPUT_SIZE]  = "";
+    char chainId[MAX_INPUT_SIZE] = "";
+    char tokenId[MAX_INPUT_SIZE] = "";
+    promptString( "Transaction hash (optional): ", txHash, MAX_INPUT_SIZE, "" );
+    promptString( "Chain ID (optional): ", chainId, MAX_INPUT_SIZE, "" );
+    promptString( "Token ID: ", tokenId, MAX_INPUT_SIZE, "" );
 
     GeniusTokenID tid;
     if (!parseGeniusTokenID( tokenId, &tid ))
@@ -245,33 +281,14 @@ static void getBalanceByChildString()
         return;
     }
 
-    const char *str = GeniusSDKGetBalanceByTokenString( tid );
-    userPrint( "Balance of %s: %s\n", tokenId, str );
-}
-
-/**
- * @brief Retrieves the balance for a child-token in raw minions.
- */
-static void getBalanceByChildRaw()
-{
-    char tokenId[MAX_INPUT_SIZE] = { 0 };
-    promptString( "Enter child-token ID: ", tokenId, MAX_INPUT_SIZE, "" );
-
-    GeniusTokenID tid;
-    if (!parseGeniusTokenID( tokenId, &tid ))
-    {
-        userPrint( "Invalid token ID\n" );
-        return;
-    }
-
-    uint64_t raw = GeniusSDKGetBalanceByToken( tid );
-    userPrint( "Balance of %s: %llu minions\n", tokenId, raw );
+    GeniusSDKMint( amount, txHash, chainId, tid );
+    userPrint( "Minted %llu tokens of “%s” successfully.\n", amount, tokenId[0] ? tokenId : "<default>" );
 }
 
 /**
  * @brief Mints tokens using the string-based function.
  */
-static void mintTokensWithString()
+static void ExampleMintGNUS()
 {
     GeniusTokenValue amount;
     userPrint( "Enter amount to mint: " );
@@ -279,45 +296,51 @@ static void mintTokensWithString()
 
     char txHash[MAX_INPUT_SIZE]  = "";
     char chainId[MAX_INPUT_SIZE] = "";
-    char tokenId[MAX_INPUT_SIZE] = "";
-    promptString( "Transaction hash (optional): ", txHash, MAX_INPUT_SIZE, "" );
-    promptString( "Chain ID (optional): ", chainId, MAX_INPUT_SIZE, "" );
-    promptString( "Token ID (child token name): ", tokenId, MAX_INPUT_SIZE, "" );
+    promptString( "Transaction hash: ", txHash, MAX_INPUT_SIZE, "" );
+    promptString( "Chain ID: ", chainId, MAX_INPUT_SIZE, "" );
 
+    GeniusSDKMintGNUS( &amount, txHash, chainId );
+    userPrint( "Minted %s.\n", amount.value );
+}
+
+/**
+ * @brief Transfers tokens by prompting the user for an amount and a recipient address.
+ */
+static void ExampleTransfer()
+{
+    uint64_t amount                  = promptUInt64( "Enter the amount of Minion Tokens to transfer: ", 0 );
+    char     tokenId[MAX_INPUT_SIZE] = "";
+    GeniusAddress recipient;
     GeniusTokenID tid;
+
+    promptString( "Enter Token ID (leave empty for default): ", tokenId, MAX_INPUT_SIZE, "" );
+
+    userPrint( "Enter recipient wallet address: " );
+    readLine( recipient.address, sizeof( recipient.address ) );
+
     if (!parseGeniusTokenID( tokenId, &tid ))
     {
         userPrint( "Invalid token ID\n" );
         return;
     }
 
-    GeniusSDKMintGNUS( &amount, txHash, chainId, tid );
-    userPrint( "Minted %s tokens of “%s”.\n", amount.value, tokenId[0] ? tokenId : "<default>" );
+    bool transferSuccess = GeniusSDKTransfer( amount, &recipient, tid );
+    userPrint( "Token transfer %s.\n", transferSuccess ? "successful" : "failed" );
 }
-
 /**
  * @brief Transfers tokens using the string-based function.
  */
-static void transferTokensWithString()
+static void ExampleTransferGNUS()
 {
     GeniusTokenValue amount;
     GeniusAddress    recipient;
-    char             tokenId[MAX_INPUT_SIZE] = "";
 
     userPrint( "Enter amount to transfer: " );
     scanf( "%s", amount.value );
     userPrint( "Enter recipient address: " );
     scanf( "%s", recipient.address );
-    promptString( "Token ID (child token name): ", tokenId, MAX_INPUT_SIZE, "" );
 
-    GeniusTokenID tid;
-    if (!parseGeniusTokenID( tokenId, &tid ))
-    {
-        userPrint( "Invalid token ID\n" );
-        return;
-    }
-
-    GeniusSDKTransferGNUS( &amount, &recipient, tid );
+    GeniusSDKTransferGNUS( &amount, &recipient );
     userPrint( "Transferred %s tokens to %s.\n", amount.value, recipient.address );
 }
 
@@ -397,24 +420,6 @@ static void convertChildToMinions()
 }
 
 /**
- * @brief Retrieves and prints the current balance.
- */
-static void getBalance()
-{
-    uint64_t balance = GeniusSDKGetBalance();
-    userPrint( "Current Balance: %llu\n", balance );
-}
-
-/**
- * @brief Retrieves and prints the wallet address.
- */
-static void getAddress()
-{
-    GeniusAddress address = GeniusSDKGetAddress();
-    userPrint( "Wallet Address: %s\n", address.address );
-}
-
-/**
  * @brief Retrieves and prints the number of incoming transactions.
  */
 static void getInTransactions()
@@ -473,54 +478,6 @@ static void getProcessingCost()
     userPrint( "Estimated processing cost: %llu\n", cost );
 }
 
-/**
- * @brief Mints tokens by prompting the user for an amount.
- */
-static void mintTokens()
-{
-    uint64_t amount = promptUInt64( "Enter the amount of Minion Tokens to mint: ", 0 );
-
-    char txHash[MAX_INPUT_SIZE]  = "";
-    char chainId[MAX_INPUT_SIZE] = "";
-    char tokenId[MAX_INPUT_SIZE] = "";
-    promptString( "Transaction hash (optional): ", txHash, MAX_INPUT_SIZE, "" );
-    promptString( "Chain ID (optional): ", chainId, MAX_INPUT_SIZE, "" );
-    promptString( "Token ID (child token name): ", tokenId, MAX_INPUT_SIZE, "" );
-
-    GeniusTokenID tid;
-    if (!parseGeniusTokenID( tokenId, &tid ))
-    {
-        userPrint( "Invalid token ID\n" );
-        return;
-    }
-
-    GeniusSDKMint( amount, txHash, chainId, tid );
-    userPrint( "Minted %llu tokens of “%s” successfully.\n", amount, tokenId[0] ? tokenId : "<default>" );
-}
-
-/**
- * @brief Transfers tokens by prompting the user for an amount and a recipient address.
- */
-static void transferTokens()
-{
-    uint64_t amount                  = promptUInt64( "Enter the amount of Minion Tokens to transfer: ", 0 );
-    char     tokenId[MAX_INPUT_SIZE] = "";
-    promptString( "Enter Token ID (leave empty for default): ", tokenId, MAX_INPUT_SIZE, "" );
-
-    GeniusAddress recipient;
-    userPrint( "Enter recipient wallet address: " );
-    readLine( recipient.address, sizeof( recipient.address ) );
-
-    GeniusTokenID tid;
-    if (!parseGeniusTokenID( tokenId, &tid ))
-    {
-        userPrint( "Invalid token ID\n" );
-        return;
-    }
-
-    bool transferSuccess = GeniusSDKTransfer( amount, &recipient, tid );
-    userPrint( "Token transfer %s.\n", transferSuccess ? "successful" : "failed" );
-}
 
 /**
  * @brief Shuts down the GeniusSDK.

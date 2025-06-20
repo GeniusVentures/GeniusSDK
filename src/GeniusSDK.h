@@ -91,10 +91,17 @@ GNUS_VISIBILITY_DEFAULT const char *GeniusSDKInitMinimal( const char *base_path,
 GNUS_VISIBILITY_DEFAULT void        GeniusSDKShutdown();
 
 /**
- * @brief Retrieves the current balance in **Minion Tokens** (1e-9 GNUS).
- * @return The balance amount as a `uint64_t` value representing Minion Tokens.
+ * @brief Retrieves the current balance.
+ * @param[in] token_id         
+ * @return The balance amount as a `uint64_t` value.
  */
-GNUS_VISIBILITY_DEFAULT uint64_t GeniusSDKGetBalance( );
+GNUS_VISIBILITY_DEFAULT uint64_t GeniusSDKGetBalance( GeniusTokenID token_id );
+/**
+ * @brief Retrieves the current balance in **Genius Tokens** as a formatted string.
+ * @return The balance as a `GeniusTokenValue` struct, containing a GNUS value in string format.
+ */
+GNUS_VISIBILITY_DEFAULT GeniusTokenValue GeniusSDKGetBalanceGNUS();
+GNUS_VISIBILITY_DEFAULT const char      *GeniusSDKGetBalanceGNUSString();
 
 /**
  * @brief Retrieves the current USD price of gnus
@@ -104,15 +111,6 @@ GNUS_VISIBILITY_DEFAULT double GeniusSDKGetGNUSPrice();
 
 GNUS_VISIBILITY_DEFAULT GeniusTokenValue GeniusSDKToChild( uint64_t minions, GeniusTokenID token_id );
 GNUS_VISIBILITY_DEFAULT uint64_t         GeniusSDKFromChild( const GeniusTokenValue *child, GeniusTokenID token_id );
-
-/**
- * @brief Retrieves the current balance in **Genius Tokens** as a formatted string.
- * @return The balance as a `GeniusTokenValue` struct, containing a GNUS value in string format.
- */
-GNUS_VISIBILITY_DEFAULT GeniusTokenValue GeniusSDKGetBalanceGNUS();
-GNUS_VISIBILITY_DEFAULT const char      *GeniusSDKGetBalanceGNUSString();
-GNUS_VISIBILITY_DEFAULT uint64_t         GeniusSDKGetBalanceByToken( GeniusTokenID token_id );
-GNUS_VISIBILITY_DEFAULT const char      *GeniusSDKGetBalanceByTokenString( GeniusTokenID token_id );
 
 GNUS_VISIBILITY_DEFAULT GeniusAddress GeniusSDKGetAddress();
 
@@ -125,7 +123,7 @@ GNUS_VISIBILITY_DEFAULT void         GeniusSDKFreeTransactions( GeniusMatrix mat
  * @param[in] amount           The amount to be minted in Minion Tokens.
  * @param[in] transaction_hash A null-terminated string representing the transaction hash.
  * @param[in] chain_id         A null-terminated string representing the blockchain chain ID.
- * @param[in] token_id         
+ * @param[in] token_id         Token identifier.
  * @note If you have a Genius Token amount, use `GeniusSDKToMinions` to convert
  *       GNUS to Minion Tokens before calling this function.
  */
@@ -134,19 +132,18 @@ GNUS_VISIBILITY_DEFAULT void GeniusSDKMint( uint64_t amount, const char *transac
 
 /**
  * @brief     Mints new tokens using a **Genius Token** string format.
- * @param[in] gnus             Pointer to a `GeniusTokenValue` struct representing the amount in GNUS.
+ * @param[in] amount           Pointer to a `GeniusTokenValue` struct representing the amount in GNUS.
  * @param[in] transaction_hash A null-terminated string representing the transaction hash.
  * @param[in] chain_id         A null-terminated string representing the blockchain chain ID.
- * @param[in] token_id         
  */
-GNUS_VISIBILITY_DEFAULT void GeniusSDKMintGNUS( const GeniusTokenValue *gnus, const char *transaction_hash,
-                                                const char *chain_id, GeniusTokenID token_id );
+GNUS_VISIBILITY_DEFAULT void GeniusSDKMintGNUS( const GeniusTokenValue *amount, const char *transaction_hash,
+                                                const char *chain_id );
 
 /**
  * @brief     Transfers tokens in **Minion Tokens** (1e-9 GNUS) to another address.
  * @param[in] amount The amount to transfer in Minion Tokens.
  * @param[in] dest   Pointer to a `GeniusAddress` struct representing the recipient's address.
- * @param[in] token_id         
+ * @param[in] token_id         Token identifier.
  * @return `true` if the transfer is successful, `false` otherwise.
  * @note If you have a Genius Token amount, use `GeniusSDKToMinions` to convert
  *       GNUS to Minion Tokens before calling this function.
@@ -157,11 +154,9 @@ GNUS_VISIBILITY_DEFAULT bool GeniusSDKTransfer( uint64_t amount, GeniusAddress *
  * @brief     Transfers tokens using a **Genius Token** string representation.
  * @param[in] gnus Pointer to a `GeniusTokenValue` struct representing the amount in GNUS.
  * @param[in] dest Pointer to a `GeniusAddress` struct representing the recipient's address.
- * @param[in] token_id         
  * @return `true` if the transfer is successful, `false` otherwise.
  */
-GNUS_VISIBILITY_DEFAULT bool GeniusSDKTransferGNUS( const GeniusTokenValue *gnus, GeniusAddress *dest,
-                                                    GeniusTokenID token_id );
+GNUS_VISIBILITY_DEFAULT bool GeniusSDKTransferGNUS( const GeniusTokenValue *gnus, GeniusAddress *dest );
 
 /**
  * @brief     Pay the dev for in in-game transactions

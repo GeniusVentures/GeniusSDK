@@ -278,19 +278,19 @@ double GeniusSDKGetGNUSPrice()
 }
 
 
-uint64_t GeniusSDKGetBalance()
+uint64_t GeniusSDKGetBalance( GeniusTokenID token_id )
 {
-    return GeniusNodeInstance->GetBalance( sgns::TokenID{} );
+    return GeniusNodeInstance->GetBalance( sgns::TokenID::FromBytes(token_id.data, sizeof(token_id.data)) );
 }
 
 GeniusTokenValue GeniusSDKGetBalanceGNUS()
 {
-    return GeniusSDKToGenius( GeniusNodeInstance->GetBalance() );
+    return GeniusSDKToGenius( GeniusNodeInstance->GetBalance( sgns::TokenID{} ) );
 }
 
 const char *GeniusSDKGetBalanceGNUSString()
 {
-    uint64_t balance = GeniusNodeInstance->GetBalance();
+    uint64_t balance = GeniusNodeInstance->GetBalance( sgns::TokenID{} );
 
     // Use a static buffer to store the string (not thread-safe but should work for your needs)
     static char buffer[64];
@@ -309,29 +309,6 @@ const char *GeniusSDKGetBalanceGNUSString()
 
     std::strncpy( buffer, formatted.c_str(), sizeof( buffer ) - 1 );
     buffer[sizeof( buffer ) - 1] = '\0';
-    return buffer;
-}
-
-uint64_t GeniusSDKGetBalanceByToken( GeniusTokenID token_id )
-{
-    return GeniusNodeInstance->GetBalance( sgns::TokenID::FromBytes(token_id.data, sizeof(token_id.data)) );
-}
-
-const char *GeniusSDKGetBalanceByTokenString( GeniusTokenID token_id )
-{
-    // Use a static buffer to store the string, copying the implementation of GeniusSDKGetBalanceGNUSString
-    static char buffer[64];
-    uint64_t    balance = GeniusNodeInstance->GetBalance( sgns::TokenID::FromBytes(token_id.data, sizeof(token_id.data))  );
-
-    memset( buffer, '\0', sizeof( buffer ) );
-
-    auto formatted = GeniusNodeInstance->FormatTokens( balance, sgns::TokenID::FromBytes(token_id.data, sizeof(token_id.data))  );
-    if (formatted)
-    {
-        strncpy( buffer, formatted.value().c_str(), sizeof( buffer ) - 1 );
-        buffer[sizeof( buffer ) - 1] = '\0';    
-    }
-
     return buffer;
 }
 
@@ -357,18 +334,23 @@ void GeniusSDKFreeTransactions( GeniusMatrix matrix )
 void GeniusSDKMint( uint64_t amount, const char *transaction_hash, const char *chain_id, GeniusTokenID token_id )
 {
     auto result = GeniusNodeInstance->MintTokens( amount, std::string( transaction_hash ), std::string( chain_id ),
-                                                  sgns::TokenID::FromBytes(token_id.data, sizeof(token_id.data))  );
+                                                  sgns::TokenID::FromBytes( token_id.data, sizeof( token_id.data ) ) );
 
-    if ( !result.has_value() )
+    if (!result.has_value())
     {
         std::cerr << "Error minting tokens: " << result.error() << std::endl;
     }
 }
 
-void GeniusSDKMintGNUS( const GeniusTokenValue *gnus, const char *transaction_hash, const char *chain_id,
-                        GeniusTokenID token_id )
+void GeniusSDKMintGNUS( const GeniusTokenValue *amount, const char *transaction_hash, const char *chain_id )
 {
-    GeniusSDKMint( GeniusSDKToMinions( gnus ), transaction_hash, chain_id, token_id );
+    auto result = GeniusNodeInstance->MintTokens( GeniusSDKToMinions( amount ), std::string( transaction_hash ),
+                                                  std::string( chain_id ), sgns::TokenID{} );
+
+    if (!result.has_value())
+    {
+        std::cerr << "Error minting tokens: " << result.error() << std::endl;
+    }
 }
 
 GeniusAddress GeniusSDKGetAddress()
@@ -397,9 +379,19 @@ bool GeniusSDKTransfer( uint64_t amount, GeniusAddress *dest, GeniusTokenID toke
     }
 }
 
-bool GeniusSDKTransferGNUS( const GeniusTokenValue *gnus, GeniusAddress *dest, GeniusTokenID token_id )
+bool GeniusSDKTransferGNUS( const GeniusTokenValue *amount, GeniusAddress *dest )
 {
-    return GeniusSDKTransfer( GeniusSDKToMinions( gnus ), dest, token_id );
+    std::string destination( dest->address );
+    auto        result = GeniusNodeInstance->TransferFunds( GeniusSDKToMinions( amount ), destination,  sgns::TokenID{});
+
+    if ( result.has_value() )
+    {
+        return true;
+    }
+    else
+    {
+        return false;
+    }
 }
 
 bool GeniusSDKPayDev( uint64_t amount, GeniusTokenID token_id )
@@ -448,7 +440,7 @@ uint64_t GeniusSDKToMinions( const GeniusTokenValue *gnus )
 GeniusTokenValue GeniusSDKToGenius( uint64_t minions )
 {
     GeniusTokenValue tokenValue;
-    auto      formatted = GeniusNodeInstance->FormatTokens( minions, {} );
+    auto      formatted = GeniusNodeInstance->FormatTokens( minions, sgns::TokenID{} );
     if ( !formatted )
     {
         std::strncpy( tokenValue.value, "0", sizeof( tokenValue.value ) - 1 );
