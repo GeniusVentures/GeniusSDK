@@ -286,7 +286,20 @@ uint64_t GeniusSDKGetBalance( GeniusTokenID token_id )
 
 GeniusTokenValue GeniusSDKGetBalanceGNUS()
 {
-    return GeniusSDKToGenius( GeniusNodeInstance->GetBalance( sgns::TokenID::FromBytes( { 0x00 } ) ) );
+    uint64_t raw = GeniusNodeInstance->GetBalance( sgns::TokenID::FromBytes( { 0x00 } ) );
+
+    GeniusTokenValue tv;
+    auto             fmt = GeniusNodeInstance->FormatTokens( raw, sgns::TokenID::FromBytes( { 0x00 } ) );
+    if ( fmt.has_value() )
+    {
+        std::strncpy( tv.value, fmt.value().c_str(), sizeof( tv.value ) - 1 );
+    }
+    else
+    {
+        std::strncpy( tv.value, "0", sizeof( tv.value ) - 1 );
+    }
+    tv.value[sizeof( tv.value ) - 1] = '\0';
+    return tv;
 }
 
 const char *GeniusSDKGetBalanceGNUSString()
@@ -345,9 +358,14 @@ void GeniusSDKMint( uint64_t amount, const char *transaction_hash, const char *c
 
 void GeniusSDKMintGNUS( const GeniusTokenValue *amount, const char *transaction_hash, const char *chain_id )
 {
-    auto result = GeniusNodeInstance->MintTokens( GeniusSDKToMinions( amount ), std::string( transaction_hash ),
-                                                  std::string( chain_id ), sgns::TokenID::FromBytes( { 0x00 } ) );
+    auto     parseRes = GeniusNodeInstance->ParseTokens( std::string( amount->value ),
+                                                     sgns::TokenID::FromBytes( { 0x00 } ) );
+    uint64_t raw      = parseRes.has_value() ? parseRes.value() : 0;
 
+    auto result = GeniusNodeInstance->MintTokens( raw,
+                                                  std::string( transaction_hash ),
+                                                  std::string( chain_id ),
+                                                  sgns::TokenID::FromBytes( { 0x00 } ) );
     if ( !result.has_value() )
     {
         std::cerr << "Error minting tokens: " << result.error() << std::endl;
@@ -383,17 +401,13 @@ bool GeniusSDKTransfer( uint64_t amount, GeniusAddress *dest, GeniusTokenID toke
 
 bool GeniusSDKTransferGNUS( const GeniusTokenValue *amount, GeniusAddress *dest )
 {
-    std::string destination( dest->address );
-    auto result = GeniusNodeInstance->TransferFunds( GeniusSDKToMinions( amount ), destination, sgns::TokenID::FromBytes( { 0x00 } ) );
+    auto     parseRes = GeniusNodeInstance->ParseTokens( std::string( amount->value ),
+                                                     sgns::TokenID::FromBytes( { 0x00 } ) );
+    uint64_t raw      = parseRes.has_value() ? parseRes.value() : 0;
 
-    if ( result.has_value() )
-    {
-        return true;
-    }
-    else
-    {
-        return false;
-    }
+    std::string to( dest->address );
+    auto        result = GeniusNodeInstance->TransferFunds( raw, to, sgns::TokenID::FromBytes( { 0x00 } ) );
+    return result.has_value();
 }
 
 bool GeniusSDKPayDev( uint64_t amount, GeniusTokenID token_id )
@@ -418,7 +432,20 @@ uint64_t GeniusSDKGetCost( const JsonData_t jsondata )
 
 GeniusTokenValue GeniusSDKGetCostGNUS( const JsonData_t jsondata )
 {
-    return GeniusSDKToGenius( GeniusNodeInstance->GetProcessCost( jsondata ) );
+    uint64_t rawCost = GeniusNodeInstance->GetProcessCost( jsondata );
+
+    GeniusTokenValue tv;
+    auto             fmt = GeniusNodeInstance->FormatTokens( rawCost, sgns::TokenID::FromBytes( { 0x00 } ) );
+    if ( fmt.has_value() )
+    {
+        std::strncpy( tv.value, fmt.value().c_str(), sizeof( tv.value ) - 1 );
+    }
+    else
+    {
+        std::strncpy( tv.value, "0", sizeof( tv.value ) - 1 );
+    }
+    tv.value[sizeof( tv.value ) - 1] = '\0';
+    return tv;
 }
 
 void GeniusSDKShutdown()
@@ -428,53 +455,4 @@ void GeniusSDKShutdown()
         GeniusNodeInstance.reset(); // Explicitly destroy the shared_ptr
         std::cout << "GeniusNodeInstance has been shut down." << std::endl;
     }
-}
-
-uint64_t GeniusSDKToMinions( const GeniusTokenValue *gnus )
-{
-    auto result = GeniusNodeInstance->ParseTokens( std::string( gnus->value ), sgns::TokenID::FromBytes( { 0x00 } ) );
-    if ( result.has_value() )
-    {
-        return result.value();
-    }
-    return 0;
-}
-
-GeniusTokenValue GeniusSDKToGenius( uint64_t minions )
-{
-    GeniusTokenValue tokenValue;
-    auto             formatted = GeniusNodeInstance->FormatTokens( minions, sgns::TokenID::FromBytes( { 0x00 } ) );
-    if ( !formatted )
-    {
-        std::strncpy( tokenValue.value, "0", sizeof( tokenValue.value ) - 1 );
-        tokenValue.value[sizeof( tokenValue.value ) - 1] = '\0';
-    }
-    else
-    {
-        std::strncpy( tokenValue.value, formatted.value().c_str(), sizeof( tokenValue.value ) - 1 );
-        tokenValue.value[sizeof( tokenValue.value ) - 1] = '\0';
-    }
-    return tokenValue;
-}
-
-uint64_t GeniusSDKFromChild( const GeniusTokenValue *child, GeniusTokenID token_id )
-{
-    if ( !child )
-    {
-        return 0;
-    }
-    auto parseRes = GeniusNodeInstance->ParseTokens(
-        std::string( child->value ), sgns::TokenID::FromBytes( token_id.data, sizeof( token_id.data ) ) );
-    return parseRes ? parseRes.value() : 0;
-}
-
-GeniusTokenValue GeniusSDKToChild( uint64_t minions, GeniusTokenID token_id )
-{
-    GeniusTokenValue tokenValue = {};
-    auto             fmtRes =
-        GeniusNodeInstance->FormatTokens( minions, sgns::TokenID::FromBytes( token_id.data, sizeof( token_id.data ) ) );
-    std::string formatted = fmtRes ? fmtRes.value() : std::string{};
-    std::strncpy( tokenValue.value, formatted.c_str(), sizeof( tokenValue.value ) - 1 );
-    tokenValue.value[sizeof( tokenValue.value ) - 1] = '\0';
-    return tokenValue;
 }
