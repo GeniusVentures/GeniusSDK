@@ -19,6 +19,7 @@
 #include <cstring>
 #include <cstdarg>
 #include <fcntl.h>
+#include <inttypes.h>
 #include "GeniusSDK.h"
 
 static const int MAX_INPUT_SIZE = 256; ///< Maximum size for user input buffers.
@@ -29,8 +30,8 @@ static void ExampleGetAddress();
 static void ExampleGetBalance();
 static void ExampleGetBalanceGNUS();
 static void ExampleGetBalanceGNUSString();
-static void getInTransactions();
-static void getOutTransactions();
+static void ExampleGetInTransactions();
+static void ExampleGetOutTransactions();
 static void processSampleData();
 static void getProcessingCost();
 static void getProcessingCostInString();
@@ -39,12 +40,10 @@ static void ExampleMintGNUS();
 static void ExampleTransfer();
 static void ExampleTransferGNUS();
 static void shutdownSDK();
-static void convertGeniusToMinions();
-static void convertMinionsToGenius();
-static void convertMinionsToChild();
-static void convertChildToMinions();
 
-static void     suppressSDKLogs();
+#if (SUPPRESS_OUTPUT == 1)
+static void suppressSDKLogs();
+#endif
 static void     getSDKConfig( char *base_path, char *eth_private_key, int32_t *autodht, int32_t *process,
                               uint16_t *baseport );
 static bool     loadJsonFromFile( const char *filename, JsonData_t jsonBuffer );
@@ -59,9 +58,9 @@ static void     readLine( char *buffer, size_t bufferSize );
 #if (SUPPRESS_OUTPUT == 0)
 #define userPrint printf
 #else
-void userPrint( const char *fmt, ... );
-#endif
 static int original_stdout_fd = -1; ///< To preserve original stdout when suppressing SDK logs.
+void       userPrint( const char *fmt, ... );
+#endif
 
 typedef void ( *MenuFunc )();
 
@@ -112,40 +111,36 @@ int main()
     suppressSDKLogs();
 #endif
 
-    // define all submenus
     static const MenuOption sdkMenu[] = {
-        { 1, "Initialize SDK", initSDK }, { 2, "Shutdown SDK", shutdownSDK }, { 0, nullptr, nullptr } };
-    static const MenuOption walletMenu[] = { { 1, "Get Address", ExampleGetAddress },
-                                             { 2, "GetBalance", ExampleGetBalance },
-                                             { 3, "GetBalanceGNUS", ExampleGetBalanceGNUS },
-                                             { 4, "GetBalanceGNUSString", ExampleGetBalanceGNUSString },
-                                             { 0, nullptr, nullptr } };
-    static const MenuOption txMenu[]     = { { 1, "Incoming Transactions", getInTransactions },
-                                             { 2, "Outgoing Transactions", getOutTransactions },
-                                             { 3, "ExampleMint", ExampleMint },
-                                             { 4, "MintGNUS", ExampleMintGNUS },
-                                             { 5, "Transfer", ExampleTransfer },
-                                             { 6, "TransferGNUS", ExampleTransferGNUS },
-                                             { 0, nullptr, nullptr } };
-    static const MenuOption convMenu[]   = { { 1, "Minions → Genius", convertMinionsToGenius },
-                                             { 2, "Genius → Minions", convertGeniusToMinions },
-                                             { 3, "Minions → Child formatted", convertMinionsToChild },
-                                             { 4, "Child formatted → Minions", convertChildToMinions },
-                                             { 0, nullptr, nullptr } };
-    static const MenuOption procMenu[]   = { { 1, "Process Sample JSON", processSampleData },
-                                             { 2, "Get Cost (raw)", getProcessingCost },
-                                             { 3, "Get Cost (formatted)", getProcessingCostInString },
-                                             { 0, nullptr, nullptr } };
-
-    // Main menu
-    static const MenuOption mainMenu[] = { { 1, "SDK", nullptr }, // placeholder: call submenu
-                                           { 2, "Wallet", nullptr },     { 3, "Transactions", nullptr },
-                                           { 4, "Conversion", nullptr }, { 5, "Processing", nullptr },
-                                           { 0, nullptr, nullptr } };
+        { 1, "Initialize SDK", initSDK },
+        { 2, "Shutdown SDK", shutdownSDK },
+        { 0, nullptr, nullptr },
+    };
+    static const MenuOption walletMenu[] = {
+        { 1, "GetAddress", ExampleGetAddress },
+        { 2, "GetBalance", ExampleGetBalance },
+        { 3, "GetBalanceGNUS", ExampleGetBalanceGNUS },
+        { 4, "GetBalanceGNUSString", ExampleGetBalanceGNUSString },
+        { 0, nullptr, nullptr },
+    };
+    static const MenuOption txMenu[] = {
+        { 1, "GetInTransactions", ExampleGetInTransactions },
+        { 2, "GetOutTransactions", ExampleGetOutTransactions },
+        { 3, "Mint", ExampleMint },
+        { 4, "MintGNUS", ExampleMintGNUS },
+        { 5, "Transfer", ExampleTransfer },
+        { 6, "TransferGNUS", ExampleTransferGNUS },
+        { 0, nullptr, nullptr },
+    };
+    static const MenuOption procMenu[] = {
+        { 1, "Process Sample JSON", processSampleData },
+        { 2, "Get Cost (raw)", getProcessingCost },
+        { 3, "Get Cost (formatted)", getProcessingCostInString },
+        { 0, nullptr, nullptr },
+    };
 
     while (true)
     {
-        // locally define the main menu structure
         struct MenuOption
         {
             int         option;
@@ -156,8 +151,7 @@ int main()
         static const MenuOption mainMenu[] = { { 1, "SDK", []() { runSubMenu( "SDK", sdkMenu ); } },
                                                { 2, "Wallet", []() { runSubMenu( "Wallet", walletMenu ); } },
                                                { 3, "Transactions", []() { runSubMenu( "Transactions", txMenu ); } },
-                                               { 4, "Conversion", []() { runSubMenu( "Conversion", convMenu ); } },
-                                               { 5, "Processing", []() { runSubMenu( "Processing", procMenu ); } },
+                                               { 4, "Processing", []() { runSubMenu( "Processing", procMenu ); } },
                                                { 0, "Exit", nullptr } };
 
         userPrint( "\n=== Main Menu ===\n" );
@@ -282,7 +276,8 @@ static void ExampleMint()
     }
 
     GeniusSDKMint( amount, txHash, chainId, tid );
-    userPrint( "Minted %llu tokens of “%s” successfully.\n", amount, tokenId[0] ? tokenId : "<default>" );
+    userPrint( "Minted %llu tokens of “%s” successfully.\n", (unsigned long long)amount,
+               tokenId[0] ? tokenId : "<default>" );
 }
 
 /**
@@ -308,8 +303,8 @@ static void ExampleMintGNUS()
  */
 static void ExampleTransfer()
 {
-    uint64_t amount                  = promptUInt64( "Enter the amount of Minion Tokens to transfer: ", 0 );
-    char     tokenId[MAX_INPUT_SIZE] = "";
+    uint64_t      amount                  = promptUInt64( "Enter the amount of Minion Tokens to transfer: ", 0 );
+    char          tokenId[MAX_INPUT_SIZE] = "";
     GeniusAddress recipient;
     GeniusTokenID tid;
 
@@ -327,6 +322,7 @@ static void ExampleTransfer()
     bool transferSuccess = GeniusSDKTransfer( amount, &recipient, tid );
     userPrint( "Token transfer %s.\n", transferSuccess ? "successful" : "failed" );
 }
+
 /**
  * @brief Transfers tokens using the string-based function.
  */
@@ -355,87 +351,22 @@ static void getProcessingCostInString()
 }
 
 /**
- * @brief Converts Genius tokens to Minions.
- */
-static void convertGeniusToMinions()
-{
-    GeniusTokenValue amount;
-    userPrint( "Enter Genius amount: " );
-    scanf( "%s", amount.value );
-    uint64_t minions = GeniusSDKToMinions( &amount );
-    userPrint( "Converted to Minions: %llu\n", minions );
-}
-
-/**
- * @brief Converts Minions to Genius tokens.
- */
-static void convertMinionsToGenius()
-{
-    uint64_t minions;
-    userPrint( "Enter Minion amount: " );
-    scanf( "%llu", &minions );
-    GeniusTokenValue genius = GeniusSDKToGenius( minions );
-    userPrint( "Converted to Genius: %s\n", genius.value );
-}
-
-static void convertMinionsToChild()
-{
-    uint64_t m                       = promptUInt64( "Enter Minion amount: ", 0 );
-    char     tokenId[MAX_INPUT_SIZE] = "";
-    promptString( "Enter Token ID (leave empty for default): ", tokenId, MAX_INPUT_SIZE, "" );
-
-    GeniusTokenID tid;
-    if (!parseGeniusTokenID( tokenId, &tid ))
-    {
-        userPrint( "Invalid token ID\n" );
-        return;
-    }
-
-    GeniusTokenValue c = GeniusSDKToChild( m, tid );
-    userPrint( "Child-token format: %s\n", c.value );
-}
-
-static void convertChildToMinions()
-{
-    char childStr[MAX_INPUT_SIZE] = "";
-    promptString( "Enter child-token string: ", childStr, MAX_INPUT_SIZE, "" );
-
-    char tokenId[MAX_INPUT_SIZE] = "";
-    promptString( "Enter Token ID (leave empty for default): ", tokenId, MAX_INPUT_SIZE, "" );
-
-    // Copy into GeniusTokenValue and parse
-    GeniusTokenValue c = {};
-    std::strncpy( c.value, childStr, sizeof( c.value ) - 1 );
-    c.value[sizeof( c.value ) - 1] = '\0';
-
-    GeniusTokenID tid;
-    if (!parseGeniusTokenID( tokenId, &tid ))
-    {
-        userPrint( "Invalid token ID\n" );
-        return;
-    }
-
-    uint64_t m = GeniusSDKFromChild( &c, tid );
-    userPrint( "Minions: %llu\n", m );
-}
-
-/**
  * @brief Retrieves and prints the number of incoming transactions.
  */
-static void getInTransactions()
+static void ExampleGetInTransactions()
 {
     GeniusMatrix inTransactions = GeniusSDKGetInTransactions();
-    userPrint( "Incoming Transactions: %llu\n", inTransactions.size );
+    userPrint( "Incoming Transactions: %" PRIu64 "\n", inTransactions.size );
     GeniusSDKFreeTransactions( inTransactions );
 }
 
 /**
  * @brief Retrieves and prints the number of outgoing transactions.
  */
-static void getOutTransactions()
+static void ExampleGetOutTransactions()
 {
     GeniusMatrix outTransactions = GeniusSDKGetOutTransactions();
-    userPrint( "Outgoing Transactions: %llu\n", outTransactions.size );
+    userPrint( "Outgoing Transactions: %llu\n", static_cast<unsigned long long>( outTransactions.size ) );
     GeniusSDKFreeTransactions( outTransactions );
 }
 
@@ -475,9 +406,8 @@ static void getProcessingCost()
         return;
     }
     uint64_t cost = GeniusSDKGetCost( localSampleData );
-    userPrint( "Estimated processing cost: %llu\n", cost );
+    userPrint( "Estimated processing cost: %llu\n", static_cast<unsigned long long>( cost ) );
 }
-
 
 /**
  * @brief Shuts down the GeniusSDK.
@@ -488,6 +418,7 @@ static void shutdownSDK()
     userPrint( "GeniusSDK shut down successfully.\n" );
 }
 
+#if (SUPPRESS_OUTPUT == 1)
 /**
  * @brief Suppresses SDK logs by redirecting stdout to /dev/null.
  */
@@ -515,6 +446,7 @@ static void suppressSDKLogs()
     }
 #endif
 }
+#endif
 
 /**
  * @brief Retrieves configuration values for initializing the GeniusSDK.
