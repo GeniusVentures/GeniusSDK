@@ -62,16 +62,18 @@ typedef struct
  * @brief Represents a Genius token value in fixed-point format as a string.
  *
  * This structure provides enough space to hold the largest possible Genius token
- * string value ("18446744073.709551615") plus the null terminator.
+ * string value ("18446744073709.551615") plus the null terminator.
  */
 typedef struct
 {
     char value[22]; ///< String representation of the Genius token value
 } GeniusTokenValue;
-
+/**
+ * @brief A binary identifier for a Genius-compatible token.
+ */
 typedef struct
 {
-    unsigned char data[32];
+    unsigned char data[32]; ///< 32-byte raw token ID used internally
 } GeniusTokenID;
 
 typedef char     JsonData_t[2048]; ///< ID/Path of the image to be processed
