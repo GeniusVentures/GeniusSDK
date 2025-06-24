@@ -48,12 +48,22 @@ namespace
         }
 
         std::string s = v.GetString();
-        if ( s.size() != 2 + 64 || ( s.rfind( "0x", 0 ) != 0 && s.rfind( "0X", 0 ) != 0 ) )
+        std::string hex;
+
+        if ( s.size() >= 2 && ( s.rfind( "0x", 0 ) == 0 || s.rfind( "0X", 0 ) == 0 ) )
         {
-            return outcome::failure( JsonError( "Invalid TokenID: must be '0x' followed by exactly 64 hex digits" ) );
+            hex = s.substr( 2 );
+        }
+        else
+        {
+            hex = s;
         }
 
-        std::string             hex = s.substr( 2 );
+        if ( hex.size() != 64 )
+        {
+            return outcome::failure( JsonError( "Invalid TokenID: must be exactly 64 hex digits" ) );
+        }
+
         std::array<uint8_t, 32> buf;
         try
         {
@@ -358,13 +368,11 @@ void GeniusSDKMint( uint64_t amount, const char *transaction_hash, const char *c
 
 void GeniusSDKMintGNUS( const GeniusTokenValue *amount, const char *transaction_hash, const char *chain_id )
 {
-    auto     parseRes = GeniusNodeInstance->ParseTokens( std::string( amount->value ),
-                                                     sgns::TokenID::FromBytes( { 0x00 } ) );
-    uint64_t raw      = parseRes.has_value() ? parseRes.value() : 0;
+    auto parseRes =
+        GeniusNodeInstance->ParseTokens( std::string( amount->value ), sgns::TokenID::FromBytes( { 0x00 } ) );
+    uint64_t raw = parseRes.has_value() ? parseRes.value() : 0;
 
-    auto result = GeniusNodeInstance->MintTokens( raw,
-                                                  std::string( transaction_hash ),
-                                                  std::string( chain_id ),
+    auto result = GeniusNodeInstance->MintTokens( raw, std::string( transaction_hash ), std::string( chain_id ),
                                                   sgns::TokenID::FromBytes( { 0x00 } ) );
     if ( !result.has_value() )
     {
@@ -401,9 +409,9 @@ bool GeniusSDKTransfer( uint64_t amount, GeniusAddress *dest, GeniusTokenID toke
 
 bool GeniusSDKTransferGNUS( const GeniusTokenValue *amount, GeniusAddress *dest )
 {
-    auto     parseRes = GeniusNodeInstance->ParseTokens( std::string( amount->value ),
-                                                     sgns::TokenID::FromBytes( { 0x00 } ) );
-    uint64_t raw      = parseRes.has_value() ? parseRes.value() : 0;
+    auto parseRes =
+        GeniusNodeInstance->ParseTokens( std::string( amount->value ), sgns::TokenID::FromBytes( { 0x00 } ) );
+    uint64_t raw = parseRes.has_value() ? parseRes.value() : 0;
 
     std::string to( dest->address );
     auto        result = GeniusNodeInstance->TransferFunds( raw, to, sgns::TokenID::FromBytes( { 0x00 } ) );
