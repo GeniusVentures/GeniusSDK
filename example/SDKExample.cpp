@@ -19,110 +19,173 @@
 #include <cstring>
 #include <cstdarg>
 #include <fcntl.h>
+#include <inttypes.h>
 #include "GeniusSDK.h"
 
 static const int MAX_INPUT_SIZE = 256; ///< Maximum size for user input buffers.
 
 static void initSDK();
 
-static void getBalance();
-static void getBalanceInString();
-static void getAddress();
-static void getInTransactions();
-static void getOutTransactions();
+static void ExampleGetAddress();
+static void ExampleGetBalance();
+static void ExampleGetBalanceGNUS();
+static void ExampleGetBalanceGNUSString();
+static void ExampleGetInTransactions();
+static void ExampleGetOutTransactions();
 static void processSampleData();
 static void getProcessingCost();
 static void getProcessingCostInString();
-static void mintTokens();
-static void mintTokensWithString();
-static void transferTokens();
-static void transferTokensWithString();
+static void ExampleMint();
+static void ExampleMintGNUS();
+static void ExampleTransfer();
+static void ExampleTransferGNUS();
 static void shutdownSDK();
-static void convertGeniusToMinions();
-static void convertMinionsToGenius();
 
-static void     suppressSDKLogs();
+#if (SUPPRESS_OUTPUT == 1)
+static void suppressSDKLogs();
+#endif
 static void     getSDKConfig( char *base_path, char *eth_private_key, int32_t *autodht, int32_t *process,
                               uint16_t *baseport );
 static bool     loadJsonFromFile( const char *filename, JsonData_t jsonBuffer );
+static bool     parseGeniusTokenID( const char *hex, GeniusTokenID *out );
 static void     promptString( const char *prompt, char *destination, size_t maxLen, const char *defaultValue );
 static int      promptInt( const char *prompt, int defaultValue );
 static uint16_t promptUShort( const char *prompt, uint16_t defaultValue );
 static uint64_t promptUInt64( const char *prompt, uint64_t defaultValue );
 static void     readLine( char *buffer, size_t bufferSize );
 
-#define SUPPRESS_OUTPUT 1
-#if ( SUPPRESS_OUTPUT == 0 )
+#define SUPPRESS_OUTPUT 0
+#if (SUPPRESS_OUTPUT == 0)
 #define userPrint printf
 #else
-void userPrint( const char *fmt, ... );
-#endif
 static int original_stdout_fd = -1; ///< To preserve original stdout when suppressing SDK logs.
+void       userPrint( const char *fmt, ... );
+#endif
 
+typedef void ( *MenuFunc )();
+
+struct MenuOption
+{
+    int         option;
+    const char *description;
+    MenuFunc    function; // nullptr means “Back” or “Exit”
+};
+
+// Generic submenu runner
+static void runSubMenu( const char *title, const MenuOption *menu )
+{
+    while (true)
+    {
+        userPrint( "\n--- %s ---\n", title );
+        for (const MenuOption *opt = menu; opt->description; ++opt)
+        {
+            userPrint( "%2d - %s\n", opt->option, opt->description );
+        }
+        userPrint( " 0 - Back\n" );
+
+        int  choice  = promptInt( "Enter choice: ", -1 );
+        bool handled = false;
+        for (const MenuOption *opt = menu; opt->description; ++opt)
+        {
+            if (opt->option == choice)
+            {
+                handled = true;
+                opt->function(); // call routine
+                return;          // back to main menu
+            }
+        }
+        if (choice == 0)
+        {
+            return; // Back
+        }
+        if (!handled)
+        {
+            userPrint( "Invalid choice. Please select again.\n" );
+        }
+    }
+}
 
 int main()
 {
-    static const struct MenuOption
-    {
-        int32_t     option;      ///< Option number
-        const char *description; ///< Option description
-        void ( *function )();    ///< Function to execute when the option is selected
-    } options[] = { { 1, "Initialize the SDK", initSDK },
-                    { 2, "Shutdown SDK", shutdownSDK },
-                    { 3, "Get Balance", getBalance },
-                    { 4, "Get Balance (String)", getBalanceInString },
-                    { 5, "Get Address", getAddress },
-                    { 6, "Get Incoming Transactions", getInTransactions },
-                    { 7, "Get Outgoing Transactions", getOutTransactions },
-                    { 8, "Free Transactions", nullptr },
-                    { 9, "Mint Tokens", mintTokens },
-                    { 10, "Mint Tokens (String)", mintTokensWithString },
-                    { 11, "Transfer Tokens", transferTokens },
-                    { 12, "Transfer Tokens (String)", transferTokensWithString },
-                    { 13, "Get Processing Cost", getProcessingCost },
-                    { 14, "Get Processing Cost (String)", getProcessingCostInString },
-                    { 15, "Process Sample Data", processSampleData },
-                    { 16, "Convert Genius to Minions", convertGeniusToMinions },
-                    { 17, "Convert Minions to Genius", convertMinionsToGenius },
-                    { 0, "Exit", nullptr } };
-
-#if ( SUPPRESS_OUTPUT == 1 )
+#if (SUPPRESS_OUTPUT == 1)
     suppressSDKLogs();
 #endif
 
-    int choice = -1;
-    do
-    {
-        userPrint( "\nSelect an option:\n" );
-        for ( int32_t i = 0; options[i].option != 0; i++ )
-        {
-            userPrint( "%d - %s\n", options[i].option, options[i].description );
-        }
-        choice = promptInt( "Enter choice: ", -1 );
+    static const MenuOption sdkMenu[] = {
+        { 1, "Initialize SDK", initSDK },
+        { 2, "Shutdown SDK", shutdownSDK },
+        { 0, nullptr, nullptr },
+    };
+    static const MenuOption walletMenu[] = {
+        { 1, "GetAddress", ExampleGetAddress },
+        { 2, "GetBalance", ExampleGetBalance },
+        { 3, "GetBalanceGNUS", ExampleGetBalanceGNUS },
+        { 4, "GetBalanceGNUSString", ExampleGetBalanceGNUSString },
+        { 0, nullptr, nullptr },
+    };
+    static const MenuOption txMenu[] = {
+        { 1, "GetInTransactions", ExampleGetInTransactions },
+        { 2, "GetOutTransactions", ExampleGetOutTransactions },
+        { 3, "Mint", ExampleMint },
+        { 4, "MintGNUS", ExampleMintGNUS },
+        { 5, "Transfer", ExampleTransfer },
+        { 6, "TransferGNUS", ExampleTransferGNUS },
+        { 0, nullptr, nullptr },
+    };
+    static const MenuOption procMenu[] = {
+        { 1, "Process Sample JSON", processSampleData },
+        { 2, "Get Cost (raw)", getProcessingCost },
+        { 3, "Get Cost (formatted)", getProcessingCostInString },
+        { 0, nullptr, nullptr },
+    };
 
-        bool validChoice = false;
-        for ( int32_t i = 0; options[i].option != 0; i++ )
+    while (true)
+    {
+        struct MenuOption
         {
-            if ( options[i].option == choice )
+            int         option;
+            const char *description;
+            void ( *function )();
+        };
+
+        static const MenuOption mainMenu[] = { { 1, "SDK", []() { runSubMenu( "SDK", sdkMenu ); } },
+                                               { 2, "Wallet", []() { runSubMenu( "Wallet", walletMenu ); } },
+                                               { 3, "Transactions", []() { runSubMenu( "Transactions", txMenu ); } },
+                                               { 4, "Processing", []() { runSubMenu( "Processing", procMenu ); } },
+                                               { 0, "Exit", nullptr } };
+
+        userPrint( "\n=== Main Menu ===\n" );
+        for (const auto &opt : mainMenu)
+        {
+            userPrint( "%2d - %s\n", opt.option, opt.description );
+        }
+
+        int  choice  = promptInt( "Enter choice: ", -1 );
+        bool handled = false;
+
+        for (const auto &opt : mainMenu)
+        {
+            if (opt.option == choice)
             {
-                validChoice = true;
-                if ( options[i].function )
+                handled = true;
+                if (opt.function)
                 {
-                    options[i].function();
+                    opt.function();
                 }
                 else
                 {
-                    userPrint( "Exiting...\n" );
+                    userPrint( "Exiting application.\n" );
+                    return 0;
                 }
                 break;
             }
         }
 
-        if ( !validChoice && choice != 0 )
+        if (!handled)
         {
             userPrint( "Invalid choice. Please select again.\n" );
         }
-    } while ( choice != 0 );
+    }
 
     return 0;
 }
@@ -142,7 +205,7 @@ static void initSDK()
     getSDKConfig( base_path, eth_private_key, &autodht, &process, &baseport );
 
     const char *init_result = GeniusSDKInit( base_path, eth_private_key, autodht, process, baseport );
-    if ( !init_result || strncmp( init_result, "Initialized", strlen( "Initialized" ) ) != 0 )
+    if (!init_result || strncmp( init_result, "Initialized", strlen( "Initialized" ) ) != 0)
     {
         userPrint( "Failed to initialize GeniusSDK. Error: %s\n", init_result ? init_result : "No response" );
         return;
@@ -152,34 +215,122 @@ static void initSDK()
 }
 
 /**
- * @brief Retrieves balance as a string.
+ * @brief Retrieves and prints the wallet address.
  */
-static void getBalanceInString()
+static void ExampleGetAddress()
+{
+    GeniusAddress address = GeniusSDKGetAddress();
+    userPrint( "Wallet Address: %s\n", address.address );
+}
+
+static void ExampleGetBalance()
+{
+    char tokenId[MAX_INPUT_SIZE] = { 0 };
+    promptString( "Enter child-token ID (hex, or press enter for default): ", tokenId, MAX_INPUT_SIZE, "" );
+
+    GeniusTokenID tid = {};
+    if (strlen( tokenId ) > 0)
+    {
+        if (!parseGeniusTokenID( tokenId, &tid ))
+        {
+            printf( "Invalid token ID\n" );
+            return;
+        }
+    }
+
+    uint64_t balance = GeniusSDKGetBalance( tid );
+    printf( "Balance (minions): %llu\n", (unsigned long long)balance );
+}
+
+static void ExampleGetBalanceGNUS()
 {
     GeniusTokenValue balance = GeniusSDKGetBalanceGNUS();
-    userPrint( "Balance: %s\n", balance.value );
+    printf( "Balance (GNUS value): %s\n", balance.value );
+}
+
+static void ExampleGetBalanceGNUSString()
+{
+    const char *balanceStr = GeniusSDKGetBalanceGNUSString();
+    printf( "Balance (GNUS string): %s\n", balanceStr );
+}
+
+/**
+ * @brief Mints tokens by prompting the user for an amount.
+ */
+static void ExampleMint()
+{
+    uint64_t amount = promptUInt64( "Enter the amount to mint: ", 0 );
+
+    char txHash[MAX_INPUT_SIZE]  = "";
+    char chainId[MAX_INPUT_SIZE] = "";
+    char tokenId[MAX_INPUT_SIZE] = "";
+    promptString( "Transaction hash (optional): ", txHash, MAX_INPUT_SIZE, "" );
+    promptString( "Chain ID (optional): ", chainId, MAX_INPUT_SIZE, "" );
+    promptString( "Token ID: ", tokenId, MAX_INPUT_SIZE, "" );
+
+    GeniusTokenID tid;
+    if (!parseGeniusTokenID( tokenId, &tid ))
+    {
+        userPrint( "Invalid token ID\n" );
+        return;
+    }
+
+    GeniusSDKMint( amount, txHash, chainId, tid );
+    userPrint( "Minted %llu tokens of “%s” successfully.\n", (unsigned long long)amount,
+               tokenId[0] ? tokenId : "<default>" );
 }
 
 /**
  * @brief Mints tokens using the string-based function.
  */
-static void mintTokensWithString()
+static void ExampleMintGNUS()
 {
     GeniusTokenValue amount;
     userPrint( "Enter amount to mint: " );
     scanf( "%s", amount.value );
 
-    GeniusSDKMintGNUS( &amount, "", "", "" );
-    userPrint( "Minted %s tokens.\n", amount.value );
+    char txHash[MAX_INPUT_SIZE]  = "";
+    char chainId[MAX_INPUT_SIZE] = "";
+    promptString( "Transaction hash: ", txHash, MAX_INPUT_SIZE, "" );
+    promptString( "Chain ID: ", chainId, MAX_INPUT_SIZE, "" );
+
+    GeniusSDKMintGNUS( &amount, txHash, chainId );
+    userPrint( "Minted %s.\n", amount.value );
+}
+
+/**
+ * @brief Transfers tokens by prompting the user for an amount and a recipient address.
+ */
+static void ExampleTransfer()
+{
+    uint64_t      amount                  = promptUInt64( "Enter the amount of Minion Tokens to transfer: ", 0 );
+    char          tokenId[MAX_INPUT_SIZE] = "";
+    GeniusAddress recipient;
+    GeniusTokenID tid;
+
+    promptString( "Enter Token ID (leave empty for default): ", tokenId, MAX_INPUT_SIZE, "" );
+
+    userPrint( "Enter recipient wallet address: " );
+    readLine( recipient.address, sizeof( recipient.address ) );
+
+    if (!parseGeniusTokenID( tokenId, &tid ))
+    {
+        userPrint( "Invalid token ID\n" );
+        return;
+    }
+
+    bool transferSuccess = GeniusSDKTransfer( amount, &recipient, tid );
+    userPrint( "Token transfer %s.\n", transferSuccess ? "successful" : "failed" );
 }
 
 /**
  * @brief Transfers tokens using the string-based function.
  */
-static void transferTokensWithString()
+static void ExampleTransferGNUS()
 {
     GeniusTokenValue amount;
     GeniusAddress    recipient;
+
     userPrint( "Enter amount to transfer: " );
     scanf( "%s", amount.value );
     userPrint( "Enter recipient address: " );
@@ -200,64 +351,22 @@ static void getProcessingCostInString()
 }
 
 /**
- * @brief Converts Genius tokens to Minions.
- */
-static void convertGeniusToMinions()
-{
-    GeniusTokenValue amount;
-    userPrint( "Enter Genius amount: " );
-    scanf( "%s", amount.value );
-    uint64_t minions = GeniusSDKToMinions( &amount );
-    userPrint( "Converted to Minions: %llu\n", minions );
-}
-
-/**
- * @brief Converts Minions to Genius tokens.
- */
-static void convertMinionsToGenius()
-{
-    uint64_t minions;
-    userPrint( "Enter Minion amount: " );
-    scanf( "%llu", &minions );
-    GeniusTokenValue genius = GeniusSDKToGenius( minions );
-    userPrint( "Converted to Genius: %s\n", genius.value );
-}
-
-/**
- * @brief Retrieves and prints the current balance.
- */
-static void getBalance()
-{
-    uint64_t balance = GeniusSDKGetBalance();
-    userPrint( "Current Balance: %llu\n", balance );
-}
-
-/**
- * @brief Retrieves and prints the wallet address.
- */
-static void getAddress()
-{
-    GeniusAddress address = GeniusSDKGetAddress();
-    userPrint( "Wallet Address: %s\n", address.address );
-}
-
-/**
  * @brief Retrieves and prints the number of incoming transactions.
  */
-static void getInTransactions()
+static void ExampleGetInTransactions()
 {
     GeniusMatrix inTransactions = GeniusSDKGetInTransactions();
-    userPrint( "Incoming Transactions: %llu\n", inTransactions.size );
+    userPrint( "Incoming Transactions: %" PRIu64 "\n", inTransactions.size );
     GeniusSDKFreeTransactions( inTransactions );
 }
 
 /**
  * @brief Retrieves and prints the number of outgoing transactions.
  */
-static void getOutTransactions()
+static void ExampleGetOutTransactions()
 {
     GeniusMatrix outTransactions = GeniusSDKGetOutTransactions();
-    userPrint( "Outgoing Transactions: %llu\n", outTransactions.size );
+    userPrint( "Outgoing Transactions: %llu\n", static_cast<unsigned long long>( outTransactions.size ) );
     GeniusSDKFreeTransactions( outTransactions );
 }
 
@@ -271,7 +380,7 @@ static void processSampleData()
                   MAX_INPUT_SIZE, "sample.json" );
 
     JsonData_t localSampleData;
-    if ( !loadJsonFromFile( jsonFilePath, localSampleData ) )
+    if (!loadJsonFromFile( jsonFilePath, localSampleData ))
     {
         userPrint( "Failed to load JSON file.\n" );
         return;
@@ -291,43 +400,13 @@ static void getProcessingCost()
                   MAX_INPUT_SIZE, "sample.json" );
 
     JsonData_t localSampleData;
-    if ( !loadJsonFromFile( jsonFilePath, localSampleData ) )
+    if (!loadJsonFromFile( jsonFilePath, localSampleData ))
     {
         userPrint( "Failed to load JSON file.\n" );
         return;
     }
     uint64_t cost = GeniusSDKGetCost( localSampleData );
-    userPrint( "Estimated processing cost: %llu\n", cost );
-}
-
-/**
- * @brief Mints tokens by prompting the user for an amount.
- */
-static void mintTokens()
-{
-    uint64_t amount = promptUInt64( "Enter the amount of Minion Tokens to mint: ", 0 );
-
-    const char *transaction_hash = "";
-    const char *chain_id         = "";
-    const char *token_id         = "";
-
-    GeniusSDKMint( amount, transaction_hash, chain_id, token_id );
-    userPrint( "Minted %llu Minion Tokens successfully.\n", amount );
-}
-
-/**
- * @brief Transfers tokens by prompting the user for an amount and a recipient address.
- */
-static void transferTokens()
-{
-    uint64_t amount = promptUInt64( "Enter the amount of Minion Tokens to transfer: ", 0 );
-
-    GeniusAddress recipient;
-    userPrint( "Enter recipient wallet address: " );
-    readLine( recipient.address, sizeof( recipient.address ) );
-
-    bool transferSuccess = GeniusSDKTransfer( amount, &recipient );
-    userPrint( "Token transfer %s.\n", transferSuccess ? "successful" : "failed" );
+    userPrint( "Estimated processing cost: %llu\n", static_cast<unsigned long long>( cost ) );
 }
 
 /**
@@ -339,6 +418,7 @@ static void shutdownSDK()
     userPrint( "GeniusSDK shut down successfully.\n" );
 }
 
+#if (SUPPRESS_OUTPUT == 1)
 /**
  * @brief Suppresses SDK logs by redirecting stdout to /dev/null.
  */
@@ -350,7 +430,7 @@ static void suppressSDKLogs()
     original_stdout_fd = _dup( _fileno( stdout ) );
 
     int null_fd = _open( "NUL", _O_WRONLY );
-    if ( null_fd != -1 )
+    if (null_fd != -1)
     {
         _dup2( null_fd, _fileno( stdout ) );
         _close( null_fd );
@@ -359,13 +439,14 @@ static void suppressSDKLogs()
     original_stdout_fd = dup( STDOUT_FILENO );
 
     int devnull_fd = open( "/dev/null", O_WRONLY );
-    if ( devnull_fd != -1 )
+    if (devnull_fd != -1)
     {
         dup2( devnull_fd, STDOUT_FILENO );
         close( devnull_fd );
     }
 #endif
 }
+#endif
 
 /**
  * @brief Retrieves configuration values for initializing the GeniusSDK.
@@ -397,7 +478,7 @@ static void getSDKConfig( char *base_path, char *eth_private_key, int32_t *autod
 static bool loadJsonFromFile( const char *filename, JsonData_t jsonBuffer )
 {
     FILE *fp = fopen( filename, "rb" );
-    if ( !fp )
+    if (!fp)
     {
         userPrint( "Error: Could not open JSON file: %s\n", filename );
         return false;
@@ -405,6 +486,96 @@ static bool loadJsonFromFile( const char *filename, JsonData_t jsonBuffer )
     size_t bytesRead      = fread( jsonBuffer, 1, sizeof( JsonData_t ) - 1, fp );
     jsonBuffer[bytesRead] = '\0';
     fclose( fp );
+    return true;
+}
+
+/**
+ * @brief Parse a hex string (with optional "0x" prefix) into a 32-byte TokenID.
+ * @param hex   Null-terminated hex string (upper/lower case). May be shorter or longer than 64 digits.
+ * @param out   Pointer to GeniusTokenID to fill.
+ * @return      true on success (out is filled), false on invalid hex.
+ */
+static bool parseGeniusTokenID( const char *hex, GeniusTokenID *out )
+{
+    size_t i;
+
+    if (out == NULL)
+    {
+        return false;
+    }
+
+    memset( out->data, 0, sizeof( out->data ) );
+
+    if (hex == NULL || *hex == '\0')
+    {
+        return true;
+    }
+
+    if (hex[0] == '0' && ( hex[1] == 'x' || hex[1] == 'X' ))
+    {
+        hex += 2;
+    }
+
+    size_t      len = strlen( hex );
+    const char *s   = hex;
+    if (len > 64)
+    {
+        s   = hex + ( len - 64 );
+        len = 64;
+    }
+
+    char   tmp[65];
+    size_t pad = 64 - len;
+    for (i = 0; i < pad; ++i)
+    {
+        tmp[i] = '0';
+    }
+    memcpy( tmp + pad, s, len );
+    tmp[64] = '\0';
+
+    for (i = 0; i < 32; ++i)
+    {
+        char c1 = tmp[2 * i];
+        char c2 = tmp[2 * i + 1];
+        int  hi, lo;
+
+        if (c1 >= '0' && c1 <= '9')
+        {
+            hi = c1 - '0';
+        }
+        else if (c1 >= 'a' && c1 <= 'f')
+        {
+            hi = c1 - 'a' + 10;
+        }
+        else if (c1 >= 'A' && c1 <= 'F')
+        {
+            hi = c1 - 'A' + 10;
+        }
+        else
+        {
+            return false;
+        }
+
+        if (c2 >= '0' && c2 <= '9')
+        {
+            lo = c2 - '0';
+        }
+        else if (c2 >= 'a' && c2 <= 'f')
+        {
+            lo = c2 - 'a' + 10;
+        }
+        else if (c2 >= 'A' && c2 <= 'F')
+        {
+            lo = c2 - 'A' + 10;
+        }
+        else
+        {
+            return false;
+        }
+
+        out->data[i] = (uint8_t)( ( hi << 4 ) | lo );
+    }
+
     return true;
 }
 
@@ -420,7 +591,7 @@ static void promptString( const char *prompt, char *destination, size_t maxLen, 
     char buffer[MAX_INPUT_SIZE] = { 0 };
     userPrint( "%s", prompt );
     readLine( buffer, sizeof( buffer ) );
-    if ( strlen( buffer ) > 0 )
+    if (strlen( buffer ) > 0)
     {
         strncpy( destination, buffer, maxLen );
         destination[maxLen - 1] = '\0';
@@ -481,13 +652,13 @@ static uint64_t promptUInt64( const char *prompt, uint64_t defaultValue )
  */
 static void readLine( char *buffer, size_t bufferSize )
 {
-    if ( fgets( buffer, bufferSize, stdin ) != nullptr )
+    if (fgets( buffer, bufferSize, stdin ) != nullptr)
     {
         buffer[strcspn( buffer, "\n" )] = '\0';
     }
 }
 
-#if ( SUPPRESS_OUTPUT == 1 )
+#if (SUPPRESS_OUTPUT == 1)
 /**
  * @brief Custom print function that always writes to the original stdout.
  * @param fmt Format string (printf-style).
