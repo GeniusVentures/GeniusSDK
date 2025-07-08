@@ -30,11 +30,11 @@ jobs:
         abi: [""]
         include:
           - target: Linux
-            host: ubuntu-latest
+            host: ubuntu-22.04
             abi: x86_64
             build-type: Release
           - target: Linux
-            host: ubuntu-latest
+            host: ubuntu-22.04
             abi: x86_64
             build-type: Debug
           - target: Linux
