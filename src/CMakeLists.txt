@@ -25,3 +25,33 @@ target_link_libraries(GeniusSDK_shared PUBLIC sgns::sgns_account)
 
 geniussdk_install(GeniusSDK)        
 geniussdk_install(GeniusSDK_shared)  
+
+if(APPLE)
+    if(PLATFORM STREQUAL "OS64")
+        # iOS Framework
+        add_library(GeniusSDK_framework SHARED ${ALL_SRCS} ${ALL_HDRS})
+        set_target_properties(GeniusSDK_framework PROPERTIES
+            FRAMEWORK TRUE
+            OUTPUT_NAME GeniusSDK
+            FRAMEWORK_VERSION A
+            MACOSX_FRAMEWORK_IDENTIFIER ai.gnus.GeniusSDK
+            INSTALL_NAME_DIR "@rpath"
+            MACOSX_FRAMEWORK_INFO_PLIST "${CMAKE_SOURCE_DIR}/cmake/GeniusSDK_Info_ios.plist"
+            PUBLIC_HEADER "${ALL_HDRS};${CMAKE_BINARY_DIR}/GeniusSDKExport.h"
+        )
+        target_link_libraries(GeniusSDK_framework PUBLIC sgns::sgns_account)
+        geniussdk_install(GeniusSDK_framework)
+
+    else()
+        # macOS Bundle
+        add_library(GeniusSDK_bundle MODULE ${ALL_SRCS} ${ALL_HDRS})
+        set_target_properties(GeniusSDK_bundle PROPERTIES
+            BUNDLE TRUE
+            OUTPUT_NAME GeniusSDK
+            INSTALL_NAME_DIR "@rpath"
+            PUBLIC_HEADER "${ALL_HDRS};${CMAKE_BINARY_DIR}/GeniusSDKExport.h"
+        )
+        target_link_libraries(GeniusSDK_bundle PUBLIC sgns::sgns_account)
+        geniussdk_install(GeniusSDK_bundle)
+    endif()
+endif()
