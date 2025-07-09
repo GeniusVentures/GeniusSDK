@@ -7,8 +7,6 @@ set(BOOST_PATCH_VERSION "0" CACHE STRING "Boost Patch Version")
 set(BOOST_VERSION "${BOOST_MAJOR_VERSION}.${BOOST_MINOR_VERSION}.${BOOST_PATCH_VERSION}")
 set(BOOST_VERSION_2U "${BOOST_MAJOR_VERSION}_${BOOST_MINOR_VERSION}")
 
-set(SHARED_LIB_BUILD OFF CACHE BOOL "Shared library option for GeniusSDK")
-
 if(APPLE)
     if(IOS)
         # Settings specifically for iOS
@@ -31,11 +29,6 @@ if(NOT TARGET Vulkan::Vulkan)
     find_package(Vulkan REQUIRED)
 endif()
 
-if(SHARED_LIB_BUILD)
-    set(LIB_TYPE SHARED)
-else()
-    set(LIB_TYPE STATIC)
-endif()
 
 # Set config of GTest
 set(GTest_DIR "${THIRDPARTY_BUILD_DIR}/GTest/lib/cmake/GTest")
