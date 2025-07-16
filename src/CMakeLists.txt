@@ -43,8 +43,12 @@ if(APPLE)
             MACOSX_FRAMEWORK_INFO_PLIST "${CMAKE_CURRENT_LIST_DIR}/../cmake/GeniusSDK_Info_ios.plist"
             PUBLIC_HEADER "${ALL_HDRS};${CMAKE_BINARY_DIR}/GeniusSDKExport.h"
         )
-        target_link_libraries(GeniusSDK_framework PUBLIC sgns::sgns_account)
+        target_link_libraries(GeniusSDK_framework PUBLIC sgns::sgns_account "-framework Security")
         geniussdk_install(GeniusSDK_framework)
+        target_link_libraries(GeniusSDK_shared
+        PUBLIC
+        "-framework Security"
+        )
 
     else()
         # macOS Bundle
