@@ -18,17 +18,12 @@ target_link_libraries(GeniusSDK PUBLIC sgns::sgns_account)
 add_library(GeniusSDK_shared SHARED ${ALL_SRCS} ${ALL_HDRS})
 GENERATE_EXPORT_HEADER(GeniusSDK_shared EXPORT_FILE_NAME ${CMAKE_BINARY_DIR}/GeniusSDKExport.h)
 
-if(WIN32)
-    set_target_properties(GeniusSDK_shared PROPERTIES
-        OUTPUT_NAME GeniusSDK_shared  
-        PUBLIC_HEADER "${ALL_HDRS};${CMAKE_BINARY_DIR}/GeniusSDKExport.h"
-    )
-else()
-    set_target_properties(GeniusSDK_shared PROPERTIES
-        OUTPUT_NAME GeniusSDK  
-        PUBLIC_HEADER "${ALL_HDRS};${CMAKE_BINARY_DIR}/GeniusSDKExport.h"
-    )
-endif()
+
+set_target_properties(GeniusSDK_shared PROPERTIES
+    OUTPUT_NAME GeniusSDK_shared  
+    PUBLIC_HEADER "${ALL_HDRS};${CMAKE_BINARY_DIR}/GeniusSDKExport.h"
+)
+
 
 target_link_libraries(GeniusSDK_shared PUBLIC sgns::sgns_account)
 
