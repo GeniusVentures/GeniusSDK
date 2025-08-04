@@ -205,7 +205,7 @@ namespace
 }
 
 const char *GeniusSDKInit( const char *base_path, const char *eth_private_key, bool autodht, bool process,
-                           uint16_t baseport )
+                           uint16_t baseport, bool is_full_node )
 {
     if ( base_path == nullptr )
     {
@@ -218,8 +218,8 @@ const char *GeniusSDKInit( const char *base_path, const char *eth_private_key, b
 
     if ( load_config_ret )
     {
-        GeniusNodeInstance =
-            std::make_shared<sgns::GeniusNode>( load_config_ret.value(), eth_private_key, autodht, process, baseport );
+        GeniusNodeInstance = std::make_shared<sgns::GeniusNode>( load_config_ret.value(), eth_private_key, autodht,
+                                                                 process, baseport, is_full_node );
         ret_val.append( load_config_ret.value().BaseWritePath );
     }
     else
@@ -232,7 +232,7 @@ const char *GeniusSDKInit( const char *base_path, const char *eth_private_key, b
 }
 
 const char *GeniusSDKInitSecure( const char *base_path, const char *dev_config, const char *eth_private_key,
-                                 bool autodht, bool process, uint16_t baseport )
+                                 bool autodht, bool process, uint16_t baseport, bool is_full_node )
 {
     if ( base_path == nullptr )
     {
@@ -249,8 +249,8 @@ const char *GeniusSDKInitSecure( const char *base_path, const char *dev_config, 
 
     if ( load_config_ret )
     {
-        GeniusNodeInstance =
-            std::make_shared<sgns::GeniusNode>( load_config_ret.value(), eth_private_key, autodht, process, baseport );
+        GeniusNodeInstance = std::make_shared<sgns::GeniusNode>( load_config_ret.value(), eth_private_key, autodht,
+                                                                 process, baseport, is_full_node );
         ret_val.append( load_config_ret.value().BaseWritePath );
     }
     else
@@ -264,7 +264,7 @@ const char *GeniusSDKInitSecure( const char *base_path, const char *dev_config, 
 
 const char *GeniusSDKInitMinimal( const char *base_path, const char *eth_private_key, uint16_t baseport )
 {
-    return GeniusSDKInit( base_path, eth_private_key, true, true, baseport );
+    return GeniusSDKInit( base_path, eth_private_key, true, true, baseport, false );
 }
 
 void GeniusSDKProcess( const JsonData_t jsondata )
