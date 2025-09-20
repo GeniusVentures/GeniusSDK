@@ -1,7 +1,8 @@
 ---
 BasedOnStyle: Microsoft
-AlwaysBreakTemplateDeclarations: true
 AccessModifierOffset: -4
+AllowAllArgumentsOnNextLine: false
+AllowAllParametersOfDeclarationOnNextLine: false
 AlignConsecutiveAssignments:
   Enabled: true
   AlignCompound: true
@@ -11,18 +12,28 @@ AlignConsecutiveDeclarations:
   Enabled: true
 AlignConsecutiveShortCaseStatements:
   Enabled: true
+AllowShortBlocksOnASingleLine: Empty
+AllowShortFunctionsOnASingleLine: Empty
+AlwaysBreakTemplateDeclarations: true
 BraceWrapping:
+  AfterCaseLabel: true
   BeforeLambdaBody: true
+BinPackArguments: false
+BinPackParameters: false
 BreakConstructorInitializers: AfterColon
 BreakStringLiterals: false
 ColumnLimit: 120
 FixNamespaceComments: false
-IndentCaseBlocks: true
+IndentCaseBlocks: false
 IndentCaseLabels: true
 InsertBraces: true
 InsertNewlineAtEOF: true
+InsertTrailingCommas: Wrapped
 KeepEmptyLinesAtTheStartOfBlocks: false
 NamespaceIndentation: All
+PackConstructorInitializers: NextLine
+PenaltyBreakAssignment: 190
+PenaltyBreakBeforeFirstCallParameter: 2
 ReflowComments: false
 RemoveParentheses: ReturnStatement
 RemoveSemicolon: true
@@ -30,5 +41,6 @@ SeparateDefinitionBlocks: Always
 SortIncludes: Never
 SpacesInParens: Custom
 SpacesInParensOptions:
+  InConditionalStatements: true
   Other: true
 Standard: c++17

@@ -13,6 +13,7 @@
  * @author     Henrique A. Klein
  * @author     Luiz Guilherme Rizzatto Zucchi
  */
+
 #ifndef _GENIUSSDK_H
 #define _GENIUSSDK_H
 
@@ -68,6 +69,7 @@ typedef struct
 {
     char value[22]; ///< String representation of the Genius token value
 } GeniusTokenValue;
+
 /**
  * @brief A binary identifier for a Genius-compatible token.
  */
@@ -79,13 +81,22 @@ typedef struct
 typedef char     JsonData_t[2048]; ///< ID/Path of the image to be processed
 typedef uint64_t PayAmount_t;      ///< Amount to be paid for the processing
 
-GNUS_VISIBILITY_DEFAULT const char *GeniusSDKInit( const char *base_path, const char *eth_private_key, bool autodht,
-                                                   bool process, uint16_t baseport, bool is_full_node );
-GNUS_VISIBILITY_DEFAULT const char *GeniusSDKInitSecure( const char *base_path, const char *dev_config,
-                                                         const char *eth_private_key, bool autodht, bool process,
-                                                         uint16_t baseport, bool is_full_node );
-GNUS_VISIBILITY_DEFAULT const char *GeniusSDKInitMinimal( const char *base_path, const char *eth_private_key,
-                                                          uint16_t baseport );
+GNUS_VISIBILITY_DEFAULT const char *GeniusSDKInit( const char *base_path,
+                                                   const char *eth_private_key,
+                                                   bool        autodht,
+                                                   bool        process,
+                                                   uint16_t    baseport,
+                                                   bool        is_full_node );
+GNUS_VISIBILITY_DEFAULT const char *GeniusSDKInitSecure( const char *base_path,
+                                                         const char *dev_config,
+                                                         const char *eth_private_key,
+                                                         bool        autodht,
+                                                         bool        process,
+                                                         uint16_t    baseport,
+                                                         bool        is_full_node );
+GNUS_VISIBILITY_DEFAULT const char *GeniusSDKInitMinimal( const char *base_path,
+                                                          const char *eth_private_key,
+                                                          uint16_t    baseport );
 GNUS_VISIBILITY_DEFAULT void        GeniusSDKShutdown();
 
 /**
@@ -125,7 +136,9 @@ GNUS_VISIBILITY_DEFAULT void         GeniusSDKFreeTransactions( GeniusMatrix mat
  * @param[in] chain_id         A null-terminated string representing the blockchain chain ID.
  * @param[in] token_id         Token identifier.
  */
-GNUS_VISIBILITY_DEFAULT void GeniusSDKMint( uint64_t amount, const char *transaction_hash, const char *chain_id,
+GNUS_VISIBILITY_DEFAULT void GeniusSDKMint( uint64_t      amount,
+                                            const char   *transaction_hash,
+                                            const char   *chain_id,
                                             GeniusTokenID token_id );
 
 /**
@@ -134,8 +147,9 @@ GNUS_VISIBILITY_DEFAULT void GeniusSDKMint( uint64_t amount, const char *transac
  * @param[in] transaction_hash A null-terminated string representing the transaction hash.
  * @param[in] chain_id         A null-terminated string representing the blockchain chain ID.
  */
-GNUS_VISIBILITY_DEFAULT void GeniusSDKMintGNUS( const GeniusTokenValue *amount, const char *transaction_hash,
-                                                const char *chain_id );
+GNUS_VISIBILITY_DEFAULT void GeniusSDKMintGNUS( const GeniusTokenValue *amount,
+                                                const char             *transaction_hash,
+                                                const char             *chain_id );
 
 /**
  * @brief     Transfers tokens in **Minion Tokens** to another address.
@@ -148,11 +162,11 @@ GNUS_VISIBILITY_DEFAULT bool GeniusSDKTransfer( uint64_t amount, GeniusAddress *
 
 /**
  * @brief     Transfers tokens using a **Genius Token** string representation.
- * @param[in] gnus Pointer to a `GeniusTokenValue` struct representing the amount in GNUS.
+ * @param[in] amount Pointer to a `GeniusTokenValue` struct representing the amount in GNUS.
  * @param[in] dest Pointer to a `GeniusAddress` struct representing the recipient's address.
  * @return `true` if the transfer is successful, `false` otherwise.
  */
-GNUS_VISIBILITY_DEFAULT bool GeniusSDKTransferGNUS( const GeniusTokenValue *gnus, GeniusAddress *dest );
+GNUS_VISIBILITY_DEFAULT bool GeniusSDKTransferGNUS( const GeniusTokenValue *amount, GeniusAddress *dest );
 
 /**
  * @brief     Pays the developer for in-game transactions.

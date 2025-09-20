@@ -25,9 +25,7 @@
 class JsonError : public boost::exception
 {
 public:
-    explicit JsonError( std::string msg ) : message( std::move( msg ) )
-    {
-    }
+    explicit JsonError( std::string msg ) : message( std::move( msg ) ) {}
 
     const char *what() const noexcept
     {
@@ -204,8 +202,12 @@ namespace
     std::shared_ptr<sgns::GeniusNode> GeniusNodeInstance;
 }
 
-const char *GeniusSDKInit( const char *base_path, const char *eth_private_key, bool autodht, bool process,
-                           uint16_t baseport, bool is_full_node )
+const char *GeniusSDKInit( const char *base_path,
+                           const char *eth_private_key,
+                           bool        autodht,
+                           bool        process,
+                           uint16_t    baseport,
+                           bool        is_full_node )
 {
     if ( base_path == nullptr )
     {
@@ -218,8 +220,12 @@ const char *GeniusSDKInit( const char *base_path, const char *eth_private_key, b
 
     if ( load_config_ret )
     {
-        GeniusNodeInstance = std::make_shared<sgns::GeniusNode>( load_config_ret.value(), eth_private_key, autodht,
-                                                                 process, baseport, is_full_node );
+        GeniusNodeInstance = std::shared_ptr<sgns::GeniusNode>( sgns::GeniusNode::New( load_config_ret.value(),
+                                                                                       eth_private_key,
+                                                                                       autodht,
+                                                                                       process,
+                                                                                       baseport,
+                                                                                       is_full_node ) );
         ret_val.append( load_config_ret.value().BaseWritePath );
     }
     else
@@ -231,8 +237,13 @@ const char *GeniusSDKInit( const char *base_path, const char *eth_private_key, b
     return ret_val.c_str();
 }
 
-const char *GeniusSDKInitSecure( const char *base_path, const char *dev_config, const char *eth_private_key,
-                                 bool autodht, bool process, uint16_t baseport, bool is_full_node )
+const char *GeniusSDKInitSecure( const char *base_path,
+                                 const char *dev_config,
+                                 const char *eth_private_key,
+                                 bool        autodht,
+                                 bool        process,
+                                 uint16_t    baseport,
+                                 bool        is_full_node )
 {
     if ( base_path == nullptr )
     {
@@ -249,8 +260,12 @@ const char *GeniusSDKInitSecure( const char *base_path, const char *dev_config, 
 
     if ( load_config_ret )
     {
-        GeniusNodeInstance = std::make_shared<sgns::GeniusNode>( load_config_ret.value(), eth_private_key, autodht,
-                                                                 process, baseport, is_full_node );
+        GeniusNodeInstance = std::shared_ptr<sgns::GeniusNode>( sgns::GeniusNode::New( load_config_ret.value(),
+                                                                                       eth_private_key,
+                                                                                       autodht,
+                                                                                       process,
+                                                                                       baseport,
+                                                                                       is_full_node ) );
         ret_val.append( load_config_ret.value().BaseWritePath );
     }
     else
@@ -357,7 +372,9 @@ void GeniusSDKFreeTransactions( GeniusMatrix matrix )
 
 void GeniusSDKMint( uint64_t amount, const char *transaction_hash, const char *chain_id, GeniusTokenID token_id )
 {
-    auto result = GeniusNodeInstance->MintTokens( amount, std::string( transaction_hash ), std::string( chain_id ),
+    auto result = GeniusNodeInstance->MintTokens( amount,
+                                                  std::string( transaction_hash ),
+                                                  std::string( chain_id ),
                                                   sgns::TokenID::FromBytes( token_id.data, sizeof( token_id.data ) ) );
 
     if ( !result.has_value() )
@@ -368,11 +385,13 @@ void GeniusSDKMint( uint64_t amount, const char *transaction_hash, const char *c
 
 void GeniusSDKMintGNUS( const GeniusTokenValue *amount, const char *transaction_hash, const char *chain_id )
 {
-    auto parseRes =
-        GeniusNodeInstance->ParseTokens( std::string( amount->value ), sgns::TokenID::FromBytes( { 0x00 } ) );
-    uint64_t raw = parseRes.has_value() ? parseRes.value() : 0;
+    auto     parseRes = GeniusNodeInstance->ParseTokens( std::string( amount->value ),
+                                                     sgns::TokenID::FromBytes( { 0x00 } ) );
+    uint64_t raw      = parseRes.has_value() ? parseRes.value() : 0;
 
-    auto result = GeniusNodeInstance->MintTokens( raw, std::string( transaction_hash ), std::string( chain_id ),
+    auto result = GeniusNodeInstance->MintTokens( raw,
+                                                  std::string( transaction_hash ),
+                                                  std::string( chain_id ),
                                                   sgns::TokenID::FromBytes( { 0x00 } ) );
     if ( !result.has_value() )
     {
@@ -395,23 +414,18 @@ bool GeniusSDKTransfer( uint64_t amount, GeniusAddress *dest, GeniusTokenID toke
 {
     std::string destination( dest->address );
     auto        result = GeniusNodeInstance->TransferFunds(
-        amount, destination, sgns::TokenID::FromBytes( token_id.data, sizeof( token_id.data ) ) );
+        amount,
+        destination,
+        sgns::TokenID::FromBytes( token_id.data, sizeof( token_id.data ) ) );
 
-    if ( result.has_value() )
-    {
-        return true;
-    }
-    else
-    {
-        return false;
-    }
+    return result.has_value();
 }
 
 bool GeniusSDKTransferGNUS( const GeniusTokenValue *amount, GeniusAddress *dest )
 {
-    auto parseRes =
-        GeniusNodeInstance->ParseTokens( std::string( amount->value ), sgns::TokenID::FromBytes( { 0x00 } ) );
-    uint64_t raw = parseRes.has_value() ? parseRes.value() : 0;
+    auto     parseRes = GeniusNodeInstance->ParseTokens( std::string( amount->value ),
+                                                     sgns::TokenID::FromBytes( { 0x00 } ) );
+    uint64_t raw      = parseRes.has_value() ? parseRes.value() : 0;
 
     std::string to( dest->address );
     auto        result = GeniusNodeInstance->TransferFunds( raw, to, sgns::TokenID::FromBytes( { 0x00 } ) );
@@ -420,17 +434,10 @@ bool GeniusSDKTransferGNUS( const GeniusTokenValue *amount, GeniusAddress *dest 
 
 bool GeniusSDKPayDev( uint64_t amount, GeniusTokenID token_id )
 {
-    auto result =
-        GeniusNodeInstance->PayDev( amount, sgns::TokenID::FromBytes( token_id.data, sizeof( token_id.data ) ) );
+    auto result = GeniusNodeInstance->PayDev( amount,
+                                              sgns::TokenID::FromBytes( token_id.data, sizeof( token_id.data ) ) );
 
-    if ( result.has_value() )
-    {
-        return true;
-    }
-    else
-    {
-        return false;
-    }
+    return result.has_value();
 }
 
 uint64_t GeniusSDKGetCost( const JsonData_t jsondata )
