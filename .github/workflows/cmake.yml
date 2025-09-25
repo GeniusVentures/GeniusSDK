@@ -370,23 +370,43 @@ jobs:
           echo "Checking if release $RELEASE_TAG exists..."
 
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-              if [ "$IS_TAG_RELEASE" == "false" ]; then
-                  echo "Deleting existing release/tag $RELEASE_TAG..."
-                  gh release delete "$RELEASE_TAG" --yes || true
-                  git push origin ":refs/tags/$RELEASE_TAG" || true
+              # Get the commit SHA that the release tag points to
+              RELEASE_COMMIT=$(git rev-list -n 1 "$RELEASE_TAG" 2>/dev/null || echo "")
+              
+              if [ "$RELEASE_COMMIT" = "${{ github.sha }}" ]; then
+                  echo "Release $RELEASE_TAG already exists at correct commit ${{ github.sha }}. Skipping recreation."
+              else
+                  echo "Release $RELEASE_TAG exists but points to different commit ($RELEASE_COMMIT vs ${{ github.sha }})"
+                  if [ "$IS_TAG_RELEASE" == "false" ]; then
+                      echo "Deleting existing release/tag $RELEASE_TAG..."
+                      gh release delete "$RELEASE_TAG" --yes || true
+                      git push origin ":refs/tags/$RELEASE_TAG" || true
+                      
+                      echo "Creating new tag $RELEASE_TAG..."
+                      git tag "$RELEASE_TAG" "${{ github.sha }}"
+                      git push origin "$RELEASE_TAG"
+
+                      echo "Creating GitHub release $RELEASE_TAG..."
+                      gh release create "$RELEASE_TAG" \
+                      --target "${{ github.sha }}" \
+                      -t "${{ matrix.target }} ${{ github.ref_name }} ${{ matrix.build-type }} build" \
+                      -n "Branch: ${{ github.ref_name }} | SHA: ${{ github.sha }}" \
+                      --prerelease
+                  fi
               fi
+          else
+              echo "Release $RELEASE_TAG does not exist. Creating new release."
+              echo "Creating new tag $RELEASE_TAG..."
+              git tag "$RELEASE_TAG" "${{ github.sha }}"
+              git push origin "$RELEASE_TAG"
+
+              echo "Creating GitHub release $RELEASE_TAG..."
+              gh release create "$RELEASE_TAG" \
+              --target "${{ github.sha }}" \
+              -t "${{ matrix.target }} ${{ github.ref_name }} ${{ matrix.build-type }} build" \
+              -n "Branch: ${{ github.ref_name }} | SHA: ${{ github.sha }}" \
+              $( [ "$IS_TAG_RELEASE" = "true" ] && echo "--latest" || echo "--prerelease" )
           fi
-
-          echo "Creating new tag $RELEASE_TAG..."
-          git tag "$RELEASE_TAG" "${{ github.sha }}"
-          git push origin "$RELEASE_TAG"
-
-          echo "Creating GitHub release $RELEASE_TAG..."
-          gh release create "$RELEASE_TAG" \
-          --target "${{ github.sha }}" \
-          -t "${{ matrix.target }} ${{ github.ref_name }} ${{ matrix.build-type }} build" \
-          -n "Branch: ${{ github.ref_name }} | SHA: ${{ github.sha }}" \
-          $( [ "$IS_TAG_RELEASE" = "true" ] && echo "--latest" || echo "--prerelease" )
         shell: bash
 
       - name: Upload file
