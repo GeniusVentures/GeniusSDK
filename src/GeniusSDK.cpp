@@ -304,6 +304,12 @@ double GeniusSDKGetGNUSPrice()
     return result.value();
 }
 
+const char *GeniusSDKGetVersion()
+{
+    static std::string version = GeniusNodeInstance->GetVersion();
+    return version.c_str();
+}
+
 uint64_t GeniusSDKGetBalance( GeniusTokenID token_id )
 {
     return GeniusNodeInstance->GetBalance( sgns::TokenID::FromBytes( token_id.data, sizeof( token_id.data ) ) );
@@ -470,4 +476,25 @@ void GeniusSDKShutdown()
         GeniusNodeInstance.reset(); // Explicitly destroy the shared_ptr
         std::cout << "GeniusNodeInstance has been shut down." << std::endl;
     }
+}
+
+GeniusTransactionManagerState GeniusSDKGetTransactionManagerState()
+{
+    if ( !GeniusNodeInstance )
+    {
+        return GENIUS_TM_STATE_CREATING;
+    }
+    return static_cast<GeniusTransactionManagerState>( GeniusNodeInstance->GetTransactionManagerState() );
+}
+
+GeniusTransactionStatus GeniusSDKGetTransactionStatus( const char *tx_id )
+{
+    if ( !GeniusNodeInstance || !tx_id )
+    {
+        return GENIUS_TX_STATUS_INVALID;
+    }
+
+    auto status = GeniusNodeInstance->GetTransactionStatus( std::string( tx_id ) );
+    // Map C++ enum to C enum (assumes values match)
+    return static_cast<GeniusTransactionStatus>( static_cast<int>( status ) );
 }

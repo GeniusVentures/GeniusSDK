@@ -81,6 +81,32 @@ typedef struct
 typedef char     JsonData_t[2048]; ///< ID/Path of the image to be processed
 typedef uint64_t PayAmount_t;      ///< Amount to be paid for the processing
 
+/**
+ * @brief Transaction Manager State enumeration (maps to TransactionManager::State)
+ * Values must match TransactionManager::State enum values
+ */
+typedef enum
+{
+    GENIUS_TM_STATE_CREATING     = 0, ///< Creating the object
+    GENIUS_TM_STATE_INITIALIZING = 1, ///< Initializing the object
+    GENIUS_TM_STATE_SYNCHING     = 2, ///< Synching the transactions
+    GENIUS_TM_STATE_READY        = 3  ///< Ready to process transactions
+} GeniusTransactionManagerState;
+
+/**
+ * @brief Transaction Status enumeration (maps to TransactionManager::TransactionStatus)
+ * Values must match TransactionManager::TransactionStatus enum values
+ */
+typedef enum
+{
+    GENIUS_TX_STATUS_CREATED   = 0, ///< Transaction created but not yet sent
+    GENIUS_TX_STATUS_SENDING   = 1, ///< Transaction is being sent
+    GENIUS_TX_STATUS_CONFIRMED = 2, ///< Transaction confirmed
+    GENIUS_TX_STATUS_VERIFYING = 3, ///< Transaction being verified
+    GENIUS_TX_STATUS_FAILED    = 4, ///< Transaction failed
+    GENIUS_TX_STATUS_INVALID   = 5  ///< Invalid transaction
+} GeniusTransactionStatus;
+
 GNUS_VISIBILITY_DEFAULT const char *GeniusSDKInit( const char *base_path,
                                                    const char *eth_private_key,
                                                    bool        autodht,
@@ -122,6 +148,12 @@ GNUS_VISIBILITY_DEFAULT const char *GeniusSDKGetBalanceGNUSString();
  * @return The price as a `double` value in USD.
  */
 GNUS_VISIBILITY_DEFAULT double GeniusSDKGetGNUSPrice();
+
+/**
+ * @brief       Retrieves the SDK version string.
+ * @return      A pointer to a null-terminated UTF-8 string representing the SDK version.
+ */
+GNUS_VISIBILITY_DEFAULT const char *GeniusSDKGetVersion();
 
 GNUS_VISIBILITY_DEFAULT GeniusAddress GeniusSDKGetAddress();
 
@@ -190,6 +222,19 @@ GNUS_VISIBILITY_DEFAULT uint64_t GeniusSDKGetCost( const JsonData_t jsondata );
  */
 GNUS_VISIBILITY_DEFAULT GeniusTokenValue GeniusSDKGetCostGNUS( const JsonData_t jsondata );
 GNUS_VISIBILITY_DEFAULT void             GeniusSDKProcess( const JsonData_t jsondata );
+
+/**
+ * @brief       Retrieves the current state of the Transaction Manager.
+ * @return      The current state as a @ref GeniusTransactionManagerState enum value.
+ */
+GNUS_VISIBILITY_DEFAULT GeniusTransactionManagerState GeniusSDKGetTransactionManagerState();
+
+/**
+ * @brief       Retrieves the status of a specific transaction.
+ * @param[in]   tx_id A null-terminated string representing the transaction ID.
+ * @return      The transaction status as a @ref GeniusTransactionStatus enum value.
+ */
+GNUS_VISIBILITY_DEFAULT GeniusTransactionStatus GeniusSDKGetTransactionStatus( const char *tx_id );
 
 GNUS_EXPORT_END
 
