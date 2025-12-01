@@ -225,7 +225,8 @@ const char *GeniusSDKInit( const char *base_path,
                                                                                        autodht,
                                                                                        process,
                                                                                        baseport,
-                                                                                       is_full_node ) );
+                                                                                       is_full_node,
+                                                                                       true ) );
         ret_val.append( load_config_ret.value().BaseWritePath );
     }
     else
@@ -265,7 +266,8 @@ const char *GeniusSDKInitSecure( const char *base_path,
                                                                                        autodht,
                                                                                        process,
                                                                                        baseport,
-                                                                                       is_full_node ) );
+                                                                                       is_full_node,
+                                                                                       true ) );
         ret_val.append( load_config_ret.value().BaseWritePath );
     }
     else
