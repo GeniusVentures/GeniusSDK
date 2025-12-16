@@ -371,7 +371,7 @@ jobs:
 
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
               # Get the commit SHA that the release tag points to
-              RELEASE_COMMIT=$(git rev-list -n 1 "$RELEASE_TAG" 2>/dev/null || echo "")
+              RELEASE_COMMIT=$(gh release view "$RELEASE_TAG" --json targetCommitish -q .targetCommitish 2>/dev/null || echo "")
               
               if [ "$RELEASE_COMMIT" = "${{ github.sha }}" ]; then
                   echo "Release $RELEASE_TAG already exists at correct commit ${{ github.sha }}. Skipping recreation."
