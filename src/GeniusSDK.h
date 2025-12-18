@@ -107,6 +107,13 @@ typedef enum
     GENIUS_TX_STATUS_INVALID   = 5  ///< Invalid transaction
 } GeniusTransactionStatus;
 
+typedef enum
+{
+    GENIUS_PR_STATUS_DISABLED   = 0, ///< Processing was disabled
+    GENIUS_PR_STATUS_IDLE       = 1, ///< Not processing at the moment
+    GENIUS_PR_STATUS_PROCESSING = 2, ///< Currently processing a job s
+} GeniusProcessingStatus;
+
 GNUS_VISIBILITY_DEFAULT const char *GeniusSDKInit( const char *base_path,
                                                    const char *eth_private_key,
                                                    bool        autodht,
@@ -235,6 +242,8 @@ GNUS_VISIBILITY_DEFAULT GeniusTransactionManagerState GeniusSDKGetTransactionMan
  * @return      The transaction status as a @ref GeniusTransactionStatus enum value.
  */
 GNUS_VISIBILITY_DEFAULT GeniusTransactionStatus GeniusSDKGetTransactionStatus( const char *tx_id );
+
+GNUS_VISIBILITY_DEFAULT GeniusProcessingStatus GeniusSDKGetProcessingStatus();
 
 GNUS_EXPORT_END
 

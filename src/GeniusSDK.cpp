@@ -12,6 +12,7 @@
 #include <boost/multiprecision/cpp_int/import_export.hpp>
 #include <boost/algorithm/hex.hpp>
 #include <memory>
+#include <processing/processing_service.hpp>
 #include <rapidjson/document.h>
 #include <rapidjson/writer.h>
 #include <rapidjson/filereadstream.h>
@@ -499,4 +500,28 @@ GeniusTransactionStatus GeniusSDKGetTransactionStatus( const char *tx_id )
     auto status = GeniusNodeInstance->GetTransactionStatus( std::string( tx_id ) );
     // Map C++ enum to C enum (assumes values match)
     return static_cast<GeniusTransactionStatus>( static_cast<int>( status ) );
+}
+
+GeniusProcessingStatus GeniusSDKGetProcessingStatus()
+{
+    using Status = sgns::processing::ProcessingServiceImpl::Status;
+
+    if ( !GeniusNodeInstance )
+    {
+        return GENIUS_PR_STATUS_DISABLED;
+    }
+
+    auto status = GeniusNodeInstance->GetProcessingStatus();
+
+    switch ( status )
+    {
+        case Status::DISABLED:
+            return GeniusProcessingStatus::GENIUS_PR_STATUS_DISABLED;
+        case Status::PROCESSING:
+            return GeniusProcessingStatus::GENIUS_PR_STATUS_PROCESSING;
+        case Status::IDLE:
+            return GeniusProcessingStatus::GENIUS_PR_STATUS_IDLE;
+        default:
+            return GeniusProcessingStatus::GENIUS_PR_STATUS_DISABLED;
+    }
 }
