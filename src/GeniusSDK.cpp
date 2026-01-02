@@ -285,14 +285,27 @@ const char *GeniusSDKInitMinimal( const char *base_path, const char *eth_private
     return GeniusSDKInit( base_path, eth_private_key, true, true, baseport, false );
 }
 
-void GeniusSDKProcess( const JsonData_t jsondata )
+GeniusNodeReturnValue GeniusSDKProcess( const JsonData_t jsondata )
 {
-    auto result = GeniusNodeInstance->ProcessImage( std::string{ jsondata } );
-
-    if ( !result.has_value() )
+    GeniusNodeReturnValue ret = GENIUS_NODE_ERROR_NOT_INITIALIZED;
+    do
     {
-        std::cerr << "Error processing image: " << result.error() << std::endl;
-    }
+        if ( !GeniusNodeInstance )
+        {
+            break;
+        }
+        auto result = GeniusNodeInstance->ProcessImage( std::string{ jsondata } );
+
+        if ( !result.has_value() )
+        {
+            ret = GENIUS_NODE_ERROR_PROCESS_IMAGE;
+            std::cerr << "Error processing image: " << result.error() << std::endl;
+            break;
+        }
+        ret = GENIUS_NODE_RET_OK;
+    } while ( 0 );
+
+    return ret;
 }
 
 double GeniusSDKGetGNUSPrice()
@@ -379,74 +392,158 @@ void GeniusSDKFreeTransactions( GeniusMatrix matrix )
     free( matrix.ptr );
 }
 
-void GeniusSDKMint( uint64_t amount, const char *transaction_hash, const char *chain_id, GeniusTokenID token_id )
+GeniusNodeReturnValue GeniusSDKMint( uint64_t      amount,
+                                     const char   *transaction_hash,
+                                     const char   *chain_id,
+                                     GeniusTokenID token_id )
 {
-    auto result = GeniusNodeInstance->MintTokens( amount,
-                                                  std::string( transaction_hash ),
-                                                  std::string( chain_id ),
-                                                  sgns::TokenID::FromBytes( token_id.data, sizeof( token_id.data ) ) );
-
-    if ( !result.has_value() )
+    GeniusNodeReturnValue ret = GENIUS_NODE_ERROR_NOT_INITIALIZED;
+    do
     {
-        std::cerr << "Error minting tokens: " << result.error() << std::endl;
-    }
-}
+        if ( !GeniusNodeInstance )
+        {
+            break;
+        }
+        auto result = GeniusNodeInstance->MintTokens(
+            amount,
+            std::string( transaction_hash ),
+            std::string( chain_id ),
+            sgns::TokenID::FromBytes( token_id.data, sizeof( token_id.data ) ) );
 
-void GeniusSDKMintGNUS( const GeniusTokenValue *amount, const char *transaction_hash, const char *chain_id )
-{
-    auto     parseRes = GeniusNodeInstance->ParseTokens( std::string( amount->value ),
-                                                     sgns::TokenID::FromBytes( { 0x00 } ) );
-    uint64_t raw      = parseRes.has_value() ? parseRes.value() : 0;
-
-    auto result = GeniusNodeInstance->MintTokens( raw,
-                                                  std::string( transaction_hash ),
-                                                  std::string( chain_id ),
-                                                  sgns::TokenID::FromBytes( { 0x00 } ) );
-    if ( !result.has_value() )
-    {
-        std::cerr << "Error minting tokens: " << result.error() << std::endl;
-    }
-}
-
-GeniusAddress GeniusSDKGetAddress()
-{
-    auto address = GeniusNodeInstance->GetAddress();
-
-    GeniusAddress ret;
-
-    std::copy( address.cbegin(), address.cend(), ret.address );
+        if ( !result.has_value() )
+        {
+            ret = GENIUS_NODE_ERROR_MINT;
+            std::cerr << "Error minting tokens: " << result.error() << std::endl;
+            break;
+        }
+        ret = GENIUS_NODE_RET_OK;
+    } while ( 0 );
 
     return ret;
 }
 
-bool GeniusSDKTransfer( uint64_t amount, GeniusAddress *dest, GeniusTokenID token_id )
+GeniusNodeReturnValue GeniusSDKMintGNUS( const GeniusTokenValue *amount,
+                                         const char             *transaction_hash,
+                                         const char             *chain_id )
 {
-    std::string destination( dest->address );
-    auto        result = GeniusNodeInstance->TransferFunds(
-        amount,
-        destination,
-        sgns::TokenID::FromBytes( token_id.data, sizeof( token_id.data ) ) );
+    GeniusNodeReturnValue ret = GENIUS_NODE_ERROR_NOT_INITIALIZED;
+    do
+    {
+        if ( !GeniusNodeInstance )
+        {
+            break;
+        }
+        auto parseRes = GeniusNodeInstance->ParseTokens( std::string( amount->value ),
+                                                         sgns::TokenID::FromBytes( { 0x00 } ) );
+        if ( !parseRes.has_value() )
+        {
+            ret = GENIUS_NODE_INVALID_ARGUMENT;
+            std::cerr << "Error minting tokens, invalid argument: " << parseRes.error() << std::endl;
+            break;
+        }
+        GeniusTokenID gnus_id;
+        memset(gnus_id.data, 0, sizeof(gnus_id.data));
+        ret = GeniusSDKMint( parseRes.value(),
+                             transaction_hash ,
+                             chain_id ,
+                             gnus_id );
+    } while ( 0 );
 
-    return result.has_value();
+    return ret;
 }
 
-bool GeniusSDKTransferGNUS( const GeniusTokenValue *amount, GeniusAddress *dest )
+GeniusAddress GeniusSDKGetAddress()
 {
-    auto     parseRes = GeniusNodeInstance->ParseTokens( std::string( amount->value ),
-                                                     sgns::TokenID::FromBytes( { 0x00 } ) );
-    uint64_t raw      = parseRes.has_value() ? parseRes.value() : 0;
+    GeniusAddress ret;
+    if ( GeniusNodeInstance )
+    {
+        auto address = GeniusNodeInstance->GetAddress();
 
-    std::string to( dest->address );
-    auto        result = GeniusNodeInstance->TransferFunds( raw, to, sgns::TokenID::FromBytes( { 0x00 } ) );
-    return result.has_value();
+        std::copy( address.cbegin(), address.cend(), ret.address );
+    }
+
+    return ret;
 }
 
-bool GeniusSDKPayDev( uint64_t amount, GeniusTokenID token_id )
+GeniusNodeReturnValue GeniusSDKTransfer( uint64_t amount, GeniusAddress *dest, GeniusTokenID token_id )
 {
-    auto result = GeniusNodeInstance->PayDev( amount,
-                                              sgns::TokenID::FromBytes( token_id.data, sizeof( token_id.data ) ) );
+    GeniusNodeReturnValue ret = GENIUS_NODE_ERROR_NOT_INITIALIZED;
+    do
+    {
+        if ( !GeniusNodeInstance )
+        {
+            break;
+        }
+        std::string destination( dest->address );
+        auto        result = GeniusNodeInstance->TransferFunds(
+            amount,
+            destination,
+            sgns::TokenID::FromBytes( token_id.data, sizeof( token_id.data ) ) );
+        if ( !result.has_value() )
+        {
+            ret = GENIUS_NODE_ERROR_TRANSFER;
+            break;
+        }
+        ret = GENIUS_NODE_RET_OK;
+    } while ( 0 );
 
-    return result.has_value();
+    return ret;
+}
+
+GeniusNodeReturnValue GeniusSDKTransferGNUS( const GeniusTokenValue *amount, GeniusAddress *dest )
+{
+    GeniusNodeReturnValue ret = GENIUS_NODE_ERROR_NOT_INITIALIZED;
+    do
+    {
+        if ( !GeniusNodeInstance )
+        {
+            break;
+        }
+        if ( !amount )
+        {
+            ret = GENIUS_NODE_INVALID_ARGUMENT;
+            break;
+        }
+        if ( !dest )
+        {
+            ret = GENIUS_NODE_INVALID_ARGUMENT;
+            break;
+        }
+        auto parseRes = GeniusNodeInstance->ParseTokens( std::string( amount->value ),
+                                                         sgns::TokenID::FromBytes( { 0x00 } ) );
+        if ( !parseRes.has_value() )
+        {
+            ret = GENIUS_NODE_INVALID_ARGUMENT;
+            break;
+        }
+        GeniusTokenID gnus_id;
+        memset(gnus_id.data, 0, sizeof(gnus_id.data));
+        ret = GeniusSDKTransfer( parseRes.value(), dest, gnus_id );
+    } while ( 0 );
+
+    return ret;
+}
+
+GeniusNodeReturnValue GeniusSDKPayDev( uint64_t amount, GeniusTokenID token_id )
+{
+    GeniusNodeReturnValue ret = GENIUS_NODE_ERROR_NOT_INITIALIZED;
+    do
+    {
+        if ( !GeniusNodeInstance )
+        {
+            break;
+        }
+        auto result = GeniusNodeInstance->PayDev( amount,
+                                                  sgns::TokenID::FromBytes( token_id.data, sizeof( token_id.data ) ) );
+        if ( !result.has_value() )
+        {
+            ret = GENIUS_NODE_ERROR_PAY_DEV;
+            break;
+        }
+        ret = GENIUS_NODE_RET_OK;
+    } while ( 0 );
+
+    return ret;
 }
 
 uint64_t GeniusSDKGetCost( const JsonData_t jsondata )
@@ -456,29 +553,34 @@ uint64_t GeniusSDKGetCost( const JsonData_t jsondata )
 
 GeniusTokenValue GeniusSDKGetCostGNUS( const JsonData_t jsondata )
 {
-    uint64_t rawCost = GeniusNodeInstance->GetProcessCost( jsondata );
-
     GeniusTokenValue tv;
-    auto             fmt = GeniusNodeInstance->FormatTokens( rawCost, sgns::TokenID::FromBytes( { 0x00 } ) );
-    if ( fmt.has_value() )
+    if ( GeniusNodeInstance )
     {
-        std::strncpy( tv.value, fmt.value().c_str(), sizeof( tv.value ) - 1 );
+        uint64_t rawCost = GeniusNodeInstance->GetProcessCost( jsondata );
+
+        auto fmt = GeniusNodeInstance->FormatTokens( rawCost, sgns::TokenID::FromBytes( { 0x00 } ) );
+        if ( fmt.has_value() )
+        {
+            std::strncpy( tv.value, fmt.value().c_str(), sizeof( tv.value ) - 1 );
+        }
+        else
+        {
+            std::strncpy( tv.value, "0", sizeof( tv.value ) - 1 );
+        }
+        tv.value[sizeof( tv.value ) - 1] = '\0';
     }
-    else
-    {
-        std::strncpy( tv.value, "0", sizeof( tv.value ) - 1 );
-    }
-    tv.value[sizeof( tv.value ) - 1] = '\0';
     return tv;
 }
 
-void GeniusSDKShutdown()
+GeniusNodeReturnValue GeniusSDKShutdown()
 {
+    GeniusNodeReturnValue ret = GENIUS_NODE_RET_OK;
     if ( GeniusNodeInstance )
     {
         GeniusNodeInstance.reset(); // Explicitly destroy the shared_ptr
         std::cout << "GeniusNodeInstance has been shut down." << std::endl;
     }
+    return ret;
 }
 
 GeniusTransactionManagerState GeniusSDKGetTransactionManagerState()
@@ -490,6 +592,15 @@ GeniusTransactionManagerState GeniusSDKGetTransactionManagerState()
     return static_cast<GeniusTransactionManagerState>( GeniusNodeInstance->GetTransactionManagerState() );
 }
 
+GeniusNodeState GeniusSDKGetNodeState()
+{
+    if ( !GeniusNodeInstance )
+    {
+        return GENIUS_NODE_CREATING;
+    }
+    return static_cast<GeniusNodeState>( GeniusNodeInstance->GetState() );
+}
+
 GeniusTransactionStatus GeniusSDKGetTransactionStatus( const char *tx_id )
 {
     if ( !GeniusNodeInstance || !tx_id )
@@ -498,7 +609,7 @@ GeniusTransactionStatus GeniusSDKGetTransactionStatus( const char *tx_id )
     }
 
     auto status = GeniusNodeInstance->GetTransactionStatus( std::string( tx_id ) );
-    // Map C++ enum to C enum (assumes values match)
+
     return static_cast<GeniusTransactionStatus>( static_cast<int>( status ) );
 }
 

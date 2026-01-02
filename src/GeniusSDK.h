@@ -81,10 +81,34 @@ typedef struct
 typedef char     JsonData_t[2048]; ///< ID/Path of the image to be processed
 typedef uint64_t PayAmount_t;      ///< Amount to be paid for the processing
 
+typedef enum
+{
+    GENIUS_NODE_RET_OK = 0,
+    GENIUS_NODE_ERROR_NOT_INITIALIZED,
+    GENIUS_NODE_ERROR_PROCESS_IMAGE,
+    GENIUS_NODE_ERROR_MINT,
+    GENIUS_NODE_INVALID_ARGUMENT,
+    GENIUS_NODE_ERROR_TRANSFER,
+    GENIUS_NODE_ERROR_PAY_DEV
+
+} GeniusNodeReturnValue;
+
 /**
- * @brief Transaction Manager State enumeration (maps to TransactionManager::State)
- * Values must match TransactionManager::State enum values
+ * @brief Node state enumeration (maps to GeniusNode::NodeState)
+ * Values must match GeniusNode::NodeState enum values
  */
+typedef enum
+{
+    GENIUS_NODE_CREATING = 0,
+    GENIUS_NODE_MIGRATING_DATABASE,
+    GENIUS_NODE_INITIALIZING_DATABASE,
+    GENIUS_NODE_INITIALIZING_PROCESSING,
+    GENIUS_NODE_INITIALIZING_BLOCKCHAIN,
+    GENIUS_NODE_INITIALIZING_TRANSACTIONS,
+    GENIUS_NODE_INITIALIZING_DHT,
+    GENIUS_NODE_READY,
+} GeniusNodeState;
+
 typedef enum
 {
     GENIUS_TM_STATE_CREATING     = 0, ///< Creating the object
@@ -114,23 +138,23 @@ typedef enum
     GENIUS_PR_STATUS_PROCESSING = 2, ///< Currently processing a job s
 } GeniusProcessingStatus;
 
-GNUS_VISIBILITY_DEFAULT const char *GeniusSDKInit( const char *base_path,
-                                                   const char *eth_private_key,
-                                                   bool        autodht,
-                                                   bool        process,
-                                                   uint16_t    baseport,
-                                                   bool        is_full_node );
-GNUS_VISIBILITY_DEFAULT const char *GeniusSDKInitSecure( const char *base_path,
-                                                         const char *dev_config,
-                                                         const char *eth_private_key,
-                                                         bool        autodht,
-                                                         bool        process,
-                                                         uint16_t    baseport,
-                                                         bool        is_full_node );
-GNUS_VISIBILITY_DEFAULT const char *GeniusSDKInitMinimal( const char *base_path,
-                                                          const char *eth_private_key,
-                                                          uint16_t    baseport );
-GNUS_VISIBILITY_DEFAULT void        GeniusSDKShutdown();
+GNUS_VISIBILITY_DEFAULT const char           *GeniusSDKInit( const char *base_path,
+                                                             const char *eth_private_key,
+                                                             bool        autodht,
+                                                             bool        process,
+                                                             uint16_t    baseport,
+                                                             bool        is_full_node );
+GNUS_VISIBILITY_DEFAULT const char           *GeniusSDKInitSecure( const char *base_path,
+                                                                   const char *dev_config,
+                                                                   const char *eth_private_key,
+                                                                   bool        autodht,
+                                                                   bool        process,
+                                                                   uint16_t    baseport,
+                                                                   bool        is_full_node );
+GNUS_VISIBILITY_DEFAULT const char           *GeniusSDKInitMinimal( const char *base_path,
+                                                                    const char *eth_private_key,
+                                                                    uint16_t    baseport );
+GNUS_VISIBILITY_DEFAULT GeniusNodeReturnValue GeniusSDKShutdown();
 
 /**
  * @brief Retrieves the current balance for a specific token.
@@ -175,10 +199,10 @@ GNUS_VISIBILITY_DEFAULT void         GeniusSDKFreeTransactions( GeniusMatrix mat
  * @param[in] chain_id         A null-terminated string representing the blockchain chain ID.
  * @param[in] token_id         Token identifier.
  */
-GNUS_VISIBILITY_DEFAULT void GeniusSDKMint( uint64_t      amount,
-                                            const char   *transaction_hash,
-                                            const char   *chain_id,
-                                            GeniusTokenID token_id );
+GNUS_VISIBILITY_DEFAULT GeniusNodeReturnValue GeniusSDKMint( uint64_t      amount,
+                                                             const char   *transaction_hash,
+                                                             const char   *chain_id,
+                                                             GeniusTokenID token_id );
 
 /**
  * @brief     Mints new tokens using a **Genius Token** string format.
@@ -186,9 +210,9 @@ GNUS_VISIBILITY_DEFAULT void GeniusSDKMint( uint64_t      amount,
  * @param[in] transaction_hash A null-terminated string representing the transaction hash.
  * @param[in] chain_id         A null-terminated string representing the blockchain chain ID.
  */
-GNUS_VISIBILITY_DEFAULT void GeniusSDKMintGNUS( const GeniusTokenValue *amount,
-                                                const char             *transaction_hash,
-                                                const char             *chain_id );
+GNUS_VISIBILITY_DEFAULT GeniusNodeReturnValue GeniusSDKMintGNUS( const GeniusTokenValue *amount,
+                                                                 const char             *transaction_hash,
+                                                                 const char             *chain_id );
 
 /**
  * @brief     Transfers tokens in **Minion Tokens** to another address.
@@ -197,7 +221,9 @@ GNUS_VISIBILITY_DEFAULT void GeniusSDKMintGNUS( const GeniusTokenValue *amount,
  * @param[in] token_id  Token identifier.
  * @return `true` if the transfer is successful, `false` otherwise.
  */
-GNUS_VISIBILITY_DEFAULT bool GeniusSDKTransfer( uint64_t amount, GeniusAddress *dest, GeniusTokenID token_id );
+GNUS_VISIBILITY_DEFAULT GeniusNodeReturnValue GeniusSDKTransfer( uint64_t       amount,
+                                                                 GeniusAddress *dest,
+                                                                 GeniusTokenID  token_id );
 
 /**
  * @brief     Transfers tokens using a **Genius Token** string representation.
@@ -205,7 +231,8 @@ GNUS_VISIBILITY_DEFAULT bool GeniusSDKTransfer( uint64_t amount, GeniusAddress *
  * @param[in] dest Pointer to a `GeniusAddress` struct representing the recipient's address.
  * @return `true` if the transfer is successful, `false` otherwise.
  */
-GNUS_VISIBILITY_DEFAULT bool GeniusSDKTransferGNUS( const GeniusTokenValue *amount, GeniusAddress *dest );
+GNUS_VISIBILITY_DEFAULT GeniusNodeReturnValue GeniusSDKTransferGNUS( const GeniusTokenValue *amount,
+                                                                     GeniusAddress          *dest );
 
 /**
  * @brief     Pays the developer for in-game transactions.
@@ -213,7 +240,7 @@ GNUS_VISIBILITY_DEFAULT bool GeniusSDKTransferGNUS( const GeniusTokenValue *amou
  * @param[in] token_id token identifier.
  * @return `true` if the transfer is successful, `false` otherwise.
  */
-GNUS_VISIBILITY_DEFAULT bool GeniusSDKPayDev( uint64_t amount, GeniusTokenID token_id );
+GNUS_VISIBILITY_DEFAULT GeniusNodeReturnValue GeniusSDKPayDev( uint64_t amount, GeniusTokenID token_id );
 
 /**
  * @brief Computes the cost of an operation based on the given JSON data (in **Minion Tokens**).
@@ -227,8 +254,8 @@ GNUS_VISIBILITY_DEFAULT uint64_t GeniusSDKGetCost( const JsonData_t jsondata );
  * @param[in] jsondata The JSON data to be processed.
  * @return A `GeniusTokenValue` struct representing the cost in Genius Tokens.
  */
-GNUS_VISIBILITY_DEFAULT GeniusTokenValue GeniusSDKGetCostGNUS( const JsonData_t jsondata );
-GNUS_VISIBILITY_DEFAULT void             GeniusSDKProcess( const JsonData_t jsondata );
+GNUS_VISIBILITY_DEFAULT GeniusTokenValue      GeniusSDKGetCostGNUS( const JsonData_t jsondata );
+GNUS_VISIBILITY_DEFAULT GeniusNodeReturnValue GeniusSDKProcess( const JsonData_t jsondata );
 
 /**
  * @brief       Retrieves the current state of the Transaction Manager.

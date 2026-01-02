@@ -13,7 +13,7 @@ set_target_properties(GeniusSDK PROPERTIES
     OUTPUT_NAME GeniusSDK
     PUBLIC_HEADER "${ALL_HDRS}"
 )
-target_link_libraries(GeniusSDK PUBLIC sgns::sgns_account)
+target_link_libraries(GeniusSDK PUBLIC sgns::genius_node)
 
 add_library(GeniusSDK_shared SHARED ${ALL_SRCS} ${ALL_HDRS})
 GENERATE_EXPORT_HEADER(GeniusSDK_shared EXPORT_FILE_NAME ${CMAKE_BINARY_DIR}/GeniusSDKExport.h)
@@ -25,7 +25,7 @@ set_target_properties(GeniusSDK_shared PROPERTIES
 )
 
 
-target_link_libraries(GeniusSDK_shared PUBLIC sgns::sgns_account)
+target_link_libraries(GeniusSDK_shared PUBLIC sgns::genius_node)
 
 geniussdk_install(GeniusSDK)        
 geniussdk_install(GeniusSDK_shared)  
@@ -43,7 +43,7 @@ if(APPLE)
             MACOSX_FRAMEWORK_INFO_PLIST "${CMAKE_CURRENT_LIST_DIR}/../cmake/GeniusSDK_Info_ios.plist"
             PUBLIC_HEADER "${ALL_HDRS};${CMAKE_BINARY_DIR}/GeniusSDKExport.h"
         )
-        target_link_libraries(GeniusSDK_framework PUBLIC sgns::sgns_account "-framework Security")
+        target_link_libraries(GeniusSDK_framework PUBLIC sgns::genius_node "-framework Security")
         geniussdk_install(GeniusSDK_framework)
         target_link_libraries(GeniusSDK_shared
         PUBLIC
@@ -59,7 +59,7 @@ if(APPLE)
             INSTALL_NAME_DIR "@rpath"
             PUBLIC_HEADER "${ALL_HDRS};${CMAKE_BINARY_DIR}/GeniusSDKExport.h"
         )
-        target_link_libraries(GeniusSDK_bundle PUBLIC sgns::sgns_account)
+        target_link_libraries(GeniusSDK_bundle PUBLIC sgns::genius_node)
         geniussdk_install(GeniusSDK_bundle)
     endif()
 endif()

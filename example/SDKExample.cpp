@@ -41,10 +41,13 @@ static void ExampleTransfer();
 static void ExampleTransferGNUS();
 static void shutdownSDK();
 
-#if (SUPPRESS_OUTPUT == 1)
+#if ( SUPPRESS_OUTPUT == 1 )
 static void suppressSDKLogs();
 #endif
-static void     getSDKConfig( char *base_path, char *eth_private_key, int32_t *autodht, int32_t *process,
+static void     getSDKConfig( char     *base_path,
+                              char     *eth_private_key,
+                              int32_t  *autodht,
+                              int32_t  *process,
                               uint16_t *baseport );
 static bool     loadJsonFromFile( const char *filename, JsonData_t jsonBuffer );
 static bool     parseGeniusTokenID( const char *hex, GeniusTokenID *out );
@@ -55,7 +58,7 @@ static uint64_t promptUInt64( const char *prompt, uint64_t defaultValue );
 static void     readLine( char *buffer, size_t bufferSize );
 
 #define SUPPRESS_OUTPUT 0
-#if (SUPPRESS_OUTPUT == 0)
+#if ( SUPPRESS_OUTPUT == 0 )
 #define userPrint printf
 #else
 static int original_stdout_fd = -1; ///< To preserve original stdout when suppressing SDK logs.
@@ -74,10 +77,10 @@ struct MenuOption
 // Generic submenu runner
 static void runSubMenu( const char *title, const MenuOption *menu )
 {
-    while (true)
+    while ( true )
     {
         userPrint( "\n--- %s ---\n", title );
-        for (const MenuOption *opt = menu; opt->description; ++opt)
+        for ( const MenuOption *opt = menu; opt->description; ++opt )
         {
             userPrint( "%2d - %s\n", opt->option, opt->description );
         }
@@ -85,20 +88,20 @@ static void runSubMenu( const char *title, const MenuOption *menu )
 
         int  choice  = promptInt( "Enter choice: ", -1 );
         bool handled = false;
-        for (const MenuOption *opt = menu; opt->description; ++opt)
+        for ( const MenuOption *opt = menu; opt->description; ++opt )
         {
-            if (opt->option == choice)
+            if ( opt->option == choice )
             {
                 handled = true;
                 opt->function(); // call routine
                 return;          // back to main menu
             }
         }
-        if (choice == 0)
+        if ( choice == 0 )
         {
             return; // Back
         }
-        if (!handled)
+        if ( !handled )
         {
             userPrint( "Invalid choice. Please select again.\n" );
         }
@@ -107,7 +110,7 @@ static void runSubMenu( const char *title, const MenuOption *menu )
 
 int main()
 {
-#if (SUPPRESS_OUTPUT == 1)
+#if ( SUPPRESS_OUTPUT == 1 )
     suppressSDKLogs();
 #endif
 
@@ -139,7 +142,7 @@ int main()
         { 0, nullptr, nullptr },
     };
 
-    while (true)
+    while ( true )
     {
         struct MenuOption
         {
@@ -155,7 +158,7 @@ int main()
                                                { 0, "Exit", nullptr } };
 
         userPrint( "\n=== Main Menu ===\n" );
-        for (const auto &opt : mainMenu)
+        for ( const auto &opt : mainMenu )
         {
             userPrint( "%2d - %s\n", opt.option, opt.description );
         }
@@ -163,12 +166,12 @@ int main()
         int  choice  = promptInt( "Enter choice: ", -1 );
         bool handled = false;
 
-        for (const auto &opt : mainMenu)
+        for ( const auto &opt : mainMenu )
         {
-            if (opt.option == choice)
+            if ( opt.option == choice )
             {
                 handled = true;
-                if (opt.function)
+                if ( opt.function )
                 {
                     opt.function();
                 }
@@ -181,7 +184,7 @@ int main()
             }
         }
 
-        if (!handled)
+        if ( !handled )
         {
             userPrint( "Invalid choice. Please select again.\n" );
         }
@@ -205,7 +208,7 @@ static void initSDK()
     getSDKConfig( base_path, eth_private_key, &autodht, &process, &baseport );
 
     const char *init_result = GeniusSDKInit( base_path, eth_private_key, autodht, process, baseport, false );
-    if (!init_result || strncmp( init_result, "Initialized", strlen( "Initialized" ) ) != 0)
+    if ( !init_result || strncmp( init_result, "Initialized", strlen( "Initialized" ) ) != 0 )
     {
         userPrint( "Failed to initialize GeniusSDK. Error: %s\n", init_result ? init_result : "No response" );
         return;
@@ -229,9 +232,9 @@ static void ExampleGetBalance()
     promptString( "Enter child-token ID (hex, or press enter for default): ", tokenId, MAX_INPUT_SIZE, "" );
 
     GeniusTokenID tid = {};
-    if (strlen( tokenId ) > 0)
+    if ( strlen( tokenId ) > 0 )
     {
-        if (!parseGeniusTokenID( tokenId, &tid ))
+        if ( !parseGeniusTokenID( tokenId, &tid ) )
         {
             printf( "Invalid token ID\n" );
             return;
@@ -269,14 +272,15 @@ static void ExampleMint()
     promptString( "Token ID: ", tokenId, MAX_INPUT_SIZE, "" );
 
     GeniusTokenID tid;
-    if (!parseGeniusTokenID( tokenId, &tid ))
+    if ( !parseGeniusTokenID( tokenId, &tid ) )
     {
         userPrint( "Invalid token ID\n" );
         return;
     }
 
     GeniusSDKMint( amount, txHash, chainId, tid );
-    userPrint( "Minted %llu tokens of “%s” successfully.\n", (unsigned long long)amount,
+    userPrint( "Minted %llu tokens of “%s” successfully.\n",
+               (unsigned long long)amount,
                tokenId[0] ? tokenId : "<default>" );
 }
 
@@ -313,14 +317,14 @@ static void ExampleTransfer()
     userPrint( "Enter recipient wallet address: " );
     readLine( recipient.address, sizeof( recipient.address ) );
 
-    if (!parseGeniusTokenID( tokenId, &tid ))
+    if ( !parseGeniusTokenID( tokenId, &tid ) )
     {
         userPrint( "Invalid token ID\n" );
         return;
     }
 
-    bool transferSuccess = GeniusSDKTransfer( amount, &recipient, tid );
-    userPrint( "Token transfer %s.\n", transferSuccess ? "successful" : "failed" );
+    auto transferSuccess = GeniusSDKTransfer( amount, &recipient, tid );
+    userPrint( "Token transfer %s.\n", transferSuccess == GENIUS_NODE_RET_OK ? "successful" : "failed" );
 }
 
 /**
@@ -376,11 +380,13 @@ static void ExampleGetOutTransactions()
 static void processSampleData()
 {
     char jsonFilePath[MAX_INPUT_SIZE] = "sample.json";
-    promptString( "Enter JSON file path for sample data (Press Enter for default: sample.json): ", jsonFilePath,
-                  MAX_INPUT_SIZE, "sample.json" );
+    promptString( "Enter JSON file path for sample data (Press Enter for default: sample.json): ",
+                  jsonFilePath,
+                  MAX_INPUT_SIZE,
+                  "sample.json" );
 
     JsonData_t localSampleData;
-    if (!loadJsonFromFile( jsonFilePath, localSampleData ))
+    if ( !loadJsonFromFile( jsonFilePath, localSampleData ) )
     {
         userPrint( "Failed to load JSON file.\n" );
         return;
@@ -396,11 +402,13 @@ static void processSampleData()
 static void getProcessingCost()
 {
     char jsonFilePath[MAX_INPUT_SIZE] = "sample.json";
-    promptString( "Enter JSON file path for sample data (Press Enter for default: sample.json): ", jsonFilePath,
-                  MAX_INPUT_SIZE, "sample.json" );
+    promptString( "Enter JSON file path for sample data (Press Enter for default: sample.json): ",
+                  jsonFilePath,
+                  MAX_INPUT_SIZE,
+                  "sample.json" );
 
     JsonData_t localSampleData;
-    if (!loadJsonFromFile( jsonFilePath, localSampleData ))
+    if ( !loadJsonFromFile( jsonFilePath, localSampleData ) )
     {
         userPrint( "Failed to load JSON file.\n" );
         return;
@@ -418,7 +426,7 @@ static void shutdownSDK()
     userPrint( "GeniusSDK shut down successfully.\n" );
 }
 
-#if (SUPPRESS_OUTPUT == 1)
+#if ( SUPPRESS_OUTPUT == 1 )
 /**
  * @brief Suppresses SDK logs by redirecting stdout to /dev/null.
  */
@@ -430,7 +438,7 @@ static void suppressSDKLogs()
     original_stdout_fd = _dup( _fileno( stdout ) );
 
     int null_fd = _open( "NUL", _O_WRONLY );
-    if (null_fd != -1)
+    if ( null_fd != -1 )
     {
         _dup2( null_fd, _fileno( stdout ) );
         _close( null_fd );
@@ -439,7 +447,7 @@ static void suppressSDKLogs()
     original_stdout_fd = dup( STDOUT_FILENO );
 
     int devnull_fd = open( "/dev/null", O_WRONLY );
-    if (devnull_fd != -1)
+    if ( devnull_fd != -1 )
     {
         dup2( devnull_fd, STDOUT_FILENO );
         close( devnull_fd );
@@ -456,13 +464,18 @@ static void suppressSDKLogs()
  * @param[out] process Pointer to store the processing flag.
  * @param[out] baseport Pointer to store the base port number.
  */
-static void getSDKConfig( char *base_path, char *eth_private_key, int32_t *autodht, int32_t *process,
+static void getSDKConfig( char     *base_path,
+                          char     *eth_private_key,
+                          int32_t  *autodht,
+                          int32_t  *process,
                           uint16_t *baseport )
 {
     userPrint( "\nConfigure GeniusSDK Initialization:\n" );
 
     promptString( "Enter base path (Press Enter for default: ./): ", base_path, MAX_INPUT_SIZE, "./" );
-    promptString( "Enter Ethereum private key (Press Enter for default): ", eth_private_key, MAX_INPUT_SIZE,
+    promptString( "Enter Ethereum private key (Press Enter for default): ",
+                  eth_private_key,
+                  MAX_INPUT_SIZE,
                   "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef" );
     *autodht  = promptInt( "Enable AutoDHT? (1 = Yes, 0 = No, Press Enter for default: 1): ", 1 );
     *process  = promptInt( "Enable processing? (1 = Yes, 0 = No, Press Enter for default: 1): ", 1 );
@@ -478,7 +491,7 @@ static void getSDKConfig( char *base_path, char *eth_private_key, int32_t *autod
 static bool loadJsonFromFile( const char *filename, JsonData_t jsonBuffer )
 {
     FILE *fp = fopen( filename, "rb" );
-    if (!fp)
+    if ( !fp )
     {
         userPrint( "Error: Could not open JSON file: %s\n", filename );
         return false;
@@ -499,26 +512,26 @@ static bool parseGeniusTokenID( const char *hex, GeniusTokenID *out )
 {
     size_t i;
 
-    if (out == NULL)
+    if ( out == NULL )
     {
         return false;
     }
 
     memset( out->data, 0, sizeof( out->data ) );
 
-    if (hex == NULL || *hex == '\0')
+    if ( hex == NULL || *hex == '\0' )
     {
         return true;
     }
 
-    if (hex[0] == '0' && ( hex[1] == 'x' || hex[1] == 'X' ))
+    if ( hex[0] == '0' && ( hex[1] == 'x' || hex[1] == 'X' ) )
     {
         hex += 2;
     }
 
     size_t      len = strlen( hex );
     const char *s   = hex;
-    if (len > 64)
+    if ( len > 64 )
     {
         s   = hex + ( len - 64 );
         len = 64;
@@ -526,28 +539,28 @@ static bool parseGeniusTokenID( const char *hex, GeniusTokenID *out )
 
     char   tmp[65];
     size_t pad = 64 - len;
-    for (i = 0; i < pad; ++i)
+    for ( i = 0; i < pad; ++i )
     {
         tmp[i] = '0';
     }
     memcpy( tmp + pad, s, len );
     tmp[64] = '\0';
 
-    for (i = 0; i < 32; ++i)
+    for ( i = 0; i < 32; ++i )
     {
         char c1 = tmp[2 * i];
         char c2 = tmp[2 * i + 1];
         int  hi, lo;
 
-        if (c1 >= '0' && c1 <= '9')
+        if ( c1 >= '0' && c1 <= '9' )
         {
             hi = c1 - '0';
         }
-        else if (c1 >= 'a' && c1 <= 'f')
+        else if ( c1 >= 'a' && c1 <= 'f' )
         {
             hi = c1 - 'a' + 10;
         }
-        else if (c1 >= 'A' && c1 <= 'F')
+        else if ( c1 >= 'A' && c1 <= 'F' )
         {
             hi = c1 - 'A' + 10;
         }
@@ -556,15 +569,15 @@ static bool parseGeniusTokenID( const char *hex, GeniusTokenID *out )
             return false;
         }
 
-        if (c2 >= '0' && c2 <= '9')
+        if ( c2 >= '0' && c2 <= '9' )
         {
             lo = c2 - '0';
         }
-        else if (c2 >= 'a' && c2 <= 'f')
+        else if ( c2 >= 'a' && c2 <= 'f' )
         {
             lo = c2 - 'a' + 10;
         }
-        else if (c2 >= 'A' && c2 <= 'F')
+        else if ( c2 >= 'A' && c2 <= 'F' )
         {
             lo = c2 - 'A' + 10;
         }
@@ -591,7 +604,7 @@ static void promptString( const char *prompt, char *destination, size_t maxLen, 
     char buffer[MAX_INPUT_SIZE] = { 0 };
     userPrint( "%s", prompt );
     readLine( buffer, sizeof( buffer ) );
-    if (strlen( buffer ) > 0)
+    if ( strlen( buffer ) > 0 )
     {
         strncpy( destination, buffer, maxLen );
         destination[maxLen - 1] = '\0';
@@ -652,13 +665,13 @@ static uint64_t promptUInt64( const char *prompt, uint64_t defaultValue )
  */
 static void readLine( char *buffer, size_t bufferSize )
 {
-    if (fgets( buffer, bufferSize, stdin ) != nullptr)
+    if ( fgets( buffer, bufferSize, stdin ) != nullptr )
     {
         buffer[strcspn( buffer, "\n" )] = '\0';
     }
 }
 
-#if (SUPPRESS_OUTPUT == 1)
+#if ( SUPPRESS_OUTPUT == 1 )
 /**
  * @brief Custom print function that always writes to the original stdout.
  * @param fmt Format string (printf-style).
