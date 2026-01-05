@@ -285,7 +285,7 @@ const char *GeniusSDKInitMinimal( const char *base_path, const char *eth_private
     return GeniusSDKInit( base_path, eth_private_key, true, true, baseport, false );
 }
 
-GeniusNodeReturnValue GeniusSDKProcess( const JsonData_t jsondata )
+GeniusNodeReturnValue_t GeniusSDKProcess( const JsonData_t jsondata )
 {
     GeniusNodeReturnValue ret = GENIUS_NODE_ERROR_NOT_INITIALIZED;
     do
@@ -392,7 +392,7 @@ void GeniusSDKFreeTransactions( GeniusMatrix matrix )
     free( matrix.ptr );
 }
 
-GeniusNodeReturnValue GeniusSDKMint( uint64_t      amount,
+GeniusNodeReturnValue_t GeniusSDKMint( uint64_t      amount,
                                      const char   *transaction_hash,
                                      const char   *chain_id,
                                      GeniusTokenID token_id )
@@ -422,7 +422,7 @@ GeniusNodeReturnValue GeniusSDKMint( uint64_t      amount,
     return ret;
 }
 
-GeniusNodeReturnValue GeniusSDKMintGNUS( const GeniusTokenValue *amount,
+GeniusNodeReturnValue_t GeniusSDKMintGNUS( const GeniusTokenValue *amount,
                                          const char             *transaction_hash,
                                          const char             *chain_id )
 {
@@ -443,10 +443,10 @@ GeniusNodeReturnValue GeniusSDKMintGNUS( const GeniusTokenValue *amount,
         }
         GeniusTokenID gnus_id;
         memset(gnus_id.data, 0, sizeof(gnus_id.data));
-        ret = GeniusSDKMint( parseRes.value(),
+        ret = static_cast<GeniusNodeReturnValue>(GeniusSDKMint( parseRes.value(),
                              transaction_hash ,
                              chain_id ,
-                             gnus_id );
+                             gnus_id ));
     } while ( 0 );
 
     return ret;
@@ -465,7 +465,7 @@ GeniusAddress GeniusSDKGetAddress()
     return ret;
 }
 
-GeniusNodeReturnValue GeniusSDKTransfer( uint64_t amount, GeniusAddress *dest, GeniusTokenID token_id )
+GeniusNodeReturnValue_t GeniusSDKTransfer( uint64_t amount, GeniusAddress *dest, GeniusTokenID token_id )
 {
     GeniusNodeReturnValue ret = GENIUS_NODE_ERROR_NOT_INITIALIZED;
     do
@@ -490,7 +490,7 @@ GeniusNodeReturnValue GeniusSDKTransfer( uint64_t amount, GeniusAddress *dest, G
     return ret;
 }
 
-GeniusNodeReturnValue GeniusSDKTransferGNUS( const GeniusTokenValue *amount, GeniusAddress *dest )
+GeniusNodeReturnValue_t GeniusSDKTransferGNUS( const GeniusTokenValue *amount, GeniusAddress *dest )
 {
     GeniusNodeReturnValue ret = GENIUS_NODE_ERROR_NOT_INITIALIZED;
     do
@@ -518,13 +518,13 @@ GeniusNodeReturnValue GeniusSDKTransferGNUS( const GeniusTokenValue *amount, Gen
         }
         GeniusTokenID gnus_id;
         memset(gnus_id.data, 0, sizeof(gnus_id.data));
-        ret = GeniusSDKTransfer( parseRes.value(), dest, gnus_id );
+        ret = static_cast<GeniusNodeReturnValue>(GeniusSDKTransfer( parseRes.value(), dest, gnus_id ));
     } while ( 0 );
 
     return ret;
 }
 
-GeniusNodeReturnValue GeniusSDKPayDev( uint64_t amount, GeniusTokenID token_id )
+GeniusNodeReturnValue_t GeniusSDKPayDev( uint64_t amount, GeniusTokenID token_id )
 {
     GeniusNodeReturnValue ret = GENIUS_NODE_ERROR_NOT_INITIALIZED;
     do
@@ -572,7 +572,7 @@ GeniusTokenValue GeniusSDKGetCostGNUS( const JsonData_t jsondata )
     return tv;
 }
 
-GeniusNodeReturnValue GeniusSDKShutdown()
+GeniusNodeReturnValue_t GeniusSDKShutdown()
 {
     GeniusNodeReturnValue ret = GENIUS_NODE_RET_OK;
     if ( GeniusNodeInstance )
@@ -583,7 +583,7 @@ GeniusNodeReturnValue GeniusSDKShutdown()
     return ret;
 }
 
-GeniusTransactionManagerState GeniusSDKGetTransactionManagerState()
+GeniusTransactionManagerState_t GeniusSDKGetTransactionManagerState()
 {
     if ( !GeniusNodeInstance )
     {
@@ -592,7 +592,7 @@ GeniusTransactionManagerState GeniusSDKGetTransactionManagerState()
     return static_cast<GeniusTransactionManagerState>( GeniusNodeInstance->GetTransactionManagerState() );
 }
 
-GeniusNodeState GeniusSDKGetNodeState()
+GeniusNodeState_t GeniusSDKGetNodeState()
 {
     if ( !GeniusNodeInstance )
     {
@@ -601,7 +601,7 @@ GeniusNodeState GeniusSDKGetNodeState()
     return static_cast<GeniusNodeState>( GeniusNodeInstance->GetState() );
 }
 
-GeniusTransactionStatus GeniusSDKGetTransactionStatus( const char *tx_id )
+GeniusTransactionStatus_t GeniusSDKGetTransactionStatus( const char *tx_id )
 {
     if ( !GeniusNodeInstance || !tx_id )
     {
@@ -613,7 +613,7 @@ GeniusTransactionStatus GeniusSDKGetTransactionStatus( const char *tx_id )
     return static_cast<GeniusTransactionStatus>( static_cast<int>( status ) );
 }
 
-GeniusProcessingStatus GeniusSDKGetProcessingStatus()
+GeniusProcessingStatus_t GeniusSDKGetProcessingStatus()
 {
     using Status = sgns::processing::ProcessingServiceImpl::Status;
 
