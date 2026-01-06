@@ -420,10 +420,7 @@ find_package(ProofSystem CONFIG REQUIRED)
 find_package(SGProcessingManager CONFIG REQUIRED)
 find_package(SuperGenius CONFIG REQUIRED)
 include_directories(${SuperGenius_INCLUDE_DIR})
-get_target_property(testdir ProcessingBase INTERFACE_INCLUDE_DIRECTORIES)
 include_directories("${ZKLLVM_BUILD_DIR}/zkLLVM/include")
-include_directories(${testdir}/SGPRocessingManager/include)
-include_directories(${testdir}/SGPRocessingManager/generated)
 
 include_directories(
     ${PROJECT_ROOT}/include
