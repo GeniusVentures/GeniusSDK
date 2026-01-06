@@ -548,7 +548,8 @@ GeniusNodeReturnValue_t GeniusSDKPayDev( uint64_t amount, GeniusTokenID token_id
 
 uint64_t GeniusSDKGetCost( const JsonData_t jsondata )
 {
-    return GeniusNodeInstance->GetProcessCost( jsondata );
+    auto procmgr       = sgns::sgprocessing::ProcessingManager::Create( jsondata );
+    return GeniusNodeInstance->GetProcessCost( procmgr.value() );
 }
 
 GeniusTokenValue GeniusSDKGetCostGNUS( const JsonData_t jsondata )
@@ -556,7 +557,8 @@ GeniusTokenValue GeniusSDKGetCostGNUS( const JsonData_t jsondata )
     GeniusTokenValue tv;
     if ( GeniusNodeInstance )
     {
-        uint64_t rawCost = GeniusNodeInstance->GetProcessCost( jsondata );
+        auto procmgr       = sgns::sgprocessing::ProcessingManager::Create( jsondata );
+        uint64_t rawCost = GeniusNodeInstance->GetProcessCost( procmgr.value() );
 
         auto fmt = GeniusNodeInstance->FormatTokens( rawCost, sgns::TokenID::FromBytes( { 0x00 } ) );
         if ( fmt.has_value() )
