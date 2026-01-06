@@ -260,8 +260,18 @@ GNUS_VISIBILITY_DEFAULT uint64_t GeniusSDKGetCost( const JsonData_t jsondata );
  * @return A `GeniusTokenValue` struct representing the cost in Genius Tokens.
  */
 GNUS_VISIBILITY_DEFAULT GeniusTokenValue        GeniusSDKGetCostGNUS( const JsonData_t jsondata );
+/**
+ * @brief Submits data for processing based on the given JSON data.
+ * @param[in] jsondata The JSON data to be processed.
+ * @return A `GeniusNodeReturnValue_t` indicating the result of the operation.
+ */
 GNUS_VISIBILITY_DEFAULT GeniusNodeReturnValue_t GeniusSDKProcess( const JsonData_t jsondata );
-
+/**
+ * @brief Checks the validity of a job based on the given JSON data.
+ * @param[in] jsondata The JSON data to be processed.
+ * @return `true` if the job is valid, `false` otherwise.
+ */
+GNUS_VISIBILITY_DEFAULT bool GeniusSDKCheckJobValidity( const JsonData_t jsondata );
 /**
  * @brief       Retrieves the current state of the Transaction Manager.
  * @return      The current state as a @ref GeniusTransactionManagerState enum value.
