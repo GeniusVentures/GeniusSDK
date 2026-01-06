@@ -388,6 +388,9 @@ set(zkLLVM_INCLUDE_DIR "${ZKLLVM_BUILD_DIR}/zkLLVM/include")
 set(LLVM_DIR "${ZKLLVM_BUILD_DIR}/zkLLVM/lib/cmake/llvm")
 find_package(LLVM CONFIG REQUIRED)
 
+set(nlohmann_json_DIR "${_THIRDPARTY_BUILD_DIR}/json/share/cmake/nlohmann_json")
+find_package(nlohmann_json CONFIG REQUIRED)
+
 if(NOT DEFINED SUPERGENIUS_BUILD_DIR)
     # define third party directory
     if(NOT DEFINED SUPERGENIUS_DIR)
@@ -409,10 +412,12 @@ endif()
 # Set config of SuperGenius project
 set(SuperGenius_DIR "${SUPERGENIUS_BUILD_DIR}/SuperGenius/lib/cmake/SuperGenius/")
 set(ProofSystem_DIR "${SUPERGENIUS_BUILD_DIR}/SuperGenius/lib/cmake/ProofSystem/")
+set(SGProcessingManager_DIR "${SUPERGENIUS_BUILD_DIR}/SuperGenius/lib/cmake/SGProcessingManager/")
 
 print("SuperGenius_DIR: ${SuperGenius_DIR}")
 
 find_package(ProofSystem CONFIG REQUIRED)
+find_package(SGProcessingManager CONFIG REQUIRED)
 find_package(SuperGenius CONFIG REQUIRED)
 include_directories(${SuperGenius_INCLUDE_DIR})
 include_directories("${ZKLLVM_BUILD_DIR}/zkLLVM/include")
