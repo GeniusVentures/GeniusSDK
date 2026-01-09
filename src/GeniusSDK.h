@@ -143,6 +143,15 @@ typedef enum
     GENIUS_PR_STATUS_PROCESSING = 2, ///< Currently processing a job s
 } GeniusProcessingStatus;
 
+/**
+ * @brief Represents the current processing status with progress information.
+ */
+typedef struct
+{
+    GeniusProcessingStatus_t status;     ///< Current processing state
+    float                    percentage; ///< Progress percentage from 0.0 to 100.0
+} GeniusProcessingStatusInfo;
+
 GNUS_VISIBILITY_DEFAULT const char             *GeniusSDKInit( const char *base_path,
                                                                const char *eth_private_key,
                                                                bool        autodht,
@@ -292,10 +301,10 @@ GNUS_VISIBILITY_DEFAULT GeniusNodeState_t GeniusSDKGetNodeState();
 GNUS_VISIBILITY_DEFAULT GeniusTransactionStatus_t GeniusSDKGetTransactionStatus( const char *tx_id );
 
 /**
- * @brief       Retrieves the current processing status.
- * @return      The current processing status as a @ref GeniusProcessingStatus enum value.
+ * @brief       Retrieves the current processing status with progress information.
+ * @return      A @ref GeniusProcessingStatusInfo struct containing the processing status and percentage.
  */
-GNUS_VISIBILITY_DEFAULT GeniusProcessingStatus_t GeniusSDKGetProcessingStatus();
+GNUS_VISIBILITY_DEFAULT GeniusProcessingStatusInfo GeniusSDKGetProcessingStatus();
 
 GNUS_EXPORT_END
 
