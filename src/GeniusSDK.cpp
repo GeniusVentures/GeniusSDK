@@ -639,26 +639,37 @@ GeniusTransactionStatus_t GeniusSDKGetTransactionStatus( const char *tx_id )
     return static_cast<GeniusTransactionStatus>( static_cast<int>( status ) );
 }
 
-GeniusProcessingStatus_t GeniusSDKGetProcessingStatus()
+GeniusProcessingStatusInfo GeniusSDKGetProcessingStatus()
 {
     using Status = sgns::processing::ProcessingServiceImpl::Status;
 
+    GeniusProcessingStatusInfo result;
+    result.percentage = 0.0f;
+
     if ( !GeniusNodeInstance )
     {
-        return GENIUS_PR_STATUS_DISABLED;
+        result.status = GENIUS_PR_STATUS_DISABLED;
+        return result;
     }
 
-    auto status = GeniusNodeInstance->GetProcessingStatus();
+    auto status_info = GeniusNodeInstance->GetProcessingStatus();
 
-    switch ( status )
+    switch ( status_info.status )
     {
         case Status::DISABLED:
-            return GeniusProcessingStatus::GENIUS_PR_STATUS_DISABLED;
+            result.status = GeniusProcessingStatus::GENIUS_PR_STATUS_DISABLED;
+            break;
         case Status::PROCESSING:
-            return GeniusProcessingStatus::GENIUS_PR_STATUS_PROCESSING;
+            result.status = GeniusProcessingStatus::GENIUS_PR_STATUS_PROCESSING;
+            break;
         case Status::IDLE:
-            return GeniusProcessingStatus::GENIUS_PR_STATUS_IDLE;
+            result.status = GeniusProcessingStatus::GENIUS_PR_STATUS_IDLE;
+            break;
         default:
-            return GeniusProcessingStatus::GENIUS_PR_STATUS_DISABLED;
+            result.status = GeniusProcessingStatus::GENIUS_PR_STATUS_DISABLED;
+            break;
     }
+
+    result.percentage = status_info.percentage;
+    return result;
 }
