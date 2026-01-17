@@ -321,6 +321,11 @@ target_include_directories(TrustWalletCore INTERFACE "${TrustWalletCore_INCLUDE_
 set(zkLLVM_INCLUDE_DIR "${ZKLLVM_BUILD_DIR}/zkLLVM/include")
 include_directories(${zkLLVM_INCLUDE_DIR})
 
+if(LINUX)
+    find_package(PkgConfig)
+    pkg_check_modules(LIBSECRET REQUIRED IMPORTED_TARGET libsecret-1>=0.18.4)
+endif()
+
 # --------------------------------------------------------
 # Set config of crypto3
 add_library(crypto3::algebra INTERFACE IMPORTED)
