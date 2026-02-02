@@ -213,7 +213,7 @@ jobs:
           fi
 
           gh release download ${tag_name} --repo GeniusVentures/thirdparty -p "${FILE_NAME}"
-          tar -zxvf "${FILE_NAME}"
+          tar -zxf "${FILE_NAME}"
 
           # Set THIRDPARTY_BUILD_DIR to the actual location where files were extracted
 
@@ -269,7 +269,7 @@ jobs:
 
           gh release download ${tag_name} --repo GeniusVentures/zkLLVM -p "${ZKLLVM_FILE_NAME}"
 
-          tar --exclude='*bin/assigner' --exclude='*bin/clang-zkllvm' --exclude='*bin/llvm-link-zkllvm' --exclude='*bin/transpiler' -xzf "${ZKLLVM_FILE_NAME}"
+          tar --exclude='*bin/assigner' --exclude='*bin/clang-zkllvm' --exclude='*bin/llvm-link-zkllvm' --exclude='*bin/transpiler' -zxf "${ZKLLVM_FILE_NAME}"
 
           # Set ZKLLVM_BUILD_DIR to the actual location where files were extracted
 
@@ -357,6 +357,23 @@ jobs:
           fi
           
           echo "CMAKE_GENERATOR=Ninja" >> $GITHUB_ENV
+
+      - name: Add Android toolchain
+        if: ${{ matrix.target == 'Android' }}
+        run: |
+          NDK_VERSION="r27b"
+          NDK_DIR="$HOME/android-ndk-$NDK_VERSION"
+          if [ ! -d "$NDK_DIR" ]; then
+            echo "Downloading Android NDK $NDK_VERSION..."
+            wget https://dl.google.com/android/repository/android-ndk-$NDK_VERSION-linux.zip -O ndk.zip
+            unzip -o ndk.zip -d $HOME
+            rm ndk.zip
+          else
+            echo "Android NDK already exists at $NDK_DIR, skipping download"
+          fi
+          echo "ANDROID_NDK_HOME=$NDK_DIR" >> $GITHUB_ENV
+          rustup target add aarch64-linux-android
+          rustup target add armv7-linux-androideabi
 
       - name: Configure CMake for Android
         if: ${{ matrix.target == 'Android'}}
