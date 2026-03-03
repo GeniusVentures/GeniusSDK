@@ -152,22 +152,56 @@ typedef struct
     float                    percentage; ///< Progress percentage from 0.0 to 100.0
 } GeniusProcessingStatusInfo;
 
-GNUS_VISIBILITY_DEFAULT const char             *GeniusSDKInit( const char *base_path,
-                                                               const char *eth_private_key,
-                                                               bool        autodht,
-                                                               bool        process,
-                                                               uint16_t    baseport,
-                                                               bool        is_full_node );
-GNUS_VISIBILITY_DEFAULT const char             *GeniusSDKInitSecure( const char *base_path,
-                                                                     const char *dev_config,
-                                                                     const char *eth_private_key,
-                                                                     bool        autodht,
-                                                                     bool        process,
-                                                                     uint16_t    baseport,
-                                                                     bool        is_full_node );
-GNUS_VISIBILITY_DEFAULT const char             *GeniusSDKInitMinimal( const char *base_path,
+typedef struct
+{
+    const char *email;    ///< Null-terminated email
+    const char *password; ///< Null-terminated password
+} GeniusCredentials;
+
+/**
+ * @brief Inits the SDK with saved settings
+ * @returns Initialization path in case of success, null on failure
+ */
+GNUS_VISIBILITY_DEFAULT const char *GeniusSDKInit( const char *base_path,
+                                                   bool        autodht,
+                                                   bool        process,
+                                                   uint16_t    baseport,
+                                                   bool        is_full_node );
+/**
+ * @brief Inits the SDK with an ethereum private key
+ * @param[in] eth_private_key Valid HEX ethereum key, supports '0x' prefix
+ * @returns Initialization path in case of success, null on failure
+ */
+GNUS_VISIBILITY_DEFAULT const char *GeniusSDKInitWithKey( const char *base_path,
+                                                          const char *eth_private_key,
+                                                          bool        autodht,
+                                                          bool        process,
+                                                          uint16_t    baseport,
+                                                          bool        is_full_node );
+
+/**
+ * @brief Inits the SDK with credentials
+ * @returns Initialization path in case of success, null on failure
+ */
+GNUS_VISIBILITY_DEFAULT const char *GeniusSDKInitWithCredentials( const char              *base_path,
+                                                                  const GeniusCredentials *credentials,
+                                                                  bool                     autodht,
+                                                                  bool                     process,
+                                                                  uint16_t                 baseport,
+                                                                  bool                     is_full_node );
+
+GNUS_VISIBILITY_DEFAULT const char *GeniusSDKInitWithKeyAndDevConfig( const char *base_path,
+                                                                      const char *dev_config,
                                                                       const char *eth_private_key,
-                                                                      uint16_t    baseport );
+                                                                      bool        autodht,
+                                                                      bool        process,
+                                                                      uint16_t    baseport,
+                                                                      bool        is_full_node );
+
+GNUS_VISIBILITY_DEFAULT const char *GeniusSDKInitMinimal( const char *base_path,
+                                                          const char *eth_private_key,
+                                                          uint16_t    baseport );
+
 GNUS_VISIBILITY_DEFAULT GeniusNodeReturnValue_t GeniusSDKShutdown();
 
 /**
@@ -268,7 +302,7 @@ GNUS_VISIBILITY_DEFAULT uint64_t GeniusSDKGetCost( const JsonData_t jsondata );
  * @param[in] jsondata The JSON data to be processed.
  * @return A `GeniusTokenValue` struct representing the cost in Genius Tokens.
  */
-GNUS_VISIBILITY_DEFAULT GeniusTokenValue        GeniusSDKGetCostGNUS( const JsonData_t jsondata );
+GNUS_VISIBILITY_DEFAULT GeniusTokenValue GeniusSDKGetCostGNUS( const JsonData_t jsondata );
 /**
  * @brief Submits data for processing based on the given JSON data.
  * @param[in] jsondata The JSON data to be processed.
