@@ -487,3 +487,10 @@ install(FILES
     ${CMAKE_CURRENT_BINARY_DIR}/GeniusSDKConfigVersion.cmake
     DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/GeniusSDK
 )
+
+if(ANDROID)
+    install(FILES
+        "${SUPERGENIUS_DIR}/build/Android/${CMAKE_BUILD_TYPE}${ABI_SUBFOLDER_NAME}/SuperGenius/lib/android/securestorage-release.aar"
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    )
+endif()
