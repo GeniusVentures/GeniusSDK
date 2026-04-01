@@ -65,31 +65,23 @@ find_package(yaml-cpp CONFIG REQUIRED)
 
 # absl
 if(NOT DEFINED absl_DIR)
-    set(absl_DIR "${_THIRDPARTY_BUILD_DIR}/grpc/lib/cmake/absl")
+    set(absl_DIR "${_THIRDPARTY_BUILD_DIR}/protobuf/lib/cmake/absl")
 endif()
 
 # utf8_range
 if(NOT DEFINED utf8_range_DIR)
-    set(utf8_range_DIR "${_THIRDPARTY_BUILD_DIR}/grpc/lib/cmake/utf8_range")
+    set(utf8_range_DIR "${_THIRDPARTY_BUILD_DIR}/protobuf/lib/cmake/utf8_range")
 endif()
 
 # Set config of protobuf project
 if(NOT DEFINED Protobuf_DIR)
-    set(Protobuf_DIR "${_THIRDPARTY_BUILD_DIR}/grpc/lib/cmake/protobuf")
-endif()
-
-if(NOT DEFINED grpc_INCLUDE_DIR)
-    set(grpc_INCLUDE_DIR "${_THIRDPARTY_BUILD_DIR}/grpc/include")
-endif()
-
-if(NOT DEFINED Protobuf_INCLUDE_DIR)
-    set(Protobuf_INCLUDE_DIR "${grpc_INCLUDE_DIR}/google/protobuf")
+    set(Protobuf_DIR "${_THIRDPARTY_BUILD_DIR}/protobuf/lib/cmake/protobuf")
 endif()
 
 find_package(Protobuf CONFIG REQUIRED)
 
 if(NOT DEFINED PROTOC_EXECUTABLE)
-    set(PROTOC_EXECUTABLE "${THIRDPARTY_BUILD_DIR}/grpc/bin/protoc${CMAKE_EXECUTABLE_SUFFIX}")
+    set(PROTOC_EXECUTABLE "${THIRDPARTY_BUILD_DIR}/protobuf/bin/protoc${CMAKE_EXECUTABLE_SUFFIX}")
 endif()
 
 set(Protobuf_PROTOC_EXECUTABLE ${PROTOC_EXECUTABLE} CACHE PATH "Initial cache" FORCE)
@@ -255,11 +247,6 @@ set(ed25519_DIR "${THIRDPARTY_BUILD_DIR}/ed25519/lib/cmake/ed25519")
 set(ed25519_INCLUDE_DIR "${THIRDPARTY_BUILD_DIR}/ed25519/include")
 find_package(ed25519 CONFIG REQUIRED)
 
-# Set config of sr25519-donna
-set(sr25519-donna_DIR "${THIRDPARTY_BUILD_DIR}/sr25519-donna/lib/cmake/sr25519-donna")
-set(sr25519-donna_INCLUDE_DIR "${THIRDPARTY_BUILD_DIR}/sr25519-donna/include")
-find_package(sr25519-donna CONFIG REQUIRED)
-
 # Set RapidJSON config path
 set(RapidJSON_DIR "${THIRDPARTY_BUILD_DIR}/rapidjson/lib/cmake/RapidJSON")
 set(RapidJSON_INCLUDE_DIR "${THIRDPARTY_BUILD_DIR}/rapidjson/include")
@@ -415,12 +402,14 @@ if(NOT DEFINED SUPERGENIUS_BUILD_DIR)
 endif()
 
 # Set config of SuperGenius project
+set(evmrelay_DIR "${SUPERGENIUS_BUILD_DIR}/SuperGenius/lib/cmake/evmrelay/")
 set(SuperGenius_DIR "${SUPERGENIUS_BUILD_DIR}/SuperGenius/lib/cmake/SuperGenius/")
 set(ProofSystem_DIR "${SUPERGENIUS_BUILD_DIR}/SuperGenius/lib/cmake/ProofSystem/")
 set(SGProcessingManager_DIR "${SUPERGENIUS_BUILD_DIR}/SuperGenius/lib/cmake/SGProcessingManager/")
 
 print("SuperGenius_DIR: ${SuperGenius_DIR}")
 
+find_package(evmrelay CONFIG REQUIRED)
 find_package(ProofSystem CONFIG REQUIRED)
 find_package(SGProcessingManager CONFIG REQUIRED)
 find_package(SuperGenius CONFIG REQUIRED)
