@@ -31,15 +31,15 @@ add_custom_command(TARGET SDKExample POST_BUILD
         COMMENT "Copying dev_config.json data"
 )
 
-add_executable(SDKExampleCredentials
-    SDKExampleCredentials.cpp
-)
-target_link_libraries(SDKExampleCredentials PRIVATE GeniusSDK)
+# add_executable(SDKExampleCredentials
+#     SDKExampleCredentials.cpp
+# )
+# target_link_libraries(SDKExampleCredentials PRIVATE GeniusSDK)
 
-if(APPLE)
-    target_link_options(SDKExampleCredentials PRIVATE -force_load "$<TARGET_FILE:GeniusSDK>")
-elseif(WIN32)
-    target_link_options(SDKExampleCredentials PRIVATE "/WHOLEARCHIVE:$<TARGET_FILE:GeniusSDK>")
-elseif(UNIX)
-    target_link_options(SDKExampleCredentials PRIVATE "-Wl,--whole-archive" "$<TARGET_FILE:GeniusSDK>" "-Wl,--no-whole-archive")
-endif()
+# if(APPLE)
+#     target_link_options(SDKExampleCredentials PRIVATE -force_load "$<TARGET_FILE:GeniusSDK>")
+# elseif(WIN32)
+#     target_link_options(SDKExampleCredentials PRIVATE "/WHOLEARCHIVE:$<TARGET_FILE:GeniusSDK>")
+# elseif(UNIX)
+#     target_link_options(SDKExampleCredentials PRIVATE "-Wl,--whole-archive" "$<TARGET_FILE:GeniusSDK>" "-Wl,--no-whole-archive")
+# endif()
