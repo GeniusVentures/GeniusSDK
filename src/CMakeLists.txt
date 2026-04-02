@@ -14,6 +14,7 @@ set_target_properties(GeniusSDK PROPERTIES
     PUBLIC_HEADER "${ALL_HDRS}"
 )
 target_link_libraries(GeniusSDK PUBLIC sgns::genius_node)
+geniussdk_install(GeniusSDK)
 
 add_library(GeniusSDK_shared SHARED ${ALL_SRCS} ${ALL_HDRS})
 GENERATE_EXPORT_HEADER(GeniusSDK_shared EXPORT_FILE_NAME ${CMAKE_BINARY_DIR}/GeniusSDKExport.h)
@@ -26,9 +27,18 @@ set_target_properties(GeniusSDK_shared PROPERTIES
 
 
 target_link_libraries(GeniusSDK_shared PUBLIC sgns::genius_node)
-
-geniussdk_install(GeniusSDK)        
-geniussdk_install(GeniusSDK_shared)  
+if(APPLE)
+    find_program(DSYMUTIL_EXECUTABLE dsymutil REQUIRED)
+    add_custom_command(TARGET GeniusSDK_shared POST_BUILD
+    COMMAND ${DSYMUTIL_EXECUTABLE} $<TARGET_FILE:GeniusSDK_shared> -o $<TARGET_FILE:GeniusSDK_shared>.dSYM
+    COMMENT "Generating dSYM for GeniusSDK_shared"
+    )
+    install(DIRECTORY $<TARGET_FILE:GeniusSDK_shared>.dSYM
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        OPTIONAL
+    )
+endif()
+geniussdk_install(GeniusSDK_shared)
 
 if(APPLE)
     if(PLATFORM STREQUAL "OS64")
@@ -45,10 +55,12 @@ if(APPLE)
         )
         target_link_libraries(GeniusSDK_framework PUBLIC sgns::genius_node "-framework Security")
         geniussdk_install(GeniusSDK_framework)
-        target_link_libraries(GeniusSDK_shared
-        PUBLIC
-        "-framework Security"
-        )
+        if(TARGET GeniusSDK_shared)
+            target_link_libraries(GeniusSDK_shared
+            PUBLIC
+            "-framework Security"
+            )
+        endif()
 
     else()
         # macOS Bundle
