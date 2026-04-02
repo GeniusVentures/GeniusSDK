@@ -54,17 +54,11 @@ if(APPLE)
             PUBLIC_HEADER "${ALL_HDRS};${CMAKE_BINARY_DIR}/GeniusSDKExport.h"
         )
         target_link_libraries(GeniusSDK_framework PUBLIC sgns::genius_node "-framework Security")
-        if(APPLE)
-            find_program(DSYMUTIL_EXECUTABLE dsymutil REQUIRED)
-            add_custom_command(TARGET GeniusSDK_framework POST_BUILD
-            COMMAND ${DSYMUTIL_EXECUTABLE} $<TARGET_FILE:GeniusSDK_framework> -o $<TARGET_FILE:GeniusSDK_framework>.dSYM
-            COMMENT "Generating dSYM for GeniusSDK_framework"
-            )
-            install(DIRECTORY $<TARGET_FILE:GeniusSDK_framework>.dSYM
-                DESTINATION ${CMAKE_INSTALL_LIBDIR}
-                OPTIONAL
-            )
-        endif()
+        find_program(DSYMUTIL_EXECUTABLE dsymutil REQUIRED)
+        add_custom_command(TARGET GeniusSDK_framework POST_BUILD
+        COMMAND ${DSYMUTIL_EXECUTABLE} $<TARGET_FILE:GeniusSDK_framework> -o $<TARGET_FILE:GeniusSDK_framework>.dSYM
+        COMMENT "Generating dSYM for GeniusSDK_framework"
+        )
         geniussdk_install(GeniusSDK_framework)
         if(TARGET GeniusSDK_shared)
             target_link_libraries(GeniusSDK_shared
@@ -82,13 +76,11 @@ if(APPLE)
             PUBLIC_HEADER "${ALL_HDRS};${CMAKE_BINARY_DIR}/GeniusSDKExport.h"
         )
         target_link_libraries(GeniusSDK_bundle PUBLIC sgns::genius_node)
-        if(APPLE)
-            find_program(DSYMUTIL_EXECUTABLE dsymutil REQUIRED)
-            add_custom_command(TARGET GeniusSDK_bundle POST_BUILD
-            COMMAND ${DSYMUTIL_EXECUTABLE} $<TARGET_FILE:GeniusSDK_bundle> -o $<TARGET_FILE:GeniusSDK_bundle>.dSYM
-            COMMENT "Generating dSYM for GeniusSDK_bundle"
-            )
-        endif()
+        find_program(DSYMUTIL_EXECUTABLE dsymutil REQUIRED)
+        add_custom_command(TARGET GeniusSDK_bundle POST_BUILD
+        COMMAND ${DSYMUTIL_EXECUTABLE} $<TARGET_FILE:GeniusSDK_bundle> -o $<TARGET_FILE:GeniusSDK_bundle>.dSYM
+        COMMENT "Generating dSYM for GeniusSDK_bundle"
+        )
         geniussdk_install(GeniusSDK_bundle)
     endif()
 endif()
