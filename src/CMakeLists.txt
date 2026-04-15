@@ -27,6 +27,22 @@ set_target_properties(GeniusSDK_shared PROPERTIES
 
 
 target_link_libraries(GeniusSDK_shared PUBLIC sgns::genius_node)
+if(MSVC)
+    # Shared library should emit standalone PDBs for symbolication/debugging.
+    target_compile_options(GeniusSDK_shared PRIVATE
+        "$<$<CONFIG:Release>:/Zi>"
+        "$<$<CONFIG:RelWithDebInfo>:/Zi>"
+    )
+    target_link_options(GeniusSDK_shared PRIVATE
+        "$<$<CONFIG:Release>:/DEBUG:FULL>"
+        "$<$<CONFIG:RelWithDebInfo>:/DEBUG:FULL>"
+    )
+    install(FILES $<TARGET_PDB_FILE:GeniusSDK_shared>
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        OPTIONAL
+    )
+endif()
+
 if(APPLE)
     find_program(DSYMUTIL_EXECUTABLE dsymutil REQUIRED)
     add_custom_command(TARGET GeniusSDK_shared POST_BUILD
