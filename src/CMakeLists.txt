@@ -60,6 +60,8 @@ if(SGNS_ENABLE_RELEASE_SYMBOLS)
         if(CMAKE_OBJCOPY)
             add_custom_command(TARGET GeniusSDK_shared POST_BUILD
             COMMAND ${CMAKE_OBJCOPY} --only-keep-debug $<TARGET_FILE:GeniusSDK_shared> $<TARGET_FILE:GeniusSDK_shared>.debug
+            COMMAND ${CMAKE_OBJCOPY} --strip-debug $<TARGET_FILE:GeniusSDK_shared>
+            COMMAND ${CMAKE_OBJCOPY} --add-gnu-debuglink=$<TARGET_FILE:GeniusSDK_shared>.debug $<TARGET_FILE:GeniusSDK_shared>
             COMMENT "Generating debug symbols for GeniusSDK_shared"
             )
             install(FILES $<TARGET_FILE:GeniusSDK_shared>.debug
