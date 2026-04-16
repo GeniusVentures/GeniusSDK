@@ -56,7 +56,7 @@ if(SGNS_ENABLE_RELEASE_SYMBOLS)
         )
     endif()
 
-    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux" OR CMAKE_SYSTEM_NAME STREQUAL "Android")
         if(CMAKE_OBJCOPY)
             add_custom_command(TARGET GeniusSDK_shared POST_BUILD
             COMMAND ${CMAKE_OBJCOPY} --only-keep-debug $<TARGET_FILE:GeniusSDK_shared> $<TARGET_FILE:GeniusSDK_shared>.debug
