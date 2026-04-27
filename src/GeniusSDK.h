@@ -94,8 +94,8 @@ typedef enum
     GENIUS_NODE_ERROR_MINT,
     GENIUS_NODE_INVALID_ARGUMENT,
     GENIUS_NODE_ERROR_TRANSFER,
-    GENIUS_NODE_ERROR_PAY_DEV
-
+    GENIUS_NODE_ERROR_PAY_DEV,
+    GENIUS_NODE_ERROR_CREATING
 } GeniusNodeReturnValue;
 
 /**
@@ -203,6 +203,16 @@ GNUS_VISIBILITY_DEFAULT const char *GeniusSDKInitMinimal( const char *base_path,
                                                           uint16_t    baseport );
 
 GNUS_VISIBILITY_DEFAULT GeniusNodeReturnValue_t GeniusSDKShutdown();
+
+GNUS_VISIBILITY_DEFAULT const char *GetAvailableAccounts();
+
+GNUS_VISIBILITY_DEFAULT GeniusNodeReturnValue_t SelectGeniusAccount( const char *public_address );
+
+GNUS_VISIBILITY_DEFAULT GeniusNodeReturnValue_t TransferGeniusAccount( const char *public_address );
+
+GNUS_VISIBILITY_DEFAULT GeniusNodeReturnValue_t MergeGeniusAccount( const char *public_address );
+
+GNUS_VISIBILITY_DEFAULT GeniusNodeReturnValue_t SetPayoutAddress( const char *public_address );
 
 /**
  * @brief Retrieves the current balance for a specific token.

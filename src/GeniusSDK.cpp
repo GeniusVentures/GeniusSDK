@@ -1,12 +1,13 @@
 /**
  * @file       GeniusSDK.cpp
- * @brief      
+ * @brief
  * @date       2024-05-26
  * @author     Henrique A. Klein (hklein@gnus.ai)
  */
 
 #include "GeniusSDK.h"
 
+#include <account/GeniusAccount.hpp>
 #include <algorithm>
 #include <memory>
 #include <string>
@@ -619,6 +620,79 @@ GeniusNodeReturnValue_t GeniusSDKShutdown()
         std::cout << "GeniusSDK: GeniusNodeInstance has been shut down\n";
     }
     return ret;
+}
+
+const char *GetAvailableAccounts()
+{
+    auto accounts = GeniusNodeInstance->GetAvailableAccounts();
+
+    // 64 characters for the address + 1 separator character
+    char *ret = reinterpret_cast<char *>( malloc( accounts.size() * 65 ) );
+
+    for ( size_t i = 0; i < accounts.size(); ++i )
+    {
+        memcpy( &ret[i * 65], accounts[i].data(), 64 );
+        ret[i * 65 - 1] = '\n';
+    }
+    ret[accounts.size() * 65 - 1] = '\0';
+
+    return ret;
+}
+
+GeniusNodeReturnValue_t SelectGeniusAccount( const char *public_address )
+{
+    if ( !GeniusNodeInstance )
+    {
+        return GENIUS_NODE_ERROR_CREATING;
+    }
+
+    if ( GeniusNodeInstance->SelectAccount( public_address ).has_value() )
+    {
+        return GENIUS_NODE_RET_OK;
+    }
+    return GENIUS_NODE_INVALID_ARGUMENT;
+}
+
+GeniusNodeReturnValue_t TransferGeniusAccount( const char *public_address )
+{
+    if ( !GeniusNodeInstance )
+    {
+        return GENIUS_NODE_ERROR_CREATING;
+    }
+
+    if ( GeniusNodeInstance->TransferAccount( public_address ).has_value() )
+    {
+        return GENIUS_NODE_RET_OK;
+    }
+    return GENIUS_NODE_INVALID_ARGUMENT;
+}
+
+GeniusNodeReturnValue_t MergeGeniusAccount( const char *public_address )
+{
+    if ( !GeniusNodeInstance )
+    {
+        return GENIUS_NODE_ERROR_CREATING;
+    }
+
+    if ( GeniusNodeInstance->MergeAccount( public_address ).has_value() )
+    {
+        return GENIUS_NODE_RET_OK;
+    }
+    return GENIUS_NODE_INVALID_ARGUMENT;
+}
+
+GeniusNodeReturnValue_t SetPayoutAddress( const char *public_address )
+{
+    if ( !GeniusNodeInstance )
+    {
+        return GENIUS_NODE_ERROR_CREATING;
+    }
+
+    if ( GeniusNodeInstance->SetPayoutAddress( public_address ).has_value() )
+    {
+        return GENIUS_NODE_RET_OK;
+    }
+    return GENIUS_NODE_INVALID_ARGUMENT;
 }
 
 GeniusTransactionManagerState_t GeniusSDKGetTransactionManagerState()
