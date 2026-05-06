@@ -81,7 +81,7 @@ endif()
 find_package(Protobuf CONFIG REQUIRED)
 
 if(NOT DEFINED PROTOC_EXECUTABLE)
-    set(PROTOC_EXECUTABLE "${THIRDPARTY_BUILD_DIR}/protobuf/bin/protoc${CMAKE_EXECUTABLE_SUFFIX}")
+    set(PROTOC_EXECUTABLE "${THIRDPARTY_BUILD_DIR}/protobuf_host/bin/protoc${CMAKE_EXECUTABLE_SUFFIX}")
 endif()
 
 set(Protobuf_PROTOC_EXECUTABLE ${PROTOC_EXECUTABLE} CACHE PATH "Initial cache" FORCE)
@@ -421,6 +421,11 @@ find_package(ProofSystem CONFIG REQUIRED)
 find_package(SGProcessingManager CONFIG REQUIRED)
 find_package(SuperGenius CONFIG REQUIRED)
 include_directories(${SuperGenius_INCLUDE_DIR})
+
+# Alias: SuperGenius exports sgns::sgns_genius_account but GeniusSDK src links against sgns::sgns_account
+if(TARGET sgns::sgns_genius_account AND NOT TARGET sgns::sgns_account)
+    add_library(sgns::sgns_account ALIAS sgns::sgns_genius_account)
+endif()
 include_directories("${ZKLLVM_BUILD_DIR}/zkLLVM/include")
 
 include_directories(
