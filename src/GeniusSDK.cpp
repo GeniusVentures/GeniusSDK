@@ -113,11 +113,11 @@ namespace
             return outcome::failure( JsonError( std::string( "Failed to parse TokenID: " ) + tidRes.error().what() ) );
         }
 
-        strncpy( config_from_file.Addr, document["Address"].GetString(), document["Address"].GetStringLength() );
+        config_from_file.Addr             = std::string( document["Address"].GetString(), document["Address"].GetStringLength() );
         config_from_file.Cut              = document["Cut"].GetString();
         config_from_file.TokenValueInGNUS = document["TokenValue"].GetString();
         config_from_file.TokenID          = tidRes.value();
-        strncpy( config_from_file.BaseWritePath, base_path.data(), base_path.size() );
+        config_from_file.BaseWritePath    = base_path;
 
         return outcome::success( config_from_file );
     }
