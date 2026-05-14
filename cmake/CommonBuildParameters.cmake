@@ -29,6 +29,8 @@ if(NOT TARGET Vulkan::Vulkan)
     find_package(Vulkan REQUIRED)
 endif()
 
+set(ZLIB_DIR "${THIRDPARTY_BUILD_DIR}/zlib/lib/cmake/zlib")
+find_package(ZLIB CONFIG REQUIRED)
 
 # Set config of GTest
 set(GTest_DIR "${THIRDPARTY_BUILD_DIR}/GTest/lib/cmake/GTest")
@@ -276,11 +278,28 @@ set(xxHash_LIBRARY_DIR "${THIRDPARTY_BUILD_DIR}/xxhash/lib")
 set(xxHash_DIR "${THIRDPARTY_BUILD_DIR}/xxhash/lib/cmake/xxHash")
 find_package(xxHash CONFIG REQUIRED)
 
-# Set config of libssh2
+
+# Prefer package config files while loading Libssh2's dependencies.
+# Libssh2 config calls `find_dependency(ZLIB)` without `CONFIG`, which can
+# otherwise resolve to CMake's FindZLIB module on Windows CI.
+set(_SGNS_CMAKE_FIND_PACKAGE_PREFER_CONFIG_WAS_DEFINED FALSE)
+if(DEFINED CMAKE_FIND_PACKAGE_PREFER_CONFIG)
+    set(_SGNS_CMAKE_FIND_PACKAGE_PREFER_CONFIG_WAS_DEFINED TRUE)
+    set(_SGNS_CMAKE_FIND_PACKAGE_PREFER_CONFIG_PREV "${CMAKE_FIND_PACKAGE_PREFER_CONFIG}")
+endif()
+set(CMAKE_FIND_PACKAGE_PREFER_CONFIG ON)
+
+# libssh2
 set(Libssh2_DIR "${THIRDPARTY_BUILD_DIR}/libssh2/lib/cmake/libssh2")
-set(Libssh2_LIBRARY_DIR "${THIRDPARTY_BUILD_DIR}/libssh2/lib")
-set(Libssh2_INCLUDE_DIR "${THIRDPARTY_BUILD_DIR}/libssh2/include")
 find_package(Libssh2 CONFIG REQUIRED)
+
+if(_SGNS_CMAKE_FIND_PACKAGE_PREFER_CONFIG_WAS_DEFINED)
+    set(CMAKE_FIND_PACKAGE_PREFER_CONFIG "${_SGNS_CMAKE_FIND_PACKAGE_PREFER_CONFIG_PREV}")
+else()
+    unset(CMAKE_FIND_PACKAGE_PREFER_CONFIG)
+endif()
+unset(_SGNS_CMAKE_FIND_PACKAGE_PREFER_CONFIG_PREV)
+unset(_SGNS_CMAKE_FIND_PACKAGE_PREFER_CONFIG_WAS_DEFINED)
 
 # Set config of AsyncIOManager
 set(AsyncIOManager_INCLUDE_DIR "${THIRDPARTY_BUILD_DIR}/AsyncIOManager/include")
@@ -294,8 +313,7 @@ set(gnus_upnp_LIBRARY_DIR "${THIRDPARTY_BUILD_DIR}/gnus_upnp/lib")
 set(gnus_upnp_DIR "${THIRDPARTY_BUILD_DIR}/gnus_upnp/lib/cmake/gnus_upnp")
 find_package(gnus_upnp CONFIG REQUIRED)
 
-set(ZLIB_DIR "${THIRDPARTY_BUILD_DIR}/zlib/lib/cmake/zlib")
-find_package(ZLIB CONFIG REQUIRED)
+
 
 # wallet-core
 set(TrustWalletCore_LIBRARY_DIR "${THIRDPARTY_BUILD_DIR}/wallet-core/lib")
