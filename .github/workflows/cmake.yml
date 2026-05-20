@@ -21,7 +21,9 @@ on:
         description: "Release tag"
         required: false
         type: string
-
+permissions:
+  contents: write
+  packages: read
 jobs:
   build:
     env:
@@ -165,10 +167,11 @@ jobs:
           fi
 
       - name: Checkout GeniusSDK
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
           path: "GeniusSDK"
           submodules: "recursive"
+          persist-credentials: true # Required for uploading the release later
 
       - name: Set build directory
         shell: bash
@@ -183,13 +186,16 @@ jobs:
       - name: Download thirdparty release
         working-directory: ${{github.workspace}}
         shell: bash
+        env:
+          GITHUB_EVENT_INPUTS_TAG: ${{ github.event.inputs.tag }}
+          GITHUB_EVENT_PULL_REQUEST_HEAD_REF: ${{ github.event.pull_request.head.ref }}
         run: |
           # Determine current branch or tag
-          if [ "${{ github.event_name }}" == "workflow_dispatch" ] && [ "${{ github.event.inputs.tag }}" ]; then
-              CURRENT_BRANCH="${{ github.event.inputs.tag }}"
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ] && [ "${GITHUB_EVENT_INPUTS_TAG}" ]; then
+              CURRENT_BRANCH="${GITHUB_EVENT_INPUTS_TAG}"
               IS_TAG=true
           elif ${{github.event_name == 'pull_request'}}; then
-              CURRENT_BRANCH=${{ github.event.pull_request.head.ref }}
+              CURRENT_BRANCH=${GITHUB_EVENT_PULL_REQUEST_HEAD_REF}
               IS_TAG=false
           else
               CURRENT_BRANCH=$GITHUB_REF_NAME
@@ -434,25 +440,27 @@ jobs:
         if: github.ref_name == 'main' || github.ref_name == 'develop' || env.IS_TAG == 'true'
         shell: bash
         run: |
-          tar --exclude=.git -czvf ${FILE_NAME} --transform 's|^|${{env.BUILD_DIRECTORY}}/|' GeniusSDK/
+          tar --exclude=.git -czvf ${FILE_NAME} --transform 's|^|${BUILD_DIRECTORY}/|' GeniusSDK/
 
       - name: Set release tag
         shell: bash
         run: |
-          if ${{ github.event_name == 'workflow_dispatch' }} && [ '${{ github.event.inputs.tag }}' ]; then
-              RELEASE_TAG="${{ github.event.inputs.tag }}"
+          if ${{ github.event_name == 'workflow_dispatch' }} && [ '${GITHUB_EVENT_INPUTS_TAG}' ]; then
+              RELEASE_TAG="${GITHUB_EVENT_INPUTS_TAG}"
               IS_TAG_RELEASE="true"
           else
               if [ '${{matrix.abi}}' ]; then
-                RELEASE_TAG="${{ matrix.target }}-${{matrix.abi}}-${{ github.ref_name }}-${{ matrix.build-type }}"
+                RELEASE_TAG="${{ matrix.target }}-${{matrix.abi}}-${GITHUB_REF_NAME}-${{ matrix.build-type }}"
               else
-                RELEASE_TAG="${{ matrix.target }}-${{ github.ref_name }}-${{ matrix.build-type }}"
+                RELEASE_TAG="${{ matrix.target }}-${GITHUB_REF_NAME}-${{ matrix.build-type }}"
               fi
               IS_TAG_RELEASE="false"
           fi
 
           echo "RELEASE_TAG=$RELEASE_TAG" >> $GITHUB_ENV
           echo "IS_TAG_RELEASE=$IS_TAG_RELEASE" >> $GITHUB_ENV
+        env:
+          GITHUB_EVENT_INPUTS_TAG: ${{ github.event.inputs.tag }}
 
       - name: Create release tag
         if: github.ref_name == 'main' || github.ref_name == 'develop'
@@ -477,12 +485,12 @@ jobs:
           echo "Creating GitHub release $RELEASE_TAG..."
           gh release create "$RELEASE_TAG" \
           --target "${{ github.sha }}" \
-          -t "${{ matrix.target }} ${{ github.ref_name }} ${{ matrix.build-type }} build" \
-          -n "Branch: ${{ github.ref_name }} | SHA: ${{ github.sha }}" \
+          -t "${{ matrix.target }} ${GITHUB_REF_NAME} ${{ matrix.build-type }} build" \
+          -n "Branch: ${GITHUB_REF_NAME} | SHA: ${{ github.sha }}" \
           $( [ "$IS_TAG_RELEASE" = "true" ] && echo "" || echo "--prerelease" )
 
       - name: Upload file
         if: github.ref_name == 'main' || github.ref_name == 'develop' || env.IS_TAG == 'true'
         working-directory: ${{github.workspace}}/GeniusSDK/
         shell: bash
-        run: gh release upload ${{env.RELEASE_TAG}} "${{env.BUILD_DIRECTORY}}/${FILE_NAME}" --clobber
+        run: gh release upload ${RELEASE_TAG} "${BUILD_DIRECTORY}/${FILE_NAME}" --clobber
