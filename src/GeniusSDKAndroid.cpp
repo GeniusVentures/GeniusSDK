@@ -18,8 +18,10 @@
 #define LOGE( ... ) __android_log_print( ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__ )
 
 // ============================================================================
-// Anonymous namespace — global JVM pointer and cached JNI references
-// Pattern: Android.cpp lines 17-19
+// Anonymous namespace — global JVM pointer (lazy-init via JNI_GetCreatedJavaVMs)
+// and cached JNI references
+// Note: JNI_OnLoad is defined in Android.cpp (secure storage) — only one per .so.
+// This file discovers the JVM on first use instead.
 // ============================================================================
 namespace
 {
@@ -42,59 +44,48 @@ namespace
 }
 
 // ============================================================================
-// JNI_OnLoad — library entry point on Android
-// Pattern: Android.cpp lines 112-127
-// ============================================================================
-extern "C" JNIEXPORT jint JNICALL JNI_OnLoad( JavaVM *vm, void *_reserved )
-{
-    LOGI( "GeniusSDK Android background bridge initializing" );
-
-    g_jvm = vm;
-
-    JNIEnv *env = nullptr;
-    if ( vm->GetEnv( reinterpret_cast<void **>( &env ), JNI_VERSION_1_6 ) != JNI_OK )
-    {
-        LOGE( "Failed to get JNI environment in JNI_OnLoad" );
-        return JNI_ERR;
-    }
-
-    LOGI( "GeniusSDK Android background bridge initialized successfully" );
-    return JNI_VERSION_1_6;
-}
-
-// ============================================================================
-// Namespace sgns — JNI helper functions
+// InitGeniusSDKAndroid — called from Android.cpp JNI_OnLoad
 // ============================================================================
 namespace sgns
 {
 
-    // ========================================================================
-    // GetJNIEnv — thread-safe JNIEnv retrieval
-    // Pattern: Android.cpp lines 266-287
-    // Handles C++ IO threads that are NOT JNI threads by default (T-01-01)
-    // ========================================================================
-    JNIEnv *GetJNIEnv()
-    {
-        JNIEnv *env    = nullptr;
-        jint    result = g_jvm->GetEnv( reinterpret_cast<void **>( &env ), JNI_VERSION_1_6 );
+void InitGeniusSDKAndroid( JavaVM *vm )
+{
+    g_jvm = vm;
+    LOGI( "GeniusSDK Android background bridge initialized" );
+}
 
-        if ( result == JNI_EDETACHED )
+// ============================================================================
+// GetJNIEnv — thread-safe JNIEnv retrieval
+// g_jvm is set by InitGeniusSDKAndroid(), called from Android.cpp's JNI_OnLoad.
+// ============================================================================
+JNIEnv *GetJNIEnv()
+{
+    if ( g_jvm == nullptr )
+    {
+        LOGE( "JVM not initialized — InitGeniusSDKAndroid not called" );
+        return nullptr;
+    }
+
+    JNIEnv *env    = nullptr;
+    jint    result = g_jvm->GetEnv( reinterpret_cast<void **>( &env ), JNI_VERSION_1_6 );
+    if ( result == JNI_EDETACHED )
+    {
+        result = g_jvm->AttachCurrentThread( &env, nullptr );
+        if ( result != JNI_OK )
         {
-            result = g_jvm->AttachCurrentThread( &env, nullptr );
-            if ( result != JNI_OK )
-            {
-                LOGE( "Failed to attach current thread to JVM" );
-                return nullptr;
-            }
-        }
-        else if ( result != JNI_OK )
-        {
-            LOGE( "Failed to get JNI environment" );
+            LOGE( "Failed to attach current thread to JVM" );
             return nullptr;
         }
-
-        return env;
     }
+    else if ( result != JNI_OK )
+    {
+        LOGE( "Failed to get JNI environment" );
+        return nullptr;
+    }
+
+    return env;
+}
 
     // ========================================================================
     // AndroidRequestForegroundService — JNI upcall to start foreground service
@@ -451,18 +442,8 @@ Java_ai_gnus_sdk_GeniusBackgroundWorker_nativeOnWorkManagerWakeUp(
         return JNI_FALSE;
     }
 
-    // Access the global GeniusNodeInstance singleton
-    // Pattern: GeniusSDK.cpp line 203
-    extern std::shared_ptr<sgns::GeniusNode> GeniusNodeInstance;
-
-    if ( !GeniusNodeInstance )
-    {
-        LOGI( "GeniusNodeInstance is null — node not initialized, skipping wake-up" );
-        return JNI_FALSE;
-    }
-
     // Check processing status via existing C API
-    // Pattern: GeniusSDK.cpp lines 642-655
+    // GeniusSDKGetProcessingStatus() handles null GeniusNodeInstance internally
     GeniusProcessingStatusInfo status_info = GeniusSDKGetProcessingStatus();
 
     LOGI( "Processing status: %d, percentage: %.1f%%, mode: %s",
@@ -534,17 +515,8 @@ extern "C" JNIEXPORT jobject JNICALL
 Java_ai_gnus_sdk_GeniusForegroundService_nativeGetProcessingStatus(
     JNIEnv *env, jclass /* clazz */ )
 {
-    // Get processing status from the GeniusNodeInstance
-    GeniusProcessingStatusInfo status_info;
-    status_info.status     = GENIUS_PR_STATUS_DISABLED;
-    status_info.percentage = 0.0f;
-
-    extern std::shared_ptr<sgns::GeniusNode> GeniusNodeInstance;
-
-    if ( GeniusNodeInstance )
-    {
-        status_info = GeniusSDKGetProcessingStatus();
-    }
+    // Get processing status — GeniusSDKGetProcessingStatus() handles null node internally
+    GeniusProcessingStatusInfo status_info = GeniusSDKGetProcessingStatus();
 
     // Return a ProcessingStatusInfo object to Kotlin
     // The Kotlin companion object expects: data class ProcessingStatusInfo(status: Int, percentage: Float)

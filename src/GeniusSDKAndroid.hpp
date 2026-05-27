@@ -31,6 +31,16 @@ namespace sgns
     bool AndroidRequestStopForegroundService();
 
     /**
+     * @brief Initialize the GeniusSDK Android background bridge.
+     *
+     * Must be called from JNI_OnLoad to pass the JavaVM pointer.
+     * Only one JNI_OnLoad exists per .so (owned by Android.cpp).
+     *
+     * @param vm JavaVM pointer from JNI_OnLoad
+     */
+    void InitGeniusSDKAndroid( JavaVM *vm );
+
+    /**
      * @brief Thread-safe JNIEnv retrieval.
      *
      * Follows the exact pattern from AndroidSecureStorage::GetJNIEnv().
