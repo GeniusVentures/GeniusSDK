@@ -5,6 +5,8 @@
 #include <sstream>
 #include <string>
 
+#include <rapidjson/document.h>
+
 /**
  * @brief Configuration for Android background processing.
  *
@@ -53,23 +55,40 @@ inline void LoadBackgroundConfig( const std::string &base_path, BackgroundConfig
     std::stringstream buffer;
     buffer << config_file.rdbuf();
 
-    // NOTE: rapidjson is linked via GeniusSDK. Including the header here would
-    // require the rapidjson include path. The actual parse implementation delegates
-    // to a function compiled in GeniusSDKAndroid.cpp which has rapidjson access.
-    // For the Walking Skeleton, the LoadBackgroundConfig call in the C++ layer
-    // uses the defaults above. Full JSON parse is wired in when build integration
-    // adds rapidjson include paths to this translation unit.
+    // Parse JSON configuration — mirrors LoadCrdtConfig pattern exactly
+    // (GeniusNode.cpp lines 195-251): HasParseError guard, HasMember + type check
+    // before every value access, safe defaults on any failure.
     //
-    // Pattern for full implementation (mirrors LoadCrdtConfig):
-    //   rapidjson::Document config_json;
-    //   config_json.Parse( buffer.str().c_str() );
-    //   if ( config_json.HasParseError() || !config_json.IsObject() ) return;
-    //   if ( config_json.HasMember( "mode" ) && config_json["mode"].IsString() )
-    //       cfg.mode = config_json["mode"].GetString();
-    //   if ( config_json.HasMember( "wakeup_interval_minutes" ) &&
-    //        config_json["wakeup_interval_minutes"].IsUint() )
-    //       cfg.wakeup_interval_minutes = config_json["wakeup_interval_minutes"].GetUint();
-    //   ... etc
+    // Mitigation T-01-06: rapidjson Parse() + HasParseError() check
+    // → fall back to safe defaults on malformed JSON (DoS prevention).
+    rapidjson::Document config_json;
+    config_json.Parse( buffer.str().c_str() );
+    if ( config_json.HasParseError() || !config_json.IsObject() )
+    {
+        return; // use safe defaults
+    }
+
+    if ( config_json.HasMember( "mode" ) && config_json["mode"].IsString() )
+    {
+        cfg.mode = config_json["mode"].GetString();
+    }
+    if ( config_json.HasMember( "wakeup_interval_minutes" ) &&
+         config_json["wakeup_interval_minutes"].IsUint() )
+    {
+        cfg.wakeup_interval_minutes = config_json["wakeup_interval_minutes"].GetUint();
+    }
+    if ( config_json.HasMember( "network_required" ) && config_json["network_required"].IsBool() )
+    {
+        cfg.network_required = config_json["network_required"].GetBool();
+    }
+    if ( config_json.HasMember( "battery_not_low" ) && config_json["battery_not_low"].IsBool() )
+    {
+        cfg.battery_not_low = config_json["battery_not_low"].GetBool();
+    }
+    if ( config_json.HasMember( "idle_only" ) && config_json["idle_only"].IsBool() )
+    {
+        cfg.idle_only = config_json["idle_only"].GetBool();
+    }
 
     // Apply non-zero defaults for fields that should not be zero
     if ( cfg.wakeup_interval_minutes == 0 )
