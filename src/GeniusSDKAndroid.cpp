@@ -354,12 +354,16 @@ Java_ai_gnus_sdk_BackgroundServiceManager_nativeInit(
     g_background_config_loaded = true;
 
     LOGI( "nativeInit: config loaded — mode=%s, interval=%u min, "
-          "network=%s, battery_not_low=%s, idle_only=%s",
+          "network=%s, battery_not_low=%s, idle_only=%s, "
+          "thermal=%s, battery_saver=%s, inference_timeout=%u",
           g_background_config.mode.c_str(),
           g_background_config.wakeup_interval_minutes,
           g_background_config.network_required ? "true" : "false",
           g_background_config.battery_not_low ? "true" : "false",
-          g_background_config.idle_only ? "true" : "false" );
+          g_background_config.idle_only ? "true" : "false",
+          g_background_config.thermal_check_enabled ? "true" : "false",
+          g_background_config.battery_saver_check_enabled ? "true" : "false",
+          g_background_config.inference_idle_timeout_seconds );
 }
 
 /**
@@ -398,6 +402,12 @@ Java_ai_gnus_sdk_BackgroundServiceManager_nativeGetConfigJson(
     writer.Bool( g_background_config.battery_not_low );
     writer.Key( "idleOnly" );
     writer.Bool( g_background_config.idle_only );
+    writer.Key( "thermalCheckEnabled" );
+    writer.Bool( g_background_config.thermal_check_enabled );
+    writer.Key( "batterySaverCheckEnabled" );
+    writer.Bool( g_background_config.battery_saver_check_enabled );
+    writer.Key( "inferenceIdleTimeoutSeconds" );
+    writer.Uint( g_background_config.inference_idle_timeout_seconds );
     writer.EndObject();
 
     return env->NewStringUTF( sb.GetString() );
@@ -490,6 +500,21 @@ Java_ai_gnus_sdk_GeniusBackgroundWorker_nativeOnWorkManagerWakeUp(
     }
     else if ( status_info.status == GENIUS_PR_STATUS_IDLE )
     {
+        // D-01: Proactive foreground service start when node is READY
+        // even if no processing is happening yet. This keeps the node alive
+        // so inference can start without waiting for next WorkManager cycle.
+        GeniusNodeState_t node_state = GeniusSDKGetNodeState();
+        if ( node_state == GENIUS_NODE_READY )
+        {
+            LOGI( "Node is IDLE but READY — proactively requesting foreground service" );
+
+            bool started = sgns::AndroidRequestForegroundService(
+                "SuperGenius Processing", "Standing by for inference…" );
+
+            LOGI( "Foreground service %s", started ? "started" : "failed to start" );
+            return started ? JNI_TRUE : JNI_FALSE;
+        }
+
         LOGI( "Node is IDLE — requesting foreground service stop" );
         sgns::AndroidRequestStopForegroundService();
         return JNI_FALSE;

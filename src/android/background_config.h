@@ -23,6 +23,9 @@ struct BackgroundConfig
     bool        network_required{ true };
     bool        battery_not_low{ true };
     bool        idle_only{ false };
+    bool        thermal_check_enabled{ true };
+    bool        battery_saver_check_enabled{ true };
+    uint32_t    inference_idle_timeout_seconds{ 120 };
 };
 
 /**
@@ -89,10 +92,27 @@ inline void LoadBackgroundConfig( const std::string &base_path, BackgroundConfig
     {
         cfg.idle_only = config_json["idle_only"].GetBool();
     }
+    if ( config_json.HasMember( "thermal_check_enabled" ) && config_json["thermal_check_enabled"].IsBool() )
+    {
+        cfg.thermal_check_enabled = config_json["thermal_check_enabled"].GetBool();
+    }
+    if ( config_json.HasMember( "battery_saver_check_enabled" ) && config_json["battery_saver_check_enabled"].IsBool() )
+    {
+        cfg.battery_saver_check_enabled = config_json["battery_saver_check_enabled"].GetBool();
+    }
+    if ( config_json.HasMember( "inference_idle_timeout_seconds" ) &&
+         config_json["inference_idle_timeout_seconds"].IsUint() )
+    {
+        cfg.inference_idle_timeout_seconds = config_json["inference_idle_timeout_seconds"].GetUint();
+    }
 
     // Apply non-zero defaults for fields that should not be zero
     if ( cfg.wakeup_interval_minutes == 0 )
     {
         cfg.wakeup_interval_minutes = 15;
+    }
+    if ( cfg.inference_idle_timeout_seconds == 0 )
+    {
+        cfg.inference_idle_timeout_seconds = 120;
     }
 }
