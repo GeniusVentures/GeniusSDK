@@ -2,11 +2,26 @@ file(GLOB ALL_HDRS
     "./*.h"
     "./*.hpp"
     )
+list(FILTER ALL_HDRS EXCLUDE REGEX "GeniusSDKAndroid\\.hpp$")
 
 file(GLOB ALL_SRCS
     "./*.cpp"
     "./*.c"
     )
+list(FILTER ALL_SRCS EXCLUDE REGEX "GeniusSDKAndroid\\.cpp$")
+
+# Android-specific sources — only compiled when targeting Android
+file(GLOB ANDROID_SRCS
+    "./GeniusSDKAndroid.cpp"
+    )
+file(GLOB ANDROID_HDRS
+    "./GeniusSDKAndroid.hpp"
+    )
+
+if(CMAKE_SYSTEM_NAME STREQUAL "Android")
+    list(APPEND ALL_SRCS ${ANDROID_SRCS})
+    list(APPEND ALL_HDRS ${ANDROID_HDRS})
+endif()
 
 add_library(GeniusSDK STATIC ${ALL_SRCS} ${ALL_HDRS})
 set_target_properties(GeniusSDK PROPERTIES
