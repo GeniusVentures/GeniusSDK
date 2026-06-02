@@ -9,7 +9,9 @@
 
 #include <account/GeniusAccount.hpp>
 #include <algorithm>
+#include <cstdint>
 #include <memory>
+#include <spdlog/spdlog.h>
 #include <string>
 #include <cstring>
 #include <fstream>
@@ -114,8 +116,8 @@ namespace
             return outcome::failure( JsonError( std::string( "Failed to parse TokenID: " ) + tidRes.error().what() ) );
         }
 
-        config_from_file.Addr             = std::string( document["Address"].GetString(), document["Address"].GetStringLength() );
-        config_from_file.Cut              = document["Cut"].GetString();
+        config_from_file.Addr = std::string( document["Address"].GetString(), document["Address"].GetStringLength() );
+        config_from_file.Cut  = document["Cut"].GetString();
         config_from_file.TokenValueInGNUS = document["TokenValue"].GetString();
         config_from_file.TokenID          = tidRes.value();
         config_from_file.BaseWritePath    = base_path;
@@ -481,12 +483,14 @@ GeniusNodeReturnValue_t GeniusSDKMintGNUS( const GeniusTokenValue *amount,
 
 GeniusAddress GeniusSDKGetAddress()
 {
-    GeniusAddress ret;
+    GeniusAddress ret = {};
+
     if ( GeniusNodeInstance )
     {
-        auto address = GeniusNodeInstance->GetAddress();
-
-        std::copy( address.cbegin(), address.cend(), ret.address );
+        auto address   = GeniusNodeInstance->GetAddress();
+        ret.address[0] = '0';
+        ret.address[1] = 'x';
+        std::copy( address.cbegin(), address.cend(), &ret.address[2] );
     }
 
     return ret;
@@ -622,24 +626,35 @@ GeniusNodeReturnValue_t GeniusSDKShutdown()
     return ret;
 }
 
-const char *GetAvailableAccounts()
+const char *GeniusSDKGetAvailableAccounts()
 {
+    // +1 for separator
+    constexpr uint64_t SECTION_SIZE = GENIUS_SDK_ADDRESS_SIZE + 1;
+
     auto accounts = GeniusNodeInstance->GetAvailableAccounts();
 
-    // 64 characters for the address + 1 separator character
-    char *ret = reinterpret_cast<char *>( malloc( accounts.size() * 65 ) );
+    char *ret = reinterpret_cast<char *>( malloc( std::max( accounts.size() * SECTION_SIZE, UINT64_C( 1 ) ) ) );
 
     for ( size_t i = 0; i < accounts.size(); ++i )
     {
-        memcpy( &ret[i * 65], accounts[i].data(), 64 );
-        ret[i * 65 - 1] = '\n';
+        SPDLOG_INFO("{}: {}", i * SECTION_SIZE, accounts[i]);
+        memcpy( &ret[i * SECTION_SIZE], accounts[i].data(), GENIUS_SDK_ADDRESS_SIZE );
+        ret[(i + 1) * SECTION_SIZE - 1] = '\n';
     }
-    ret[accounts.size() * 65 - 1] = '\0';
+
+    if ( accounts.size() > 0 )
+    {
+        ret[accounts.size() * SECTION_SIZE - 1] = '\0';
+    }
+    else
+    {
+        ret[0] = '\0';
+    }
 
     return ret;
 }
 
-GeniusNodeReturnValue_t SelectGeniusAccount( const char *public_address )
+GeniusNodeReturnValue_t GeniusSDKSelectGeniusAccount( const char *public_address )
 {
     if ( !GeniusNodeInstance )
     {
@@ -653,7 +668,7 @@ GeniusNodeReturnValue_t SelectGeniusAccount( const char *public_address )
     return GENIUS_NODE_INVALID_ARGUMENT;
 }
 
-GeniusNodeReturnValue_t TransferGeniusAccount( const char *public_address )
+GeniusNodeReturnValue_t GeniusSDKTransferGeniusAccount( const char *public_address )
 {
     if ( !GeniusNodeInstance )
     {
@@ -667,7 +682,7 @@ GeniusNodeReturnValue_t TransferGeniusAccount( const char *public_address )
     return GENIUS_NODE_INVALID_ARGUMENT;
 }
 
-GeniusNodeReturnValue_t MergeGeniusAccount( const char *public_address )
+GeniusNodeReturnValue_t GeniusSDKMergeGeniusAccount( const char *public_address )
 {
     if ( !GeniusNodeInstance )
     {
@@ -681,7 +696,7 @@ GeniusNodeReturnValue_t MergeGeniusAccount( const char *public_address )
     return GENIUS_NODE_INVALID_ARGUMENT;
 }
 
-GeniusNodeReturnValue_t SetPayoutAddress( const char *public_address )
+GeniusNodeReturnValue_t GeniusSDKSetPayoutAddress( const char *public_address )
 {
     if ( !GeniusNodeInstance )
     {
