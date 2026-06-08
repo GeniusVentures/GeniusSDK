@@ -411,12 +411,13 @@ find_package(LLVM CONFIG REQUIRED)
 set(nlohmann_json_DIR "${THIRDPARTY_BUILD_DIR}/json/share/cmake/nlohmann_json")
 find_package(nlohmann_json CONFIG REQUIRED)
 
+
 if(NOT DEFINED SUPERGENIUS_BUILD_DIR)
     # define third party directory
     if(NOT DEFINED SUPERGENIUS_DIR)
-        if(EXISTS "${CMAKE_CURRENT_LIST_DIR}/../../SuperGenius")
+        if(EXISTS "${PROJECT_SUPER_ROOT}/SuperGenius")
             print("Setting default SuperGenius directory")
-            set(SUPERGENIUS_DIR "${CMAKE_CURRENT_LIST_DIR}/../../SuperGenius" CACHE STRING "Default SuperGenius Library")
+            set(SUPERGENIUS_DIR "${PROJECT_SUPER_ROOT}/SuperGenius" CACHE STRING "Default SuperGenius Library")
 
             # # get absolute path
             cmake_path(SET SUPERGENIUS_DIR NORMALIZE "${SUPERGENIUS_DIR}")
