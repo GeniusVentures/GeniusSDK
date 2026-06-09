@@ -9,6 +9,7 @@
 
 #include <account/GeniusAccount.hpp>
 #include <algorithm>
+#include <blockchain/Blockchain.hpp>
 #include <cstdint>
 #include <memory>
 #include <spdlog/spdlog.h>
@@ -631,15 +632,21 @@ const char *GeniusSDKGetAvailableAccounts()
     // +1 for separator
     constexpr uint64_t SECTION_SIZE = GENIUS_SDK_ADDRESS_SIZE + 1;
 
+    if ( !GeniusNodeInstance )
+    {
+        return nullptr;
+    }
+
     auto accounts = GeniusNodeInstance->GetAvailableAccounts();
 
     char *ret = reinterpret_cast<char *>( malloc( std::max( accounts.size() * SECTION_SIZE, UINT64_C( 1 ) ) ) );
 
     for ( size_t i = 0; i < accounts.size(); ++i )
     {
-        SPDLOG_INFO("{}: {}", i * SECTION_SIZE, accounts[i]);
-        memcpy( &ret[i * SECTION_SIZE], accounts[i].data(), GENIUS_SDK_ADDRESS_SIZE );
-        ret[(i + 1) * SECTION_SIZE - 1] = '\n';
+        ret[i * SECTION_SIZE]     = '0';
+        ret[i * SECTION_SIZE + 1] = 'x';
+        memcpy( &ret[i * SECTION_SIZE + 2], accounts[i].data(), GENIUS_SDK_ADDRESS_SIZE - 2 );
+        ret[( i + 1 ) * SECTION_SIZE - 1] = '\n';
     }
 
     if ( accounts.size() > 0 )
@@ -654,11 +661,37 @@ const char *GeniusSDKGetAvailableAccounts()
     return ret;
 }
 
+GeniusNodeReturnValue_t GeniusSDKAddAccountWithPrivateKey( const char *private_key )
+{
+    if ( !GeniusNodeInstance )
+    {
+        return GENIUS_NODE_ERROR_NOT_INITIALIZED;
+    }
+    if ( GeniusNodeInstance->AddAccountWithKey( private_key ).has_value() )
+    {
+        return GENIUS_NODE_RET_OK;
+    }
+    return GENIUS_NODE_INVALID_ARGUMENT;
+}
+
+GeniusNodeReturnValue_t GeniusSDKAddAccountWithMnemonic( const char *mnemonic )
+{
+    if ( !GeniusNodeInstance )
+    {
+        return GENIUS_NODE_ERROR_NOT_INITIALIZED;
+    }
+    if ( GeniusNodeInstance->AddAccountWithMnemonic( std::string( mnemonic ) ).has_value() )
+    {
+        return GENIUS_NODE_RET_OK;
+    }
+    return GENIUS_NODE_INVALID_ARGUMENT;
+}
+
 GeniusNodeReturnValue_t GeniusSDKSelectGeniusAccount( const char *public_address )
 {
     if ( !GeniusNodeInstance )
     {
-        return GENIUS_NODE_ERROR_CREATING;
+        return GENIUS_NODE_ERROR_NOT_INITIALIZED;
     }
 
     if ( GeniusNodeInstance->SelectAccount( public_address ).has_value() )
@@ -672,7 +705,7 @@ GeniusNodeReturnValue_t GeniusSDKTransferGeniusAccount( const char *public_addre
 {
     if ( !GeniusNodeInstance )
     {
-        return GENIUS_NODE_ERROR_CREATING;
+        return GENIUS_NODE_ERROR_NOT_INITIALIZED;
     }
 
     if ( GeniusNodeInstance->TransferAccount( public_address ).has_value() )
@@ -686,10 +719,24 @@ GeniusNodeReturnValue_t GeniusSDKMergeGeniusAccount( const char *public_address 
 {
     if ( !GeniusNodeInstance )
     {
-        return GENIUS_NODE_ERROR_CREATING;
+        return GENIUS_NODE_ERROR_NOT_INITIALIZED;
     }
 
     if ( GeniusNodeInstance->MergeAccount( public_address ).has_value() )
+    {
+        return GENIUS_NODE_RET_OK;
+    }
+    return GENIUS_NODE_INVALID_ARGUMENT;
+}
+
+GeniusNodeReturnValue_t GeniusSDKDeleteAccount( const char *public_address )
+{
+    if ( !GeniusNodeInstance )
+    {
+        return GENIUS_NODE_ERROR_NOT_INITIALIZED;
+    }
+
+    if ( GeniusNodeInstance->DeleteAccount( public_address ).has_value() )
     {
         return GENIUS_NODE_RET_OK;
     }
@@ -700,7 +747,7 @@ GeniusNodeReturnValue_t GeniusSDKSetPayoutAddress( const char *public_address )
 {
     if ( !GeniusNodeInstance )
     {
-        return GENIUS_NODE_ERROR_CREATING;
+        return GENIUS_NODE_ERROR_NOT_INITIALIZED;
     }
 
     if ( GeniusNodeInstance->SetPayoutAddress( public_address ).has_value() )

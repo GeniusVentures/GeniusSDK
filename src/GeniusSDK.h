@@ -97,8 +97,7 @@ typedef enum
     GENIUS_NODE_ERROR_MINT,
     GENIUS_NODE_INVALID_ARGUMENT,
     GENIUS_NODE_ERROR_TRANSFER,
-    GENIUS_NODE_ERROR_PAY_DEV,
-    GENIUS_NODE_ERROR_CREATING
+    GENIUS_NODE_ERROR_PAY_DEV
 } GeniusNodeReturnValue;
 
 /**
@@ -238,6 +237,22 @@ GNUS_VISIBILITY_DEFAULT GeniusNodeReturnValue_t GeniusSDKShutdown();
 GNUS_VISIBILITY_DEFAULT const char *GeniusSDKGetAvailableAccounts();
 
 /**
+ * @brief Adds a new account using an Ethereum private key.
+ * @param[in] private_key Null-terminated string representing the private key in hex format (0x prefix optional).
+ * @return @ref GENIUS_NODE_RET_OK on success, @ref GENIUS_NODE_ERROR_NOT_INITIALIZED if the SDK is not initialized,
+ *         or @ref GENIUS_NODE_INVALID_ARGUMENT on failure.
+ */
+GNUS_VISIBILITY_DEFAULT GeniusNodeReturnValue_t GeniusSDKAddAccountWithPrivateKey( const char *private_key );
+
+/**
+ * @brief Adds a new account using a mnemonic phrase.
+ * @param[in] mnemonic Null-terminated string representing the mnemonic recovery phrase.
+ * @return @ref GENIUS_NODE_RET_OK on success, @ref GENIUS_NODE_ERROR_NOT_INITIALIZED if the SDK is not initialized,
+ *         or @ref GENIUS_NODE_INVALID_ARGUMENT on failure.
+ */
+GNUS_VISIBILITY_DEFAULT GeniusNodeReturnValue_t GeniusSDKAddAccountWithMnemonic( const char *mnemonic );
+
+/**
  * @brief Selects the active account for subsequent SDK operations.
  * @param[in] public_address Null-terminated string representing the account's public address.
  * @return @ref GENIUS_NODE_RET_OK on success, @ref GENIUS_NODE_ERROR_CREATING if not initialized,
@@ -260,6 +275,11 @@ GNUS_VISIBILITY_DEFAULT GeniusNodeReturnValue_t GeniusSDKTransferGeniusAccount( 
  *         or @ref GENIUS_NODE_INVALID_ARGUMENT on failure.
  */
 GNUS_VISIBILITY_DEFAULT GeniusNodeReturnValue_t GeniusSDKMergeGeniusAccount( const char *public_address );
+
+/**
+ * @brief Deletes the account.
+ */
+GNUS_VISIBILITY_DEFAULT GeniusNodeReturnValue_t GeniusSDKDeleteAccount( const char *public_address );
 
 /**
  * @brief Sets the payout address for processing rewards.
