@@ -245,7 +245,7 @@ const char *GeniusSDKInitWithCredentials( const char              *base_path,
                           {
                               return std::shared_ptr<sgns::GeniusNode>(
                                   sgns::GeniusNode::New( config,
-                                                         { credentials->email, credentials->password },
+                                                         credentials->password,
                                                          autodht,
                                                          process,
                                                          baseport,

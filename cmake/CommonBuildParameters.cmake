@@ -29,7 +29,6 @@ if(NOT TARGET Vulkan::Vulkan)
     find_package(Vulkan REQUIRED)
 endif()
 
-
 # Set config of GTest
 set(GTest_DIR "${THIRDPARTY_BUILD_DIR}/GTest/lib/cmake/GTest")
 set(GTest_INCLUDE_DIR "${THIRDPARTY_BUILD_DIR}/GTest/include")
@@ -63,33 +62,30 @@ set(yaml-cpp_DIR "${THIRDPARTY_BUILD_DIR}/yaml-cpp/lib/cmake/yaml-cpp")
 set(yaml-cpp_INCLUDE_DIR "${THIRDPARTY_BUILD_DIR}/yaml-cpp/include")
 find_package(yaml-cpp CONFIG REQUIRED)
 
+# ----- absl, utf8_range, protobuf all needed for protobuf to work -----
 # absl
 if(NOT DEFINED absl_DIR)
-    set(absl_DIR "${_THIRDPARTY_BUILD_DIR}/grpc/lib/cmake/absl")
+    set(absl_DIR "${THIRDPARTY_BUILD_DIR}/protobuf/lib/cmake/absl")
 endif()
 
 # utf8_range
 if(NOT DEFINED utf8_range_DIR)
-    set(utf8_range_DIR "${_THIRDPARTY_BUILD_DIR}/grpc/lib/cmake/utf8_range")
+    set(utf8_range_DIR "${THIRDPARTY_BUILD_DIR}/protobuf/lib/cmake/utf8_range")
 endif()
 
 # Set config of protobuf project
 if(NOT DEFINED Protobuf_DIR)
-    set(Protobuf_DIR "${_THIRDPARTY_BUILD_DIR}/grpc/lib/cmake/protobuf")
-endif()
-
-if(NOT DEFINED grpc_INCLUDE_DIR)
-    set(grpc_INCLUDE_DIR "${_THIRDPARTY_BUILD_DIR}/grpc/include")
+    set(Protobuf_DIR "${THIRDPARTY_BUILD_DIR}/protobuf/lib/cmake/protobuf")
 endif()
 
 if(NOT DEFINED Protobuf_INCLUDE_DIR)
-    set(Protobuf_INCLUDE_DIR "${grpc_INCLUDE_DIR}/google/protobuf")
+    set(Protobuf_INCLUDE_DIR "${THIRDPARTY_BUILD_DIR}/protobuf")
 endif()
 
 find_package(Protobuf CONFIG REQUIRED)
 
 if(NOT DEFINED PROTOC_EXECUTABLE)
-    set(PROTOC_EXECUTABLE "${THIRDPARTY_BUILD_DIR}/grpc/bin/protoc${CMAKE_EXECUTABLE_SUFFIX}")
+    set(PROTOC_EXECUTABLE "${THIRDPARTY_BUILD_DIR}/protobuf/bin/protoc${CMAKE_EXECUTABLE_SUFFIX}")
 endif()
 
 set(Protobuf_PROTOC_EXECUTABLE ${PROTOC_EXECUTABLE} CACHE PATH "Initial cache" FORCE)
@@ -121,6 +117,13 @@ set(OPENSSL_MSVC_STATIC_RT ON CACHE BOOL "OpenSSL use static RT")
 set(OPENSSL_ROOT_DIR "${OPENSSL_DIR}" CACHE PATH "Path to OpenSSL install root folder")
 set(OPENSSL_INCLUDE_DIR "${OPENSSL_DIR}/include" CACHE PATH "Path to OpenSSL include folder")
 find_package(OpenSSL REQUIRED)
+
+# --------------------------------------------------------
+# snappy
+set(Snappy_DIR "${_THIRDPARTY_BUILD_DIR}/snappy/lib/cmake/Snappy")
+set(Snappy_INCLUDE_DIR "${THIRDPARTY_BUILD_DIR}/snappy/include")
+find_package(Snappy CONFIG REQUIRED)
+include_directories(${Snappy_INCLUDE_DIR})
 
 # Set config of rocksdb
 set(RocksDB_DIR "${THIRDPARTY_BUILD_DIR}/rocksdb/lib/cmake/rocksdb")
@@ -191,6 +194,7 @@ set(boost_unit_test_framework_DIR "${Boost_LIB_DIR}/cmake/boost_unit_test_framew
 set(Boost_USE_MULTITHREADED ON)
 set(Boost_USE_STATIC_LIBS ON)
 set(Boost_NO_SYSTEM_PATHS ON)
+set(Boost_NO_SYSTEM_PATHS ON)
 option(Boost_USE_STATIC_RUNTIME "Use static runtimes" ON)
 
 option(SGNS_STACKTRACE_BACKTRACE "Use BOOST_STACKTRACE_USE_BACKTRACE in stacktraces, for POSIX" OFF)
@@ -204,7 +208,7 @@ if(SGNS_STACKTRACE_BACKTRACE)
 endif()
 
 # header only libraries must not be added here
-find_package(Boost REQUIRED COMPONENTS container date_time filesystem json random regex system thread log log_setup program_options unit_test_framework)
+find_package(Boost CONFIG REQUIRED COMPONENTS container date_time filesystem json random regex system thread log log_setup program_options unit_test_framework)
 
 # Set config of SQLiteModernCpp project
 set(SQLiteModernCpp_ROOT_DIR "${THIRDPARTY_BUILD_DIR}/SQLiteModernCpp")
@@ -254,11 +258,6 @@ find_package(ipfs-bitswap-cpp CONFIG REQUIRED)
 set(ed25519_DIR "${THIRDPARTY_BUILD_DIR}/ed25519/lib/cmake/ed25519")
 set(ed25519_INCLUDE_DIR "${THIRDPARTY_BUILD_DIR}/ed25519/include")
 find_package(ed25519 CONFIG REQUIRED)
-
-# Set config of sr25519-donna
-set(sr25519-donna_DIR "${THIRDPARTY_BUILD_DIR}/sr25519-donna/lib/cmake/sr25519-donna")
-set(sr25519-donna_INCLUDE_DIR "${THIRDPARTY_BUILD_DIR}/sr25519-donna/include")
-find_package(sr25519-donna CONFIG REQUIRED)
 
 # Set RapidJSON config path
 set(RapidJSON_DIR "${THIRDPARTY_BUILD_DIR}/rapidjson/lib/cmake/RapidJSON")
@@ -411,21 +410,16 @@ if(NOT DEFINED SUPERGENIUS_BUILD_DIR)
     endif()
     print("Setting SuperGenius build directory default")
     get_filename_component(BUILD_PLATFORM_NAME ${CMAKE_CURRENT_SOURCE_DIR} NAME)
-    set(SUPERGENIUS_BUILD_DIR "${SUPERGENIUS_DIR}/build/${BUILD_PLATFORM_NAME}/${CMAKE_BUILD_TYPE}${ABI_SUBFOLDER_NAME}" CACHE STRING "Default Third Party Build Directory")
+    set(SUPERGENIUS_BUILD_DIR "${SUPERGENIUS_DIR}/build/${BUILD_PLATFORM_NAME}/${CMAKE_BUILD_TYPE}${ABI_SUBFOLDER_NAME}" CACHE STRING "Default Super Genius Build Directory")
 endif()
 
 # Set config of SuperGenius project
 set(SuperGenius_DIR "${SUPERGENIUS_BUILD_DIR}/SuperGenius/lib/cmake/SuperGenius/")
-set(ProofSystem_DIR "${SUPERGENIUS_BUILD_DIR}/SuperGenius/lib/cmake/ProofSystem/")
-set(SGProcessingManager_DIR "${SUPERGENIUS_BUILD_DIR}/SuperGenius/lib/cmake/SGProcessingManager/")
 
 print("SuperGenius_DIR: ${SuperGenius_DIR}")
 
-find_package(ProofSystem CONFIG REQUIRED)
-find_package(SGProcessingManager CONFIG REQUIRED)
 find_package(SuperGenius CONFIG REQUIRED)
 include_directories(${SuperGenius_INCLUDE_DIR})
-include_directories("${ZKLLVM_BUILD_DIR}/zkLLVM/include")
 
 include_directories(
     ${PROJECT_ROOT}/include
@@ -453,6 +447,115 @@ endif()
 # Build examples
 if(BUILD_EXAMPLES)
     add_subdirectory(${PROJECT_ROOT}/example ${CMAKE_BINARY_DIR}/example)
+endif()
+
+# Install third-party headers used by the SDK public surface.
+set(GENIUSSDK_THIRDPARTY_INCLUDE_DIRS
+    ${Vulkan_INCLUDE_DIR}
+    ${fmt_INCLUDE_DIR}
+    ${MNN_INCLUDE_DIR}
+    ${soralog_INCLUDE_DIR}
+    ${c-ares_INCLUDE_DIR}
+    ${yaml-cpp_INCLUDE_DIR}
+    ${Protobuf_INCLUDE_DIR}
+    ${OPENSSL_INCLUDE_DIR}
+    ${Snappy_INCLUDE_DIR}
+    ${RocksDB_INCLUDE_DIR}
+    ${THIRDPARTY_BUILD_DIR}/stb/include
+    ${GSL_INCLUDE_DIR}
+    ${spdlog_INCLUDE_DIR}
+    ${tsl_hat_trie_INCLUDE_DIR}
+    ${Boost.DI_INCLUDE_DIR}
+    ${Boost_INCLUDE_DIR}
+    ${SQLiteModernCpp_INCLUDE_DIR}
+    ${sqlite3_INCLUDE_DIR}
+    ${libp2p_INCLUDE_DIR}
+    ${ipfs-lite-cpp_INCLUDE_DIR}
+    ${CBOR_INCLUDE_DIR}
+    ${ipfs-pubsub_INCLUDE_DIR}
+    ${ipfs-bitswap-cpp_INCLUDE_DIR}
+    ${ed25519_INCLUDE_DIR}
+    ${sr25519-donna_INCLUDE_DIR}
+    ${RapidJSON_INCLUDE_DIR}
+    ${jsonrpc_lean_INCLUDE_DIR}
+    ${libsecp256k1_INCLUDE_DIR}
+    ${xxHash_INCLUDE_DIR}
+    ${Libssh2_INCLUDE_DIR}
+    ${AsyncIOManager_INCLUDE_DIR}
+    ${gnus_upnp_INCLUDE_DIR}
+    ${TrustWalletCore_INCLUDE_DIR}
+    ${zkLLVM_INCLUDE_DIR}
+    ${SuperGenius_INCLUDE_DIR}
+)
+
+function(geniussdk_install_header_tree include_dir namespace_hint)
+    if(NOT EXISTS "${include_dir}")
+        return()
+    endif()
+
+    file(GLOB _root_headers
+        "${include_dir}/*.h"
+        "${include_dir}/*.hpp"
+        "${include_dir}/*.hh"
+        "${include_dir}/*.hxx"
+        "${include_dir}/*.inc"
+    )
+
+    if(_root_headers)
+        set(_destination "${CMAKE_INSTALL_INCLUDEDIR}/${namespace_hint}")
+    else()
+        set(_destination "${CMAKE_INSTALL_INCLUDEDIR}")
+    endif()
+
+    install(
+        DIRECTORY "${include_dir}/"
+        DESTINATION "${_destination}"
+        FILES_MATCHING
+        PATTERN "*.h"
+        PATTERN "*.hpp"
+        PATTERN "*.hh"
+        PATTERN "*.hxx"
+        PATTERN "*.inc"
+    )
+endfunction()
+
+function(geniussdk_install_headers include_dir)
+    get_filename_component(_leaf "${include_dir}" NAME)
+    set(_namespace "${_leaf}")
+
+    if(_leaf STREQUAL "include")
+        get_filename_component(_parent "${include_dir}" DIRECTORY)
+        get_filename_component(_parent_leaf "${_parent}" NAME)
+        set(_namespace "${_parent_leaf}")
+        if(_parent_leaf STREQUAL "build" OR _parent_leaf STREQUAL "lib" OR _parent_leaf STREQUAL "src")
+            get_filename_component(_grandparent "${_parent}" DIRECTORY)
+            get_filename_component(_grandparent_leaf "${_grandparent}" NAME)
+            set(_namespace "${_grandparent_leaf}")
+        endif()
+    endif()
+
+    geniussdk_install_header_tree("${include_dir}" "${_namespace}")
+endfunction()
+
+foreach(_thirdparty_include_dir IN LISTS GENIUSSDK_THIRDPARTY_INCLUDE_DIRS)
+    geniussdk_install_headers("${_thirdparty_include_dir}")
+endforeach()
+
+# Keep SuperGenius as a dedicated namespace root in the SDK package.
+geniussdk_install_header_tree("${SuperGenius_INCLUDE_DIR}" "SuperGenius")
+
+# Install RLP public headers under include/rlp for <rlp/...> includes.
+if(EXISTS "${SUPERGENIUS_DIR}/rlp/include/rlp")
+    install(
+        DIRECTORY "${SUPERGENIUS_DIR}/rlp/include/rlp/"
+        DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/rlp"
+        FILES_MATCHING
+        PATTERN "*.h"
+        PATTERN "*.hpp"
+        PATTERN "*.hh"
+        PATTERN "*.hxx"
+        PATTERN "*.inc"
+    )
 endif()
 
 # Install targets

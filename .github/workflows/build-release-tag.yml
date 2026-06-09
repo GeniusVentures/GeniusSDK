@@ -376,7 +376,8 @@ jobs:
       - name: Compress build artifacts
         working-directory: ${{github.workspace}}/GeniusSDK/${{env.BUILD_DIRECTORY}}
         run: |
-          tar --exclude=.git -czvf ${FILE_NAME} --transform 's|^|${{env.BUILD_DIRECTORY}}/|' GeniusSDK/
+          tar --exclude=.git -czvf ${FILE_NAME} --transform 's|^|${{env.BUILD_DIRECTORY}}/|' GeniusSDK
+          tar --exclude=.git --exclude=src --exclude=tmp -zvf ${FILE_NAME} --transform 's|^|${{env.BUILD_DIRECTORY}}/thirdparty/${{env.BUILD_DIRECTORY}}| ${{env.THIRDPARTY_BUILD_DIR}}/
         shell: bash
 
       - name: Release SDK
