@@ -233,6 +233,27 @@ const char *GeniusSDKInitWithKey( const char *base_path,
         } );
 }
 
+const char *GeniusSDKInitWithCredentials( const char              *base_path,
+                                          const GeniusCredentials *credentials,
+                                          bool                     autodht,
+                                          bool                     process,
+                                          uint16_t                 baseport,
+                                          bool                     is_full_node )
+{
+    return SDKInitHelper( base_path,
+                          [&]( const auto &config )
+                          {
+                              return std::shared_ptr<sgns::GeniusNode>(
+                                  sgns::GeniusNode::New( config,
+                                                         credentials->password,
+                                                         autodht,
+                                                         process,
+                                                         baseport,
+                                                         is_full_node,
+                                                         true ) );
+                          } );
+}
+
 const char *GeniusSDKInitWithKeyAndDevConfig( const char *base_path,
                                               const char *dev_config,
                                               const char *eth_private_key,
