@@ -609,6 +609,14 @@ GeniusNodeReturnValue_t GeniusSDKShutdown()
     return ret;
 }
 
+void GeniusSDKLoadLogConfig()
+{
+    if ( GeniusNodeInstance )
+    {
+        GeniusNodeInstance->LoadLogConfig();
+    }
+}
+
 GeniusTransactionManagerState_t GeniusSDKGetTransactionManagerState()
 {
     if ( !GeniusNodeInstance )

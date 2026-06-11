@@ -171,6 +171,11 @@ GNUS_VISIBILITY_DEFAULT const char             *GeniusSDKInitMinimal( const char
 GNUS_VISIBILITY_DEFAULT GeniusNodeReturnValue_t GeniusSDKShutdown();
 
 /**
+ * @brief Reloads log level overrides from log_config.json at runtime.
+ */
+GNUS_VISIBILITY_DEFAULT void GeniusSDKLoadLogConfig();
+
+/**
  * @brief Retrieves the current balance for a specific token.
  * @param[in] token_id  Token identifier to query.
  * @return The balance amount as a `uint64_t` value (in Minion Tokens).
