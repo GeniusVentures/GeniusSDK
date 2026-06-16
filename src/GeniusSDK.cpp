@@ -31,22 +31,23 @@
 #include <base/buffer.hpp>
 #include <processing/processing_service.hpp>
 
-class JsonError : public boost::exception
-{
-public:
-    explicit JsonError( std::string msg ) : message( std::move( msg ) ) {}
-
-    const char *what() const noexcept
-    {
-        return message.c_str();
-    }
-
-private:
-    std::string message;
-};
-
 namespace
 {
+
+    class JsonError : public boost::exception
+    {
+    public:
+        explicit JsonError( std::string msg ) : message( std::move( msg ) ) {}
+
+        const char *what() const noexcept
+        {
+            return message.c_str();
+        }
+
+    private:
+        std::string message;
+    };
+
     outcome::result<sgns::TokenID, JsonError> ParseTokenID( const rapidjson::Value &v )
     {
         if ( !v.IsString() )
@@ -624,6 +625,11 @@ GeniusNodeReturnValue_t GeniusSDKShutdown()
         std::cout << "GeniusSDK: GeniusNodeInstance has been shut down\n";
     }
     return ret;
+}
+
+void GeniusSDKFree( void *ptr )
+{
+    free( ptr );
 }
 
 GeniusStatusInfo GeniusSDKGetInitializationStatus()
