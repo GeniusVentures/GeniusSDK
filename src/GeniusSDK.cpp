@@ -247,14 +247,13 @@ const char *GeniusSDKInitWithCredentials( const char              *base_path,
     return SDKInitHelper( base_path,
                           [&]( const auto &config )
                           {
-                              return std::shared_ptr<sgns::GeniusNode>(
-                                  sgns::GeniusNode::New( config,
-                                                         credentials->password,
-                                                         autodht,
-                                                         process,
-                                                         baseport,
-                                                         is_full_node,
-                                                         true ) );
+                              return std::shared_ptr<sgns::GeniusNode>( sgns::GeniusNode::New( config,
+                                                                                               credentials->password,
+                                                                                               autodht,
+                                                                                               process,
+                                                                                               baseport,
+                                                                                               is_full_node,
+                                                                                               true ) );
                           } );
 }
 
@@ -625,6 +624,18 @@ GeniusNodeReturnValue_t GeniusSDKShutdown()
         std::cout << "GeniusSDK: GeniusNodeInstance has been shut down\n";
     }
     return ret;
+}
+
+GeniusStatusInfo GeniusSDKGetInitializationStatus()
+{
+    if ( !GeniusNodeInstance )
+    {
+        return {};
+    }
+
+    auto status = GeniusNodeInstance->GetInitializationStatus();
+
+    return { status.first, strdup( status.second.data() ) };
 }
 
 const char *GeniusSDKGetAvailableAccounts()

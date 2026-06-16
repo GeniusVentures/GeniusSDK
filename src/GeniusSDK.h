@@ -52,8 +52,7 @@ typedef struct
     GeniusArray *ptr;
 } GeniusMatrix; ///< Struct to interop a matrix of C++ vectors in C
 
-
-#define GENIUS_SDK_ADDRESS_SIZE (2 + 128) ///< 2 for prefix (0x) + 128 hex characters
+#define GENIUS_SDK_ADDRESS_SIZE ( 2 + 128 ) ///< 2 for prefix (0x) + 128 hex characters
 
 typedef struct
 {
@@ -156,6 +155,12 @@ typedef struct
 
 typedef struct
 {
+    float percentage;
+    char *message;
+} GeniusStatusInfo;
+
+typedef struct
+{
     const char *email;    ///< Null-terminated email
     const char *password; ///< Null-terminated password
 } GeniusCredentials;
@@ -227,6 +232,8 @@ GNUS_VISIBILITY_DEFAULT const char *GeniusSDKInitMinimal( const char *base_path,
  * @returns @ref GENIUS_NODE_RET_OK on success.
  */
 GNUS_VISIBILITY_DEFAULT GeniusNodeReturnValue_t GeniusSDKShutdown();
+
+GNUS_VISIBILITY_DEFAULT GeniusStatusInfo GeniusSDKGetInitializationStatus();
 
 /**
  * @brief Retrieves a list of available Genius accounts.
