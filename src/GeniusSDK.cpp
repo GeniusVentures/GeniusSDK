@@ -218,7 +218,7 @@ const char *GeniusSDKInit( const char *base_path, bool autodht, bool process, ui
                           [&]( const auto &config )
                           {
                               return std::shared_ptr<sgns::GeniusNode>(
-                                  sgns::GeniusNode::New( config, autodht, process, baseport, is_full_node, true ) );
+                                  sgns::GeniusNode::New( config, autodht, process, baseport, is_full_node ) );
                           } );
 }
 
@@ -234,7 +234,7 @@ const char *GeniusSDKInitWithKey( const char *base_path,
         [&]( const auto &config )
         {
             return std::shared_ptr<sgns::GeniusNode>(
-                sgns::GeniusNode::New( config, eth_private_key, autodht, process, baseport, is_full_node, true ) );
+                sgns::GeniusNode::New( config, eth_private_key, autodht, process, baseport, is_full_node ) );
         } );
 }
 
@@ -253,8 +253,7 @@ const char *GeniusSDKInitWithCredentials( const char              *base_path,
                                                                                                autodht,
                                                                                                process,
                                                                                                baseport,
-                                                                                               is_full_node,
-                                                                                               true ) );
+                                                                                               is_full_node ) );
                           } );
 }
 
@@ -294,8 +293,7 @@ const char *GeniusSDKInitWithKeyAndDevConfig( const char *base_path,
                                                                                    autodht,
                                                                                    process,
                                                                                    baseport,
-                                                                                   is_full_node,
-                                                                                   true ) );
+                                                                                   is_full_node ) );
     ret_val.append( load_config_ret.value().BaseWritePath );
 
     return ret_val.c_str();
