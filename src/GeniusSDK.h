@@ -233,8 +233,20 @@ GNUS_VISIBILITY_DEFAULT const char *GeniusSDKInitMinimal( const char *base_path,
  */
 GNUS_VISIBILITY_DEFAULT GeniusNodeReturnValue_t GeniusSDKShutdown();
 
+/**
+ * @brief Frees memory allocated by the SDK.
+ * @param[in] ptr Pointer to the memory block to free. May be null (no-op).
+ */
 GNUS_VISIBILITY_DEFAULT void GeniusSDKFree(void* ptr);
 
+/**
+ * @brief Retrieves the current SDK initialization progress.
+ * @return A @ref GeniusStatusInfo struct containing:
+ *         - `percentage`: Initialization progress from 0.0 to 1.0
+ *         - `message`: A null-terminated string describing the current initialization step,
+ *           or null if the SDK is not initialized. The caller must free `message` with
+ *           @ref GeniusSDKFree().
+ */
 GNUS_VISIBILITY_DEFAULT GeniusStatusInfo GeniusSDKGetInitializationStatus();
 
 /**
