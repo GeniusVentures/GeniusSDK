@@ -31,22 +31,23 @@
 #include <base/buffer.hpp>
 #include <processing/processing_service.hpp>
 
-class JsonError : public boost::exception
-{
-public:
-    explicit JsonError( std::string msg ) : message( std::move( msg ) ) {}
-
-    const char *what() const noexcept
-    {
-        return message.c_str();
-    }
-
-private:
-    std::string message;
-};
-
 namespace
 {
+
+    class JsonError : public boost::exception
+    {
+    public:
+        explicit JsonError( std::string msg ) : message( std::move( msg ) ) {}
+
+        const char *what() const noexcept
+        {
+            return message.c_str();
+        }
+
+    private:
+        std::string message;
+    };
+
     outcome::result<sgns::TokenID, JsonError> ParseTokenID( const rapidjson::Value &v )
     {
         if ( !v.IsString() )
@@ -247,13 +248,12 @@ const char *GeniusSDKInitWithCredentials( const char              *base_path,
     return SDKInitHelper( base_path,
                           [&]( const auto &config )
                           {
-                              return std::shared_ptr<sgns::GeniusNode>(
-                                  sgns::GeniusNode::New( config,
-                                                         credentials->password,
-                                                         autodht,
-                                                         process,
-                                                         baseport,
-                                                         is_full_node ) );
+                              return std::shared_ptr<sgns::GeniusNode>( sgns::GeniusNode::New( config,
+                                                                                               credentials->password,
+                                                                                               autodht,
+                                                                                               process,
+                                                                                               baseport,
+                                                                                               is_full_node ) );
                           } );
 }
 
@@ -631,6 +631,23 @@ void GeniusSDKLoadLogConfig()
     {
         GeniusNodeInstance->LoadLogConfig();
     }
+}
+
+void GeniusSDKFree( void *ptr )
+{
+    free( ptr );
+}
+
+GeniusStatusInfo GeniusSDKGetInitializationStatus()
+{
+    if ( !GeniusNodeInstance )
+    {
+        return {};
+    }
+
+    auto status = GeniusNodeInstance->GetInitializationStatus();
+
+    return { status.first, strdup( status.second.data() ) };
 }
 
 const char *GeniusSDKGetAvailableAccounts()

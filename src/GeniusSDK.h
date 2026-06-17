@@ -52,8 +52,7 @@ typedef struct
     GeniusArray *ptr;
 } GeniusMatrix; ///< Struct to interop a matrix of C++ vectors in C
 
-
-#define GENIUS_SDK_ADDRESS_SIZE (2 + 128) ///< 2 for prefix (0x) + 128 hex characters
+#define GENIUS_SDK_ADDRESS_SIZE ( 2 + 128 ) ///< 2 for prefix (0x) + 128 hex characters
 
 typedef struct
 {
@@ -156,6 +155,12 @@ typedef struct
 
 typedef struct
 {
+    float percentage;
+    char *message;
+} GeniusStatusInfo;
+
+typedef struct
+{
     const char *email;    ///< Null-terminated email
     const char *password; ///< Null-terminated password
 } GeniusCredentials;
@@ -232,6 +237,21 @@ GNUS_VISIBILITY_DEFAULT GeniusNodeReturnValue_t GeniusSDKShutdown();
  * @brief Reloads log level overrides from log_config.json at runtime.
  */
 GNUS_VISIBILITY_DEFAULT void GeniusSDKLoadLogConfig();
+
+ * @brief Frees memory allocated by the SDK.
+ * @param[in] ptr Pointer to the memory block to free. May be null (no-op).
+ */
+GNUS_VISIBILITY_DEFAULT void GeniusSDKFree(void* ptr);
+
+/**
+ * @brief Retrieves the current SDK initialization progress.
+ * @return A @ref GeniusStatusInfo struct containing:
+ *         - `percentage`: Initialization progress from 0.0 to 1.0
+ *         - `message`: A null-terminated string describing the current initialization step,
+ *           or null if the SDK is not initialized. The caller must free `message` with
+ *           @ref GeniusSDKFree().
+ */
+GNUS_VISIBILITY_DEFAULT GeniusStatusInfo GeniusSDKGetInitializationStatus();
 
 /**
  * @brief Retrieves a list of available Genius accounts.
