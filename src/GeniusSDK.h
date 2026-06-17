@@ -52,11 +52,14 @@ typedef struct
     GeniusArray *ptr;
 } GeniusMatrix; ///< Struct to interop a matrix of C++ vectors in C
 
+
+#define GENIUS_SDK_ADDRESS_SIZE (2 + 128) ///< 2 for prefix (0x) + 128 hex characters
+
 typedef struct
 {
-    /// A string prepended with `0x` followed by 64 hex characters,
+    /// A string prepended with `0x` followed by 128 hex characters,
     /// including a null-terminating char just for safety.
-    char address[2 + 256 / 4 + 1];
+    char address[GENIUS_SDK_ADDRESS_SIZE + 1];
 } GeniusAddress;
 
 /**
@@ -95,7 +98,6 @@ typedef enum
     GENIUS_NODE_INVALID_ARGUMENT,
     GENIUS_NODE_ERROR_TRANSFER,
     GENIUS_NODE_ERROR_PAY_DEV
-
 } GeniusNodeReturnValue;
 
 /**
@@ -152,28 +154,145 @@ typedef struct
     float                    percentage; ///< Progress percentage from 0.0 to 100.0
 } GeniusProcessingStatusInfo;
 
-GNUS_VISIBILITY_DEFAULT const char             *GeniusSDKInit( const char *base_path,
-                                                               const char *eth_private_key,
-                                                               bool        autodht,
-                                                               bool        process,
-                                                               uint16_t    baseport,
-                                                               bool        is_full_node );
-GNUS_VISIBILITY_DEFAULT const char             *GeniusSDKInitSecure( const char *base_path,
-                                                                     const char *dev_config,
-                                                                     const char *eth_private_key,
-                                                                     bool        autodht,
-                                                                     bool        process,
-                                                                     uint16_t    baseport,
-                                                                     bool        is_full_node );
-GNUS_VISIBILITY_DEFAULT const char             *GeniusSDKInitMinimal( const char *base_path,
+typedef struct
+{
+    const char *email;    ///< Null-terminated email
+    const char *password; ///< Null-terminated password
+} GeniusCredentials;
+
+/**
+ * @brief Inits the SDK with saved settings (no private key — uses existing wallet).
+ * @param[in] base_path    Base path for node data storage. Must contain a `dev_config.json` file.
+ * @param[in] autodht      Whether to auto-discover DHT peers.
+ * @param[in] process      Whether to enable processing.
+ * @param[in] baseport     Base network port for the node.
+ * @param[in] is_full_node Whether to run as a full node.
+ * @returns Initialization path in case of success, null on failure.
+ */
+GNUS_VISIBILITY_DEFAULT const char *GeniusSDKInit( const char *base_path,
+                                                   bool        autodht,
+                                                   bool        process,
+                                                   uint16_t    baseport,
+                                                   bool        is_full_node );
+/**
+ * @brief Inits the SDK with an ethereum private key.
+ * @param[in] base_path       Base path for node data storage. Must contain a `dev_config.json` file.
+ * @param[in] eth_private_key Valid HEX ethereum key, supports '0x' prefix.
+ * @param[in] autodht         Whether to auto-discover DHT peers.
+ * @param[in] process         Whether to enable processing.
+ * @param[in] baseport        Base network port for the node.
+ * @param[in] is_full_node    Whether to run as a full node.
+ * @returns Initialization path in case of success, null on failure.
+ */
+GNUS_VISIBILITY_DEFAULT const char *GeniusSDKInitWithKey( const char *base_path,
+                                                          const char *eth_private_key,
+                                                          bool        autodht,
+                                                          bool        process,
+                                                          uint16_t    baseport,
+                                                          bool        is_full_node );
+
+/**
+ * @brief Inits the SDK with an explicit developer config JSON string and an ethereum private key.
+ * @param[in] base_path       Base path for node data storage.
+ * @param[in] dev_config      Developer configuration as a JSON string (overrides dev_config.json).
+ * @param[in] eth_private_key Valid HEX ethereum key, supports '0x' prefix.
+ * @param[in] autodht         Whether to auto-discover DHT peers.
+ * @param[in] process         Whether to enable processing.
+ * @param[in] baseport        Base network port for the node.
+ * @param[in] is_full_node    Whether to run as a full node.
+ * @returns Initialization path in case of success, null on failure.
+ */
+GNUS_VISIBILITY_DEFAULT const char *GeniusSDKInitWithKeyAndDevConfig( const char *base_path,
+                                                                      const char *dev_config,
                                                                       const char *eth_private_key,
-                                                                      uint16_t    baseport );
+                                                                      bool        autodht,
+                                                                      bool        process,
+                                                                      uint16_t    baseport,
+                                                                      bool        is_full_node );
+
+/**
+ * @brief Inits the SDK with minimal configuration (convenience wrapper).
+ * @details Equivalent to calling GeniusSDKInitWithKey() with autodht=true, process=true, is_full_node=false.
+ * @param[in] base_path       Base path for node data storage.
+ * @param[in] eth_private_key Valid HEX ethereum key, supports '0x' prefix.
+ * @param[in] baseport        Base network port for the node.
+ * @returns Initialization path in case of success, null on failure.
+ */
+GNUS_VISIBILITY_DEFAULT const char *GeniusSDKInitMinimal( const char *base_path,
+                                                          const char *eth_private_key,
+                                                          uint16_t    baseport );
+
+/**
+ * @brief Shuts down the SDK and releases all node resources.
+ * @returns @ref GENIUS_NODE_RET_OK on success.
+ */
 GNUS_VISIBILITY_DEFAULT GeniusNodeReturnValue_t GeniusSDKShutdown();
 
 /**
  * @brief Reloads log level overrides from log_config.json at runtime.
  */
 GNUS_VISIBILITY_DEFAULT void GeniusSDKLoadLogConfig();
+
+/**
+ * @brief Retrieves a list of available Genius accounts.
+ * @return A null-terminated string containing newline-separated hex addresses,
+ *         or null if the SDK is not initialized. The caller must free the
+ *         returned string with free().
+ */
+GNUS_VISIBILITY_DEFAULT const char *GeniusSDKGetAvailableAccounts();
+
+/**
+ * @brief Adds a new account using an Ethereum private key.
+ * @param[in] private_key Null-terminated string representing the private key in hex format (0x prefix optional).
+ * @return @ref GENIUS_NODE_RET_OK on success, @ref GENIUS_NODE_ERROR_NOT_INITIALIZED if the SDK is not initialized,
+ *         or @ref GENIUS_NODE_INVALID_ARGUMENT on failure.
+ */
+GNUS_VISIBILITY_DEFAULT GeniusNodeReturnValue_t GeniusSDKAddAccountWithPrivateKey( const char *private_key );
+
+/**
+ * @brief Adds a new account using a mnemonic phrase.
+ * @param[in] mnemonic Null-terminated string representing the mnemonic recovery phrase.
+ * @return @ref GENIUS_NODE_RET_OK on success, @ref GENIUS_NODE_ERROR_NOT_INITIALIZED if the SDK is not initialized,
+ *         or @ref GENIUS_NODE_INVALID_ARGUMENT on failure.
+ */
+GNUS_VISIBILITY_DEFAULT GeniusNodeReturnValue_t GeniusSDKAddAccountWithMnemonic( const char *mnemonic );
+
+/**
+ * @brief Selects the active account for subsequent SDK operations.
+ * @param[in] public_address Null-terminated string representing the account's public address.
+ * @return @ref GENIUS_NODE_RET_OK on success, @ref GENIUS_NODE_ERROR_CREATING if not initialized,
+ *         or @ref GENIUS_NODE_INVALID_ARGUMENT on failure.
+ */
+GNUS_VISIBILITY_DEFAULT GeniusNodeReturnValue_t GeniusSDKSelectGeniusAccount( const char *public_address );
+
+/**
+ * @brief Transfers an account to a different address.
+ * @param[in] public_address Null-terminated string representing the target public address.
+ * @return @ref GENIUS_NODE_RET_OK on success, @ref GENIUS_NODE_ERROR_CREATING if not initialized,
+ *         or @ref GENIUS_NODE_INVALID_ARGUMENT on failure.
+ */
+GNUS_VISIBILITY_DEFAULT GeniusNodeReturnValue_t GeniusSDKTransferGeniusAccount( const char *public_address );
+
+/**
+ * @brief Merges an external account into the node's wallet.
+ * @param[in] public_address Null-terminated string representing the account's public address to merge.
+ * @return @ref GENIUS_NODE_RET_OK on success, @ref GENIUS_NODE_ERROR_CREATING if not initialized,
+ *         or @ref GENIUS_NODE_INVALID_ARGUMENT on failure.
+ */
+GNUS_VISIBILITY_DEFAULT GeniusNodeReturnValue_t GeniusSDKMergeGeniusAccount( const char *public_address );
+
+/**
+ * @brief Deletes the account.
+ */
+GNUS_VISIBILITY_DEFAULT GeniusNodeReturnValue_t GeniusSDKDeleteAccount( const char *public_address );
+
+/**
+ * @brief Sets the payout address for processing rewards.
+ * @param[in] public_address Null-terminated string representing the payout public address.
+ * @return @ref GENIUS_NODE_RET_OK on success, @ref GENIUS_NODE_ERROR_CREATING if not initialized,
+ *         or @ref GENIUS_NODE_INVALID_ARGUMENT on failure.
+ */
+GNUS_VISIBILITY_DEFAULT GeniusNodeReturnValue_t GeniusSDKSetPayoutAddress( const char *public_address );
 
 /**
  * @brief Retrieves the current balance for a specific token.
@@ -205,11 +324,31 @@ GNUS_VISIBILITY_DEFAULT double GeniusSDKGetGNUSPrice();
  */
 GNUS_VISIBILITY_DEFAULT const char *GeniusSDKGetVersion();
 
+/**
+ * @brief Returns the public address of the currently selected account.
+ * @return Address filled or zeroized if SDK wasn't initialized.
+ */
 GNUS_VISIBILITY_DEFAULT GeniusAddress GeniusSDKGetAddress();
 
+/**
+ * @brief Retrieves all incoming transactions.
+ * @return A @ref GeniusMatrix containing the incoming transactions.
+ *         Must be freed with @ref GeniusSDKFreeTransactions().
+ */
 GNUS_VISIBILITY_DEFAULT GeniusMatrix GeniusSDKGetInTransactions();
+
+/**
+ * @brief Retrieves all outgoing transactions.
+ * @return A @ref GeniusMatrix containing the outgoing transactions.
+ *         Must be freed with @ref GeniusSDKFreeTransactions().
+ */
 GNUS_VISIBILITY_DEFAULT GeniusMatrix GeniusSDKGetOutTransactions();
-GNUS_VISIBILITY_DEFAULT void         GeniusSDKFreeTransactions( GeniusMatrix matrix );
+
+/**
+ * @brief Frees a @ref GeniusMatrix previously obtained from GetInTransactions() or GetOutTransactions().
+ * @param[in] matrix The matrix to free.
+ */
+GNUS_VISIBILITY_DEFAULT void GeniusSDKFreeTransactions( GeniusMatrix matrix );
 
 /**
  * @brief     Mints new tokens specified in **Minion Tokens**.
@@ -238,7 +377,8 @@ GNUS_VISIBILITY_DEFAULT GeniusNodeReturnValue_t GeniusSDKMintGNUS( const GeniusT
  * @param[in] amount    The amount to transfer in Minion Tokens.
  * @param[in] dest      Pointer to a `GeniusAddress` struct representing the recipient's address.
  * @param[in] token_id  Token identifier.
- * @return `true` if the transfer is successful, `false` otherwise.
+ * @return @ref GENIUS_NODE_RET_OK on success, @ref GENIUS_NODE_ERROR_NOT_INITIALIZED if the SDK is not initialized,
+ *         or @ref GENIUS_NODE_ERROR_TRANSFER on failure.
  */
 GNUS_VISIBILITY_DEFAULT GeniusNodeReturnValue_t GeniusSDKTransfer( uint64_t       amount,
                                                                    GeniusAddress *dest,
@@ -247,17 +387,20 @@ GNUS_VISIBILITY_DEFAULT GeniusNodeReturnValue_t GeniusSDKTransfer( uint64_t     
 /**
  * @brief     Transfers tokens using a **Genius Token** string representation.
  * @param[in] amount Pointer to a `GeniusTokenValue` struct representing the amount in GNUS.
- * @param[in] dest Pointer to a `GeniusAddress` struct representing the recipient's address.
- * @return `true` if the transfer is successful, `false` otherwise.
+ * @param[in] dest   Pointer to a `GeniusAddress` struct representing the recipient's address.
+ * @return @ref GENIUS_NODE_RET_OK on success, @ref GENIUS_NODE_ERROR_NOT_INITIALIZED if the SDK is not initialized,
+ *         @ref GENIUS_NODE_INVALID_ARGUMENT if amount or dest is null,
+ *         or @ref GENIUS_NODE_ERROR_TRANSFER on failure.
  */
 GNUS_VISIBILITY_DEFAULT GeniusNodeReturnValue_t GeniusSDKTransferGNUS( const GeniusTokenValue *amount,
                                                                        GeniusAddress          *dest );
 
 /**
  * @brief     Pays the developer for in-game transactions.
- * @param[in] amount The amount to transfer in Minion Tokens.
- * @param[in] token_id token identifier.
- * @return `true` if the transfer is successful, `false` otherwise.
+ * @param[in] amount   The amount to transfer in Minion Tokens.
+ * @param[in] token_id Token identifier.
+ * @return @ref GENIUS_NODE_RET_OK on success, @ref GENIUS_NODE_ERROR_NOT_INITIALIZED if the SDK is not initialized,
+ *         or @ref GENIUS_NODE_ERROR_PAY_DEV on failure.
  */
 GNUS_VISIBILITY_DEFAULT GeniusNodeReturnValue_t GeniusSDKPayDev( uint64_t amount, GeniusTokenID token_id );
 
@@ -273,7 +416,7 @@ GNUS_VISIBILITY_DEFAULT uint64_t GeniusSDKGetCost( const JsonData_t jsondata );
  * @param[in] jsondata The JSON data to be processed.
  * @return A `GeniusTokenValue` struct representing the cost in Genius Tokens.
  */
-GNUS_VISIBILITY_DEFAULT GeniusTokenValue        GeniusSDKGetCostGNUS( const JsonData_t jsondata );
+GNUS_VISIBILITY_DEFAULT GeniusTokenValue GeniusSDKGetCostGNUS( const JsonData_t jsondata );
 /**
  * @brief Submits data for processing based on the given JSON data.
  * @param[in] jsondata The JSON data to be processed.

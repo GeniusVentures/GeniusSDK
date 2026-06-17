@@ -1,27 +1,35 @@
 /**
  * @file       GeniusSDK.cpp
- * @brief      
+ * @brief
  * @date       2024-05-26
  * @author     Henrique A. Klein (hklein@gnus.ai)
  */
 
 #include "GeniusSDK.h"
-#include "account/GeniusNode.hpp"
+
+#include <account/GeniusAccount.hpp>
 #include <algorithm>
-#include <base/buffer.hpp>
-#include <boost/multiprecision/cpp_int/import_export.hpp>
-#include <boost/algorithm/hex.hpp>
+#include <blockchain/Blockchain.hpp>
+#include <cstdint>
 #include <memory>
-#include <processing/processing_service.hpp>
-#include <rapidjson/document.h>
-#include <rapidjson/writer.h>
-#include <rapidjson/filereadstream.h>
-#include <rapidjson/filewritestream.h>
-#include <boost/outcome.hpp>
-#include <boost/exception/all.hpp>
+#include <spdlog/spdlog.h>
 #include <string>
 #include <cstring>
 #include <fstream>
+
+#include "account/GeniusNode.hpp"
+
+#include <boost/algorithm/hex.hpp>
+#include <boost/exception/all.hpp>
+#include <boost/multiprecision/cpp_int/import_export.hpp>
+#include <boost/outcome.hpp>
+#include <rapidjson/document.h>
+#include <rapidjson/filereadstream.h>
+#include <rapidjson/filewritestream.h>
+#include <rapidjson/writer.h>
+
+#include <base/buffer.hpp>
+#include <processing/processing_service.hpp>
 
 class JsonError : public boost::exception
 {
@@ -76,23 +84,15 @@ namespace
         return outcome::success( sgns::TokenID::FromBytes( buf.data(), buf.size() ) );
     }
 
-    outcome::result<DevConfig_st, JsonError> ReadDevConfigFromJSON( const std::string &base_path )
+    // Helper function to parse JSON string into DevConfig_st
+    outcome::result<DevConfig_st, JsonError> ParseDevConfig( const std::string &jsonStr, const std::string &base_path )
     {
-        std::ifstream file( base_path + "dev_config.json" );
-        if ( !file.is_open() )
-        {
-            return outcome::failure( JsonError( "Configuration file \"dev_config.json\" not found on " + base_path ) );
-        }
-        DevConfig_st      config_from_file = {};
-        std::stringstream buffer;
-        buffer << file.rdbuf();
-        std::string jsonStr = buffer.str();
-
+        DevConfig_st           config_from_file = {};
         rapidjson::Document    document;
         rapidjson::ParseResult parseResult = document.Parse( jsonStr.c_str() );
         if ( parseResult == nullptr )
         {
-            return outcome::failure( JsonError( "Parse error " ) );
+            return outcome::failure( JsonError( "Parse error" ) );
         }
 
         if ( !document.HasMember( "Address" ) || !document["Address"].IsString() )
@@ -117,11 +117,11 @@ namespace
             return outcome::failure( JsonError( std::string( "Failed to parse TokenID: " ) + tidRes.error().what() ) );
         }
 
-        strncpy( config_from_file.Addr, document["Address"].GetString(), document["Address"].GetStringLength() );
-        config_from_file.Cut              = document["Cut"].GetString();
+        config_from_file.Addr = std::string( document["Address"].GetString(), document["Address"].GetStringLength() );
+        config_from_file.Cut  = document["Cut"].GetString();
         config_from_file.TokenValueInGNUS = document["TokenValue"].GetString();
         config_from_file.TokenID          = tidRes.value();
-        strncpy( config_from_file.BaseWritePath, base_path.data(), base_path.size() );
+        config_from_file.BaseWritePath    = base_path;
 
         return outcome::success( config_from_file );
     }
@@ -129,43 +129,20 @@ namespace
     outcome::result<DevConfig_st, JsonError> ReadDevConfigFromJSONStr( const std::string &base_path,
                                                                        const std::string &jsonStr )
     {
-        DevConfig_st           config_from_file = {};
-        rapidjson::Document    document;
-        rapidjson::ParseResult parseResult = document.Parse( jsonStr.c_str() );
-        if ( parseResult == nullptr )
-        {
-            return outcome::failure( JsonError( "Parse error " ) );
-        }
+        return ParseDevConfig( jsonStr, base_path );
+    }
 
-        if ( !document.HasMember( "Address" ) || !document["Address"].IsString() )
+    outcome::result<DevConfig_st, JsonError> ReadDevConfigFromJSON( const std::string &base_path )
+    {
+        std::ifstream file( base_path + "dev_config.json" );
+        if ( !file.is_open() )
         {
-            return outcome::failure( JsonError( "Missing or invalid 'Address'" ) );
+            return outcome::failure( JsonError( "Configuration file \"dev_config.json\" not found on " + base_path ) );
         }
-        if ( !document.HasMember( "Cut" ) || !document["Cut"].IsString() )
-        {
-            return outcome::failure( JsonError( "Missing or invalid 'Cut'" ) );
-        }
-        if ( !document.HasMember( "TokenValue" ) || !document["TokenValue"].IsString() )
-        {
-            return outcome::failure( JsonError( "Missing or invalid 'TokenValue'" ) );
-        }
-        if ( !document.HasMember( "TokenID" ) || !document["TokenID"].IsString() )
-        {
-            return outcome::failure( JsonError( "Missing or invalid 'TokenID'" ) );
-        }
-        auto tidRes = ParseTokenID( document["TokenID"] );
-        if ( !tidRes )
-        {
-            return outcome::failure( JsonError( std::string( "Failed to parse TokenID: " ) + tidRes.error().what() ) );
-        }
-
-        strncpy( config_from_file.Addr, document["Address"].GetString(), document["Address"].GetStringLength() );
-        config_from_file.Cut              = document["Cut"].GetString();
-        config_from_file.TokenValueInGNUS = document["TokenValue"].GetString();
-        config_from_file.TokenID          = tidRes.value();
-        strncpy( config_from_file.BaseWritePath, base_path.data(), base_path.size() );
-
-        return outcome::success( config_from_file );
+        std::stringstream buffer;
+        buffer << file.rdbuf();
+        std::string jsonStr = buffer.str();
+        return ParseDevConfig( jsonStr, base_path );
     }
 
     GeniusMatrix matrix_from_vector_of_vector( const std::vector<std::vector<uint8_t>> &vec )
@@ -201,88 +178,132 @@ namespace
     }
 
     std::shared_ptr<sgns::GeniusNode> GeniusNodeInstance;
-}
 
-const char *GeniusSDKInit( const char *base_path,
-                           const char *eth_private_key,
-                           bool        autodht,
-                           bool        process,
-                           uint16_t    baseport,
-                           bool        is_full_node )
-{
-    if ( base_path == nullptr )
+    template <typename Creator>
+    const char *SDKInitHelper( const char *base_path, Creator create_node )
     {
-        std::cerr << "base_path should not be empty!" << std::endl;
-        return nullptr;
-    }
+        static std::string ret_val = "Initialized on ";
 
-    auto               load_config_ret = ReadDevConfigFromJSON( base_path );
-    static std::string ret_val         = "Initialized on ";
+        if ( base_path == nullptr )
+        {
+            std::cerr << "GeniusSDK: base_path should not be empty!\n";
+            return nullptr;
+        }
 
-    if ( load_config_ret )
-    {
-        GeniusNodeInstance = std::shared_ptr<sgns::GeniusNode>( sgns::GeniusNode::New( load_config_ret.value(),
-                                                                                       eth_private_key,
-                                                                                       autodht,
-                                                                                       process,
-                                                                                       baseport,
-                                                                                       is_full_node,
-                                                                                       true ) );
+        auto load_config_ret = ReadDevConfigFromJSON( base_path );
+
+        if ( !load_config_ret )
+        {
+            ret_val.assign( load_config_ret.error().what() );
+            std::cerr << load_config_ret.error().what() << std::endl;
+            return nullptr;
+        }
+
+        GeniusNodeInstance = create_node( load_config_ret.value() );
+
+        if ( GeniusNodeInstance == nullptr )
+        {
+            return nullptr;
+        }
+
         ret_val.append( load_config_ret.value().BaseWritePath );
+        return ret_val.c_str();
     }
-    else
-    {
-        ret_val.assign( load_config_ret.error().what() );
-        std::cout << load_config_ret.error().what() << std::endl;
-    }
-
-    return ret_val.c_str();
 }
 
-const char *GeniusSDKInitSecure( const char *base_path,
-                                 const char *dev_config,
-                                 const char *eth_private_key,
-                                 bool        autodht,
-                                 bool        process,
-                                 uint16_t    baseport,
-                                 bool        is_full_node )
+const char *GeniusSDKInit( const char *base_path, bool autodht, bool process, uint16_t baseport, bool is_full_node )
 {
+    return SDKInitHelper( base_path,
+                          [&]( const auto &config )
+                          {
+                              return std::shared_ptr<sgns::GeniusNode>(
+                                  sgns::GeniusNode::New( config, autodht, process, baseport, is_full_node, true ) );
+                          } );
+}
+
+const char *GeniusSDKInitWithKey( const char *base_path,
+                                  const char *eth_private_key,
+                                  bool        autodht,
+                                  bool        process,
+                                  uint16_t    baseport,
+                                  bool        is_full_node )
+{
+    return SDKInitHelper(
+        base_path,
+        [&]( const auto &config )
+        {
+            return std::shared_ptr<sgns::GeniusNode>(
+                sgns::GeniusNode::New( config, eth_private_key, autodht, process, baseport, is_full_node, true ) );
+        } );
+}
+
+const char *GeniusSDKInitWithCredentials( const char              *base_path,
+                                          const GeniusCredentials *credentials,
+                                          bool                     autodht,
+                                          bool                     process,
+                                          uint16_t                 baseport,
+                                          bool                     is_full_node )
+{
+    return SDKInitHelper( base_path,
+                          [&]( const auto &config )
+                          {
+                              return std::shared_ptr<sgns::GeniusNode>(
+                                  sgns::GeniusNode::New( config,
+                                                         credentials->password,
+                                                         autodht,
+                                                         process,
+                                                         baseport,
+                                                         is_full_node,
+                                                         true ) );
+                          } );
+}
+
+const char *GeniusSDKInitWithKeyAndDevConfig( const char *base_path,
+                                              const char *dev_config,
+                                              const char *eth_private_key,
+                                              bool        autodht,
+                                              bool        process,
+                                              uint16_t    baseport,
+                                              bool        is_full_node )
+{
+    static std::string ret_val = "Initialized on ";
+
     if ( base_path == nullptr )
     {
-        std::cerr << "base_path should not be empty!" << std::endl;
+        std::cerr << "base_path should not be empty!\n";
         return nullptr;
     }
+
     if ( dev_config == nullptr )
     {
-        std::cerr << "dev_config should not be empty!" << std::endl;
+        std::cerr << "dev_config should not be empty!\n";
         return nullptr;
     }
-    auto               load_config_ret = ReadDevConfigFromJSONStr( base_path, dev_config );
-    static std::string ret_val         = "Initialized on ";
 
-    if ( load_config_ret )
-    {
-        GeniusNodeInstance = std::shared_ptr<sgns::GeniusNode>( sgns::GeniusNode::New( load_config_ret.value(),
-                                                                                       eth_private_key,
-                                                                                       autodht,
-                                                                                       process,
-                                                                                       baseport,
-                                                                                       is_full_node,
-                                                                                       true ) );
-        ret_val.append( load_config_ret.value().BaseWritePath );
-    }
-    else
+    auto load_config_ret = ReadDevConfigFromJSONStr( base_path, dev_config );
+
+    if ( !load_config_ret )
     {
         ret_val.assign( load_config_ret.error().what() );
-        std::cout << load_config_ret.error().what() << std::endl;
+        std::cerr << load_config_ret.error().what() << std::endl;
+        return nullptr;
     }
+
+    GeniusNodeInstance = std::shared_ptr<sgns::GeniusNode>( sgns::GeniusNode::New( load_config_ret.value(),
+                                                                                   eth_private_key,
+                                                                                   autodht,
+                                                                                   process,
+                                                                                   baseport,
+                                                                                   is_full_node,
+                                                                                   true ) );
+    ret_val.append( load_config_ret.value().BaseWritePath );
 
     return ret_val.c_str();
 }
 
 const char *GeniusSDKInitMinimal( const char *base_path, const char *eth_private_key, uint16_t baseport )
 {
-    return GeniusSDKInit( base_path, eth_private_key, true, true, baseport, false );
+    return GeniusSDKInitWithKey( base_path, eth_private_key, true, true, baseport, false );
 }
 
 GeniusNodeReturnValue_t GeniusSDKProcess( const JsonData_t jsondata )
@@ -314,12 +335,9 @@ bool GeniusSDKCheckJobValidity( const JsonData_t jsondata )
     {
         return false;
     }
-    auto procmgr       = sgns::sgprocessing::ProcessingManager::Create( jsondata );
-    if(!procmgr)
-    {
-        return false;
-    }
-    return true;
+    auto procmgr = sgns::sgprocessing::ProcessingManager::Create( jsondata );
+
+    return procmgr.has_value();
 }
 
 double GeniusSDKGetGNUSPrice()
@@ -407,9 +425,9 @@ void GeniusSDKFreeTransactions( GeniusMatrix matrix )
 }
 
 GeniusNodeReturnValue_t GeniusSDKMint( uint64_t      amount,
-                                     const char   *transaction_hash,
-                                     const char   *chain_id,
-                                     GeniusTokenID token_id )
+                                       const char   *transaction_hash,
+                                       const char   *chain_id,
+                                       GeniusTokenID token_id )
 {
     GeniusNodeReturnValue ret = GENIUS_NODE_ERROR_NOT_INITIALIZED;
     do
@@ -437,8 +455,8 @@ GeniusNodeReturnValue_t GeniusSDKMint( uint64_t      amount,
 }
 
 GeniusNodeReturnValue_t GeniusSDKMintGNUS( const GeniusTokenValue *amount,
-                                         const char             *transaction_hash,
-                                         const char             *chain_id )
+                                           const char             *transaction_hash,
+                                           const char             *chain_id )
 {
     GeniusNodeReturnValue ret = GENIUS_NODE_ERROR_NOT_INITIALIZED;
     do
@@ -456,11 +474,9 @@ GeniusNodeReturnValue_t GeniusSDKMintGNUS( const GeniusTokenValue *amount,
             break;
         }
         GeniusTokenID gnus_id;
-        memset(gnus_id.data, 0, sizeof(gnus_id.data));
-        ret = static_cast<GeniusNodeReturnValue>(GeniusSDKMint( parseRes.value(),
-                             transaction_hash ,
-                             chain_id ,
-                             gnus_id ));
+        memset( gnus_id.data, 0, sizeof( gnus_id.data ) );
+        ret = static_cast<GeniusNodeReturnValue>(
+            GeniusSDKMint( parseRes.value(), transaction_hash, chain_id, gnus_id ) );
     } while ( 0 );
 
     return ret;
@@ -468,12 +484,14 @@ GeniusNodeReturnValue_t GeniusSDKMintGNUS( const GeniusTokenValue *amount,
 
 GeniusAddress GeniusSDKGetAddress()
 {
-    GeniusAddress ret;
+    GeniusAddress ret = {};
+
     if ( GeniusNodeInstance )
     {
-        auto address = GeniusNodeInstance->GetAddress();
-
-        std::copy( address.cbegin(), address.cend(), ret.address );
+        auto address   = GeniusNodeInstance->GetAddress();
+        ret.address[0] = '0';
+        ret.address[1] = 'x';
+        std::copy( address.cbegin(), address.cend(), &ret.address[2] );
     }
 
     return ret;
@@ -513,12 +531,12 @@ GeniusNodeReturnValue_t GeniusSDKTransferGNUS( const GeniusTokenValue *amount, G
         {
             break;
         }
-        if ( !amount )
+        if ( amount == nullptr )
         {
             ret = GENIUS_NODE_INVALID_ARGUMENT;
             break;
         }
-        if ( !dest )
+        if ( dest == nullptr )
         {
             ret = GENIUS_NODE_INVALID_ARGUMENT;
             break;
@@ -531,8 +549,8 @@ GeniusNodeReturnValue_t GeniusSDKTransferGNUS( const GeniusTokenValue *amount, G
             break;
         }
         GeniusTokenID gnus_id;
-        memset(gnus_id.data, 0, sizeof(gnus_id.data));
-        ret = static_cast<GeniusNodeReturnValue>(GeniusSDKTransfer( parseRes.value(), dest, gnus_id ));
+        memset( gnus_id.data, 0, sizeof( gnus_id.data ) );
+        ret = static_cast<GeniusNodeReturnValue>( GeniusSDKTransfer( parseRes.value(), dest, gnus_id ) );
     } while ( 0 );
 
     return ret;
@@ -562,8 +580,8 @@ GeniusNodeReturnValue_t GeniusSDKPayDev( uint64_t amount, GeniusTokenID token_id
 
 uint64_t GeniusSDKGetCost( const JsonData_t jsondata )
 {
-    auto procmgr       = sgns::sgprocessing::ProcessingManager::Create( jsondata );
-    if(!procmgr)
+    auto procmgr = sgns::sgprocessing::ProcessingManager::Create( jsondata );
+    if ( !procmgr )
     {
         return 0;
     }
@@ -575,8 +593,8 @@ GeniusTokenValue GeniusSDKGetCostGNUS( const JsonData_t jsondata )
     GeniusTokenValue tv;
     if ( GeniusNodeInstance )
     {
-        auto procmgr       = sgns::sgprocessing::ProcessingManager::Create( jsondata );
-        if(!procmgr)
+        auto procmgr = sgns::sgprocessing::ProcessingManager::Create( jsondata );
+        if ( !procmgr )
         {
             std::strncpy( tv.value, "0", sizeof( tv.value ) - 1 );
             tv.value[sizeof( tv.value ) - 1] = '\0';
@@ -604,7 +622,7 @@ GeniusNodeReturnValue_t GeniusSDKShutdown()
     if ( GeniusNodeInstance )
     {
         GeniusNodeInstance.reset(); // Explicitly destroy the shared_ptr
-        std::cout << "GeniusNodeInstance has been shut down." << std::endl;
+        std::cout << "GeniusSDK: GeniusNodeInstance has been shut down\n";
     }
     return ret;
 }
@@ -615,6 +633,136 @@ void GeniusSDKLoadLogConfig()
     {
         GeniusNodeInstance->LoadLogConfig();
     }
+}
+
+const char *GeniusSDKGetAvailableAccounts()
+{
+    // +1 for separator
+    constexpr uint64_t SECTION_SIZE = GENIUS_SDK_ADDRESS_SIZE + 1;
+
+    if ( !GeniusNodeInstance )
+    {
+        return nullptr;
+    }
+
+    auto accounts = GeniusNodeInstance->GetAvailableAccounts();
+
+    char *ret = reinterpret_cast<char *>( malloc( std::max( accounts.size() * SECTION_SIZE, UINT64_C( 1 ) ) ) );
+
+    for ( size_t i = 0; i < accounts.size(); ++i )
+    {
+        ret[i * SECTION_SIZE]     = '0';
+        ret[i * SECTION_SIZE + 1] = 'x';
+        memcpy( &ret[i * SECTION_SIZE + 2], accounts[i].data(), GENIUS_SDK_ADDRESS_SIZE - 2 );
+        ret[( i + 1 ) * SECTION_SIZE - 1] = '\n';
+    }
+
+    if ( accounts.size() > 0 )
+    {
+        ret[accounts.size() * SECTION_SIZE - 1] = '\0';
+    }
+    else
+    {
+        ret[0] = '\0';
+    }
+
+    return ret;
+}
+
+GeniusNodeReturnValue_t GeniusSDKAddAccountWithPrivateKey( const char *private_key )
+{
+    if ( !GeniusNodeInstance )
+    {
+        return GENIUS_NODE_ERROR_NOT_INITIALIZED;
+    }
+    if ( GeniusNodeInstance->AddAccountWithKey( private_key ).has_value() )
+    {
+        return GENIUS_NODE_RET_OK;
+    }
+    return GENIUS_NODE_INVALID_ARGUMENT;
+}
+
+GeniusNodeReturnValue_t GeniusSDKAddAccountWithMnemonic( const char *mnemonic )
+{
+    if ( !GeniusNodeInstance )
+    {
+        return GENIUS_NODE_ERROR_NOT_INITIALIZED;
+    }
+    if ( GeniusNodeInstance->AddAccountWithMnemonic( std::string( mnemonic ) ).has_value() )
+    {
+        return GENIUS_NODE_RET_OK;
+    }
+    return GENIUS_NODE_INVALID_ARGUMENT;
+}
+
+GeniusNodeReturnValue_t GeniusSDKSelectGeniusAccount( const char *public_address )
+{
+    if ( !GeniusNodeInstance )
+    {
+        return GENIUS_NODE_ERROR_NOT_INITIALIZED;
+    }
+
+    if ( GeniusNodeInstance->SelectAccount( public_address ).has_value() )
+    {
+        return GENIUS_NODE_RET_OK;
+    }
+    return GENIUS_NODE_INVALID_ARGUMENT;
+}
+
+GeniusNodeReturnValue_t GeniusSDKTransferGeniusAccount( const char *public_address )
+{
+    if ( !GeniusNodeInstance )
+    {
+        return GENIUS_NODE_ERROR_NOT_INITIALIZED;
+    }
+
+    if ( GeniusNodeInstance->TransferAccount( public_address ).has_value() )
+    {
+        return GENIUS_NODE_RET_OK;
+    }
+    return GENIUS_NODE_INVALID_ARGUMENT;
+}
+
+GeniusNodeReturnValue_t GeniusSDKMergeGeniusAccount( const char *public_address )
+{
+    if ( !GeniusNodeInstance )
+    {
+        return GENIUS_NODE_ERROR_NOT_INITIALIZED;
+    }
+
+    if ( GeniusNodeInstance->MergeAccount( public_address ).has_value() )
+    {
+        return GENIUS_NODE_RET_OK;
+    }
+    return GENIUS_NODE_INVALID_ARGUMENT;
+}
+
+GeniusNodeReturnValue_t GeniusSDKDeleteAccount( const char *public_address )
+{
+    if ( !GeniusNodeInstance )
+    {
+        return GENIUS_NODE_ERROR_NOT_INITIALIZED;
+    }
+
+    if ( GeniusNodeInstance->DeleteAccount( public_address ).has_value() )
+    {
+        return GENIUS_NODE_RET_OK;
+    }
+    return GENIUS_NODE_INVALID_ARGUMENT;
+}
+
+GeniusNodeReturnValue_t GeniusSDKSetPayoutAddress( const char *public_address )
+{
+    if ( !GeniusNodeInstance )
+    {
+        return GENIUS_NODE_ERROR_NOT_INITIALIZED;
+    }
+
+    if ( GeniusNodeInstance->SetPayoutAddress( public_address ).has_value() )
+    {
+        return GENIUS_NODE_RET_OK;
+    }
+    return GENIUS_NODE_INVALID_ARGUMENT;
 }
 
 GeniusTransactionManagerState_t GeniusSDKGetTransactionManagerState()
@@ -637,7 +785,7 @@ GeniusNodeState_t GeniusSDKGetNodeState()
 
 GeniusTransactionStatus_t GeniusSDKGetTransactionStatus( const char *tx_id )
 {
-    if ( !GeniusNodeInstance || !tx_id )
+    if ( !GeniusNodeInstance || tx_id == nullptr )
     {
         return GENIUS_TX_STATUS_INVALID;
     }

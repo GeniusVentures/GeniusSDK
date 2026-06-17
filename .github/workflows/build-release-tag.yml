@@ -4,22 +4,24 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Tag to create releases for'
+        description: "Tag to create releases for"
         required: true
         type: string
       thirdparty_tag:
-        description: 'Tag for thirdparty dependency (defaults to main tag if not specified)'
+        description: "Tag for thirdparty dependency (defaults to main tag if not specified)"
         required: false
         type: string
       supergenius_tag:
-        description: 'Tag for SuperGenius dependency (defaults to main tag if not specified)'
+        description: "Tag for SuperGenius dependency (defaults to main tag if not specified)"
         required: false
         type: string
       zkllvm_tag:
-        description: 'Tag for zkLLVM dependency (defaults to main tag if not specified)'
+        description: "Tag for zkLLVM dependency (defaults to main tag if not specified)"
         required: false
         type: string
-
+permissions:
+  contents: write
+  packages: read
 jobs:
   build:
     env:
@@ -35,7 +37,7 @@ jobs:
       fail-fast: false
       matrix:
         target: [Android, iOS, OSX, Linux, Windows]
-        build-type: [Debug,Release]
+        build-type: [Debug, Release]
         abi: [""]
         include:
           - target: Linux
@@ -91,14 +93,14 @@ jobs:
         run: |
           $gitUsrBinPath = "C:\Program Files\Git\usr\bin"
           $gitBinPath = "C:\Program Files\Git\bin"
-          
+
           foreach ($p in @($gitBinPath, $gitUsrBinPath)) {
             if (Test-Path $p) {
               Add-Content -Path $env:GITHUB_PATH -Value $p
               $env:PATH = "$p;$env:PATH"
             }
           }
-          
+
           Write-Output "Git Bash configured for bash shell commands"
           $bashLocation = (Get-Command bash.exe -ErrorAction SilentlyContinue).Source
           if ($bashLocation) {
@@ -168,7 +170,7 @@ jobs:
           sudo update-alternatives --install /usr/bin/c++ c++ $(which clang++) 100
           sudo update-alternatives --set cc $(which clang)
           sudo update-alternatives --set c++ $(which clang++)
-           
+
           sudo apt install ccache ninja-build libvulkan-dev libzstd-dev libsecret-1-dev -y
           echo "CMAKE_GENERATOR=Ninja" >> $GITHUB_ENV
 
@@ -224,9 +226,12 @@ jobs:
 
       - name: Download thirdparty release
         working-directory: ${{github.workspace}}
+        shell: bash
+        env:
+          GITHUB_EVENT_INPUTS_TAG: ${{ github.event.inputs.tag }}
+          THIRDPARTY_TAG: ${{ github.event.inputs.thirdparty_tag || github.event.inputs.tag }}
         run: |
-          TAG_NAME="${{ github.event.inputs.tag }}"
-          THIRDPARTY_TAG="${{ github.event.inputs.thirdparty_tag || github.event.inputs.tag }}"
+          TAG_NAME="${GITHUB_EVENT_INPUTS_TAG}"
           echo "Building for tag: ${TAG_NAME}"
           echo "Using thirdparty tag: ${THIRDPARTY_TAG}"
 
@@ -252,21 +257,24 @@ jobs:
           else
             echo "THIRDPARTY_BUILD_DIR=$(pwd)/${BUILD_DIRECTORY}" >> $GITHUB_ENV
           fi
-        shell: bash
 
       - name: Download zkLLVM release
         working-directory: ${{github.workspace}}
+
+        shell: bash
+        env:
+          GITHUB_EVENT_INPUTS_TAG: ${{ github.event.inputs.tag }}
         run: |
-          TAG_NAME="${{ github.event.inputs.tag }}"
+          TAG_NAME="${GITHUB_EVENT_INPUTS_TAG}"
           ZKLLVM_TAG="${{ github.event.inputs.zkllvm_tag || github.event.inputs.tag }}"
           echo "Using zkLLVM tag: ${ZKLLVM_TAG}"
-          
+
           mkdir zkLLVM
           cd zkLLVM
 
           # Download from the specified zkLLVM tag's release
           echo "Downloading zkLLVM from tag: ${ZKLLVM_TAG}"
-          
+
           if [ "${{ matrix.target }}" = "Windows" ]; then
               ZKLLVM_FILE_NAME=${{matrix.target}}-${{matrix.build-type}}.tar.gz
               ZKLLVM_BUILD_DIR=build/${{matrix.target}}/${{matrix.build-type}}
@@ -283,7 +291,7 @@ jobs:
           tar --exclude='*bin/assigner' --exclude='*bin/clang-zkllvm' --exclude='*bin/llvm-link-zkllvm' --exclude='*bin/transpiler' -xzf "${ZKLLVM_FILE_NAME}"
 
           # Set ZKLLVM_BUILD_DIR to the actual location where files were extracted
-          
+
           if [ "${{ matrix.target }}" = "Windows" ]; then
             # Convert Unix path to Windows path for Windows builds
             echo "ZKLLVM_BUILD_DIR=$(pwd -W)/${ZKLLVM_BUILD_DIR}" >> $GITHUB_ENV
@@ -291,14 +299,15 @@ jobs:
             echo "ZKLLVM_BUILD_DIR=$(pwd)/${ZKLLVM_BUILD_DIR}" >> $GITHUB_ENV
           fi
 
-        shell: bash
-
       - name: Download SuperGenius
+        shell: bash
+        env:
+          SUPERGENIUS_TAG: ${{ github.event.inputs.supergenius_tag || github.event.inputs.tag }}
+          GITHUB_EVENT_INPUTS_TAG: ${{ github.event.inputs.tag }}
         run: |
-          TAG_NAME="${{ github.event.inputs.tag }}"
-          SUPERGENIUS_TAG="${{ github.event.inputs.supergenius_tag || github.event.inputs.tag }}"
+          TAG_NAME="${GITHUB_EVENT_INPUTS_TAG}"
           echo "Using SuperGenius tag: ${SUPERGENIUS_TAG}"
-          
+
           mkdir SuperGenius
           cd SuperGenius
 
@@ -325,14 +334,14 @@ jobs:
           else
             echo "SUPERGENIUS_DIR=$(pwd)" >> $GITHUB_ENV
           fi
-        shell: bash
 
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
           path: "GeniusSDK"
           submodules: "recursive"
           ref: ${{ github.event.inputs.tag }}
+          persist-credentials: true # We need this for uploading the release later
 
       - name: Configure CMake for Android
         if: ${{ matrix.target == 'Android'}}
@@ -371,8 +380,10 @@ jobs:
       - name: Create or check release
         working-directory: ${{github.workspace}}/GeniusSDK
         shell: bash
+        env:
+          GITHUB_EVENT_INPUTS_TAG: ${{ github.event.inputs.tag }}
         run: |
-          TAG_NAME='${{ github.event.inputs.tag }}'
+          TAG_NAME="${GITHUB_EVENT_INPUTS_TAG}"
           echo "TAG_NAME=$TAG_NAME" >> $GITHUB_ENV
 
           echo "Checking if GitHub release exists for tag: $TAG_NAME"
@@ -396,7 +407,7 @@ jobs:
       - name: Compress build artifacts
         working-directory: ${{github.workspace}}/GeniusSDK/${{env.BUILD_DIRECTORY}}
         run: |
-          tar --exclude=.git -czvf ${FILE_NAME} --transform 's|^|${{env.BUILD_DIRECTORY}}/|' GeniusSDK/
+          tar --exclude=.git -czvf ${FILE_NAME} --transform 's|^|${BUILD_DIRECTORY}/|' GeniusSDK/
         shell: bash
 
       - name: Release SDK
@@ -404,4 +415,4 @@ jobs:
         shell: bash
         run: |
           echo -e "Uploading ${FILE_NAME} to release ${TAG_NAME}"
-          gh release upload --clobber ${TAG_NAME} "${{env.BUILD_DIRECTORY}}/${FILE_NAME}"
+          gh release upload --clobber ${TAG_NAME} "${BUILD_DIRECTORY}/${FILE_NAME}"
