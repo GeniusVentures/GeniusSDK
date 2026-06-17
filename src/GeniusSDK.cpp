@@ -625,6 +625,14 @@ GeniusNodeReturnValue_t GeniusSDKShutdown()
     return ret;
 }
 
+void GeniusSDKLoadLogConfig()
+{
+    if ( GeniusNodeInstance )
+    {
+        GeniusNodeInstance->LoadLogConfig();
+    }
+}
+
 void GeniusSDKFree( void *ptr )
 {
     free( ptr );

@@ -234,6 +234,11 @@ GNUS_VISIBILITY_DEFAULT const char *GeniusSDKInitMinimal( const char *base_path,
 GNUS_VISIBILITY_DEFAULT GeniusNodeReturnValue_t GeniusSDKShutdown();
 
 /**
+ * @brief Reloads log level overrides from log_config.json at runtime.
+ */
+GNUS_VISIBILITY_DEFAULT void GeniusSDKLoadLogConfig();
+
+/**
  * @brief Frees memory allocated by the SDK.
  * @param[in] ptr Pointer to the memory block to free. May be null (no-op).
  */
