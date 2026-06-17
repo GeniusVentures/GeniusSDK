@@ -238,6 +238,7 @@ GNUS_VISIBILITY_DEFAULT GeniusNodeReturnValue_t GeniusSDKShutdown();
  */
 GNUS_VISIBILITY_DEFAULT void GeniusSDKLoadLogConfig();
 
+/**
  * @brief Frees memory allocated by the SDK.
  * @param[in] ptr Pointer to the memory block to free. May be null (no-op).
  */
