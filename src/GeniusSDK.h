@@ -159,14 +159,30 @@ typedef struct
     char *message;
 } GeniusStatusInfo;
 
+/**
+ * @brief Return type for account creation that includes both a status code and
+ *        the generated mnemonic phrase.
+ */
 typedef struct
 {
-    const char *email;    ///< Null-terminated email
-    const char *password; ///< Null-terminated password
-} GeniusCredentials;
+    GeniusProcessingStatus_t
+                status;   ///< Return status (@ref GENIUS_NODE_RET_OK or @ref GENIUS_NODE_ERROR_NOT_INITIALIZED)
+    const char *mnemonic; ///< Null terminated string, needs to be freed with @ref GeniusSDKFree
+} GeniusMnemonicAndStatus;
+
+/**
+ * @brief Return type for SDK initialization with a random mnemonic, bundling
+ *        the initialization path and the generated recovery phrase.
+ */
+typedef struct
+{
+    const char *initialization_path; ///< Statically allocated, do not call free
+    const char *mnemonic;            ///< Heap allocated, needs to be freed with @ref GeniusSDKFree
+} GeniusMnemonicAndInitPath;
 
 /**
  * @brief Inits the SDK with saved settings (no private key — uses existing wallet).
+ * If no account exists, creates with a random mnemonic.
  * @param[in] base_path    Base path for node data storage. Must contain a `dev_config.json` file.
  * @param[in] autodht      Whether to auto-discover DHT peers.
  * @param[in] process      Whether to enable processing.
@@ -195,6 +211,31 @@ GNUS_VISIBILITY_DEFAULT const char *GeniusSDKInitWithKey( const char *base_path,
                                                           bool        process,
                                                           uint16_t    baseport,
                                                           bool        is_full_node );
+
+GNUS_VISIBILITY_DEFAULT const char *GeniusSDKInitWithMnemonic( const char *base_path,
+                                                               const char *mnemonic,
+                                                               bool        autodht,
+                                                               bool        process,
+                                                               uint16_t    baseport,
+                                                               bool        is_full_node );
+
+/**
+ * @brief     Inits the SDK with a randomly generated mnemonic (no private key required).
+ * @param[in] base_path    Base path for node data storage. Must contain a `dev_config.json` file.
+ * @param[in] autodht      Whether to auto-discover DHT peers.
+ * @param[in] process      Whether to enable processing.
+ * @param[in] baseport     Base network port for the node.
+ * @param[in] is_full_node Whether to run as a full node.
+ * @return A @ref GeniusMnemonicAndInitPath struct containing the initialization path
+ *         (statically allocated, do not free) and the generated mnemonic phrase
+ *         (heap allocated, must be freed with @ref GeniusSDKFree). Returns null
+ *         `initialization_path` on failure (mnemonic may still be populated).
+ */
+GNUS_VISIBILITY_DEFAULT GeniusMnemonicAndInitPath GeniusSDKInitWithRandomMnemonic( const char *base_path,
+                                                                                   bool        autodht,
+                                                                                   bool        process,
+                                                                                   uint16_t    baseport,
+                                                                                   bool        is_full_node );
 
 /**
  * @brief Inits the SDK with an explicit developer config JSON string and an ethereum private key.
@@ -242,7 +283,7 @@ GNUS_VISIBILITY_DEFAULT void GeniusSDKLoadLogConfig();
  * @brief Frees memory allocated by the SDK.
  * @param[in] ptr Pointer to the memory block to free. May be null (no-op).
  */
-GNUS_VISIBILITY_DEFAULT void GeniusSDKFree(void* ptr);
+GNUS_VISIBILITY_DEFAULT void GeniusSDKFree( void *ptr );
 
 /**
  * @brief Retrieves the current SDK initialization progress.
@@ -277,6 +318,15 @@ GNUS_VISIBILITY_DEFAULT GeniusNodeReturnValue_t GeniusSDKAddAccountWithPrivateKe
  *         or @ref GENIUS_NODE_INVALID_ARGUMENT on failure.
  */
 GNUS_VISIBILITY_DEFAULT GeniusNodeReturnValue_t GeniusSDKAddAccountWithMnemonic( const char *mnemonic );
+
+/**
+ * @brief Adds a new account using a randomly generated mnemonic phrase.
+ * @return A @ref GeniusMnemonicAndStatus struct. On success, `status` is
+ *         @ref GENIUS_NODE_RET_OK and `mnemonic` contains the generated phrase
+ *         (must be freed with @ref GeniusSDKFree). On failure, `status` is
+ *         @ref GENIUS_NODE_ERROR_NOT_INITIALIZED and `mnemonic` is null.
+ */
+GNUS_VISIBILITY_DEFAULT GeniusMnemonicAndStatus GeniusSDKAddAccountWithRandomMnemonic();
 
 /**
  * @brief Selects the active account for subsequent SDK operations.
@@ -350,6 +400,15 @@ GNUS_VISIBILITY_DEFAULT const char *GeniusSDKGetVersion();
  * @return Address filled or zeroized if SDK wasn't initialized.
  */
 GNUS_VISIBILITY_DEFAULT GeniusAddress GeniusSDKGetAddress();
+
+/**
+ * @brief Returns the mnemonic of the current active account or `nullptr`
+ *        if the account was not created from a mnemonic.
+ * @return A heap-allocated null-terminated mnemonic string, or `nullptr` if
+ *         the SDK is not initialized or the account has no mnemonic.
+ *         Must be freed with @ref GeniusSDKFree.
+ */
+GNUS_VISIBILITY_DEFAULT const char *GeniusSDKGetMnemonic();
 
 /**
  * @brief Retrieves all incoming transactions.
