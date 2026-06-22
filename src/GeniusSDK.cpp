@@ -187,7 +187,7 @@ namespace
 
         if ( base_path == nullptr )
         {
-            std::cerr << "GeniusSDK: base_path should not be empty!\n";
+            SPDLOG_ERROR( "base_path should not be empty!\n" );
             return nullptr;
         }
 
@@ -196,7 +196,7 @@ namespace
         if ( !load_config_ret )
         {
             ret_val.assign( load_config_ret.error().what() );
-            std::cerr << load_config_ret.error().what() << std::endl;
+            SPDLOG_ERROR( load_config_ret.error().what() );
             return nullptr;
         }
 
@@ -216,10 +216,7 @@ const char *GeniusSDKInit( const char *base_path, bool autodht, bool process, ui
 {
     return SDKInitHelper( base_path,
                           [&]( const auto &config )
-                          {
-                              return std::shared_ptr<sgns::GeniusNode>(
-                                  sgns::GeniusNode::New( config, autodht, process, baseport, is_full_node ) );
-                          } );
+                          { return sgns::GeniusNode::New( config, autodht, process, baseport, is_full_node ); } );
 }
 
 const char *GeniusSDKInitWithKey( const char *base_path,
@@ -229,32 +226,34 @@ const char *GeniusSDKInitWithKey( const char *base_path,
                                   uint16_t    baseport,
                                   bool        is_full_node )
 {
-    return SDKInitHelper(
-        base_path,
-        [&]( const auto &config )
-        {
-            return std::shared_ptr<sgns::GeniusNode>(
-                sgns::GeniusNode::New( config, eth_private_key, autodht, process, baseport, is_full_node ) );
-        } );
-}
-
-const char *GeniusSDKInitWithCredentials( const char              *base_path,
-                                          const GeniusCredentials *credentials,
-                                          bool                     autodht,
-                                          bool                     process,
-                                          uint16_t                 baseport,
-                                          bool                     is_full_node )
-{
     return SDKInitHelper( base_path,
                           [&]( const auto &config )
                           {
-                              return std::shared_ptr<sgns::GeniusNode>( sgns::GeniusNode::New( config,
-                                                                                               credentials->password,
-                                                                                               autodht,
-                                                                                               process,
-                                                                                               baseport,
-                                                                                               is_full_node ) );
+                              return sgns::GeniusNode::NewFromPrivateKey( config,
+                                                                          eth_private_key,
+                                                                          autodht,
+                                                                          process,
+                                                                          baseport,
+                                                                          is_full_node );
                           } );
+}
+
+GeniusMnemonicAndInitPath GeniusSDKInitWithRandomMnemonic( const char *base_path,
+                                                           bool        autodht,
+                                                           bool        process,
+                                                           uint16_t    baseport,
+                                                           bool        is_full_node )
+{
+    std::string mnemonic;
+    const auto *init_path = SDKInitHelper(
+        base_path,
+        [&]( const auto &config )
+        {
+            auto ret = sgns::GeniusNode::NewFromRandomMnemonic( config, autodht, process, baseport, is_full_node );
+            mnemonic = ret.second;
+            return ret.first;
+        } );
+    return { init_path, strdup( mnemonic.c_str() ) };
 }
 
 const char *GeniusSDKInitWithKeyAndDevConfig( const char *base_path,
@@ -288,15 +287,29 @@ const char *GeniusSDKInitWithKeyAndDevConfig( const char *base_path,
         return nullptr;
     }
 
-    GeniusNodeInstance = std::shared_ptr<sgns::GeniusNode>( sgns::GeniusNode::New( load_config_ret.value(),
-                                                                                   eth_private_key,
-                                                                                   autodht,
-                                                                                   process,
-                                                                                   baseport,
-                                                                                   is_full_node ) );
+    GeniusNodeInstance = std::shared_ptr<sgns::GeniusNode>(
+        sgns::GeniusNode::NewFromPrivateKey( load_config_ret.value(),
+                                             eth_private_key,
+                                             autodht,
+                                             process,
+                                             baseport,
+                                             is_full_node ) );
     ret_val.append( load_config_ret.value().BaseWritePath );
 
     return ret_val.c_str();
+}
+
+const char *GeniusSDKInitWithMnemonic( const char *base_path,
+                                       const char *mnemonic,
+                                       bool        autodht,
+                                       bool        process,
+                                       uint16_t    baseport,
+                                       bool        is_full_node )
+{
+    return SDKInitHelper(
+        base_path,
+        [&]( const auto &config )
+        { return sgns::GeniusNode::NewFromMnemonic( config, mnemonic, autodht, process, baseport, is_full_node ); } );
 }
 
 const char *GeniusSDKInitMinimal( const char *base_path, const char *eth_private_key, uint16_t baseport )
@@ -495,6 +508,23 @@ GeniusAddress GeniusSDKGetAddress()
     return ret;
 }
 
+const char *GeniusSDKGetMnemonic()
+{
+    if ( !GeniusNodeInstance )
+    {
+        return nullptr;
+    }
+
+    auto mnemonic = GeniusNodeInstance->GetMnemonicOfActiveAccount();
+
+    if ( !mnemonic )
+    {
+        return nullptr;
+    }
+
+    return strdup( mnemonic->c_str() );
+}
+
 GeniusNodeReturnValue_t GeniusSDKTransfer( uint64_t amount, GeniusAddress *dest, GeniusTokenID token_id )
 {
     GeniusNodeReturnValue ret = GENIUS_NODE_ERROR_NOT_INITIALIZED;
@@ -647,7 +677,7 @@ GeniusStatusInfo GeniusSDKGetInitializationStatus()
 
     auto status = GeniusNodeInstance->GetInitializationStatus();
 
-    return { status.first, strdup( status.second.data() ) };
+    return { status.first, strdup( status.second.c_str() ) };
 }
 
 const char *GeniusSDKGetAvailableAccounts()
@@ -708,6 +738,20 @@ GeniusNodeReturnValue_t GeniusSDKAddAccountWithMnemonic( const char *mnemonic )
         return GENIUS_NODE_RET_OK;
     }
     return GENIUS_NODE_INVALID_ARGUMENT;
+}
+
+GeniusMnemonicAndStatus GeniusSDKAddAccountWithRandomMnemonic()
+{
+    if ( !GeniusNodeInstance )
+    {
+        return { GENIUS_NODE_ERROR_NOT_INITIALIZED, nullptr };
+    }
+    auto ret = GeniusNodeInstance->AddAccountWithRandomMnemonic();
+    if ( ret.has_error() )
+    {
+        return { GENIUS_NODE_ERROR_NOT_INITIALIZED, nullptr };
+    }
+    return { GENIUS_NODE_RET_OK, strdup( ret.value().c_str() ) };
 }
 
 GeniusNodeReturnValue_t GeniusSDKSelectGeniusAccount( const char *public_address )
