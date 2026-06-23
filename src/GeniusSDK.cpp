@@ -238,24 +238,6 @@ const char *GeniusSDKInitWithKey( const char *base_path,
                           } );
 }
 
-GeniusMnemonicAndInitPath GeniusSDKInitWithRandomMnemonic( const char *base_path,
-                                                           bool        autodht,
-                                                           bool        process,
-                                                           uint16_t    baseport,
-                                                           bool        is_full_node )
-{
-    std::string mnemonic;
-    const auto *init_path = SDKInitHelper(
-        base_path,
-        [&]( const auto &config )
-        {
-            auto ret = sgns::GeniusNode::NewFromRandomMnemonic( config, autodht, process, baseport, is_full_node );
-            mnemonic = ret.second;
-            return ret.first;
-        } );
-    return { init_path, strdup( mnemonic.c_str() ) };
-}
-
 const char *GeniusSDKInitWithKeyAndDevConfig( const char *base_path,
                                               const char *dev_config,
                                               const char *eth_private_key,
@@ -268,13 +250,13 @@ const char *GeniusSDKInitWithKeyAndDevConfig( const char *base_path,
 
     if ( base_path == nullptr )
     {
-        std::cerr << "base_path should not be empty!\n";
+        SPDLOG_ERROR( "base_path should not be empty!\n" );
         return nullptr;
     }
 
     if ( dev_config == nullptr )
     {
-        std::cerr << "dev_config should not be empty!\n";
+        SPDLOG_ERROR( "dev_config should not be empty!\n" );
         return nullptr;
     }
 
@@ -283,17 +265,16 @@ const char *GeniusSDKInitWithKeyAndDevConfig( const char *base_path,
     if ( !load_config_ret )
     {
         ret_val.assign( load_config_ret.error().what() );
-        std::cerr << load_config_ret.error().what() << std::endl;
+        SPDLOG_ERROR( load_config_ret.error().what() );
         return nullptr;
     }
 
-    GeniusNodeInstance = std::shared_ptr<sgns::GeniusNode>(
-        sgns::GeniusNode::NewFromPrivateKey( load_config_ret.value(),
-                                             eth_private_key,
-                                             autodht,
-                                             process,
-                                             baseport,
-                                             is_full_node ) );
+    GeniusNodeInstance = sgns::GeniusNode::NewFromPrivateKey( load_config_ret.value(),
+                                                              eth_private_key,
+                                                              autodht,
+                                                              process,
+                                                              baseport,
+                                                              is_full_node );
     ret_val.append( load_config_ret.value().BaseWritePath );
 
     return ret_val.c_str();
@@ -508,21 +489,25 @@ GeniusAddress GeniusSDKGetAddress()
     return ret;
 }
 
-const char *GeniusSDKGetMnemonic()
+GeniusMnemonic GeniusSDKGetMnemonic()
 {
     if ( !GeniusNodeInstance )
     {
-        return nullptr;
+        return {};
     }
 
     auto mnemonic = GeniusNodeInstance->GetMnemonicOfActiveAccount();
 
     if ( !mnemonic )
     {
-        return nullptr;
+        return {};
     }
 
-    return strdup( mnemonic->c_str() );
+    GeniusMnemonic ret = {};
+
+    std::copy( mnemonic->cbegin(), mnemonic->cend(), ret.mnemonic );
+
+    return ret;
 }
 
 GeniusNodeReturnValue_t GeniusSDKTransfer( uint64_t amount, GeniusAddress *dest, GeniusTokenID token_id )
@@ -744,14 +729,16 @@ GeniusMnemonicAndStatus GeniusSDKAddAccountWithRandomMnemonic()
 {
     if ( !GeniusNodeInstance )
     {
-        return { GENIUS_NODE_ERROR_NOT_INITIALIZED, nullptr };
+        return { GENIUS_NODE_ERROR_NOT_INITIALIZED, {} };
     }
-    auto ret = GeniusNodeInstance->AddAccountWithRandomMnemonic();
-    if ( ret.has_error() )
+    auto reply = GeniusNodeInstance->AddAccountWithRandomMnemonic();
+    if ( reply.has_error() )
     {
-        return { GENIUS_NODE_ERROR_NOT_INITIALIZED, nullptr };
+        return { GENIUS_NODE_ERROR_NOT_INITIALIZED, {} };
     }
-    return { GENIUS_NODE_RET_OK, strdup( ret.value().c_str() ) };
+    GeniusMnemonicAndStatus ret = { GENIUS_NODE_RET_OK, {} };
+    std::copy( reply.value().cbegin(), reply.value().cend(), ret.mnemonic );
+    return ret;
 }
 
 GeniusNodeReturnValue_t GeniusSDKSelectGeniusAccount( const char *public_address )
