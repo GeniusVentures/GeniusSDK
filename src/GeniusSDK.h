@@ -14,6 +14,8 @@
  * @author     Luiz Guilherme Rizzatto Zucchi
  */
 
+// NOLINTBEGIN(modernize-use-using, modernize-deprecated-headers, cppcoreguidelines-avoid-c-arrays, performance-enum-size)
+
 #ifndef _GENIUSSDK_H
 #define _GENIUSSDK_H
 
@@ -159,6 +161,14 @@ typedef struct
     char *message;
 } GeniusStatusInfo;
 
+#define GENIUS_SDK_MAX_MNEMONIC_SIZE                                                                                   \
+    ( 24 * 8 + 23 + 1 ) // 24 words (with max of 8 characters), 23 space separators, 1 null termination
+
+typedef struct
+{
+    char mnemonic[GENIUS_SDK_MAX_MNEMONIC_SIZE];
+} GeniusMnemonic;
+
 /**
  * @brief Return type for account creation that includes both a status code and
  *        the generated mnemonic phrase.
@@ -166,8 +176,8 @@ typedef struct
 typedef struct
 {
     GeniusProcessingStatus_t
-                status;   ///< Return status (@ref GENIUS_NODE_RET_OK or @ref GENIUS_NODE_ERROR_NOT_INITIALIZED)
-    const char *mnemonic; ///< Null terminated string, needs to be freed with @ref GeniusSDKFree
+         status; ///< Return status (@ref GENIUS_NODE_RET_OK or @ref GENIUS_NODE_ERROR_NOT_INITIALIZED)
+    char mnemonic[GENIUS_SDK_MAX_MNEMONIC_SIZE]; ///< Null terminated string
 } GeniusMnemonicAndStatus;
 
 /**
@@ -177,7 +187,7 @@ typedef struct
 typedef struct
 {
     const char *initialization_path; ///< Statically allocated, do not call free
-    const char *mnemonic;            ///< Heap allocated, needs to be freed with @ref GeniusSDKFree
+    char        mnemonic[GENIUS_SDK_MAX_MNEMONIC_SIZE];
 } GeniusMnemonicAndInitPath;
 
 /**
@@ -218,24 +228,6 @@ GNUS_VISIBILITY_DEFAULT const char *GeniusSDKInitWithMnemonic( const char *base_
                                                                bool        process,
                                                                uint16_t    baseport,
                                                                bool        is_full_node );
-
-/**
- * @brief     Inits the SDK with a randomly generated mnemonic (no private key required).
- * @param[in] base_path    Base path for node data storage. Must contain a `dev_config.json` file.
- * @param[in] autodht      Whether to auto-discover DHT peers.
- * @param[in] process      Whether to enable processing.
- * @param[in] baseport     Base network port for the node.
- * @param[in] is_full_node Whether to run as a full node.
- * @return A @ref GeniusMnemonicAndInitPath struct containing the initialization path
- *         (statically allocated, do not free) and the generated mnemonic phrase
- *         (heap allocated, must be freed with @ref GeniusSDKFree). Returns null
- *         `initialization_path` on failure (mnemonic may still be populated).
- */
-GNUS_VISIBILITY_DEFAULT GeniusMnemonicAndInitPath GeniusSDKInitWithRandomMnemonic( const char *base_path,
-                                                                                   bool        autodht,
-                                                                                   bool        process,
-                                                                                   uint16_t    baseport,
-                                                                                   bool        is_full_node );
 
 /**
  * @brief Inits the SDK with an explicit developer config JSON string and an ethereum private key.
@@ -408,7 +400,7 @@ GNUS_VISIBILITY_DEFAULT GeniusAddress GeniusSDKGetAddress();
  *         the SDK is not initialized or the account has no mnemonic.
  *         Must be freed with @ref GeniusSDKFree.
  */
-GNUS_VISIBILITY_DEFAULT const char *GeniusSDKGetMnemonic();
+GNUS_VISIBILITY_DEFAULT GeniusMnemonic GeniusSDKGetMnemonic();
 
 /**
  * @brief Retrieves all incoming transactions.
@@ -537,3 +529,5 @@ GNUS_VISIBILITY_DEFAULT GeniusProcessingStatusInfo GeniusSDKGetProcessingStatus(
 GNUS_EXPORT_END
 
 #endif
+
+// NOLINTEND(modernize-use-using, modernize-deprecated-headers, cppcoreguidelines-avoid-c-arrays, performance-enum-size)
