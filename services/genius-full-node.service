@@ -1,0 +1,17 @@
+[Unit]
+Description=GeniusSDK Full Node
+After=network.target
+
+[Service]
+Type=simple
+User=geniussdk
+EnvironmentFile=-/etc/geniussdk/full-node.conf
+Environment="GENIUS_PROCESS=1"
+ExecStart=/bin/sh -c 'exec /usr/bin/GeniusSDKService /var/lib/geniussdk/full 1 $GENIUS_PROCESS 40001 1'
+Restart=on-failure
+RestartSec=5s
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
