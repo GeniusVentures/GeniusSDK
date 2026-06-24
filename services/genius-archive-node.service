@@ -1,0 +1,15 @@
+[Unit]
+Description=GeniusSDK Archive Node
+After=network.target
+
+[Service]
+Type=simple
+User=geniussdk
+ExecStart=/usr/bin/GeniusSDKService /var/lib/geniussdk/archive 1 0 40001 1
+Restart=on-failure
+RestartSec=5s
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

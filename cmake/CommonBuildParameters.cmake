@@ -204,13 +204,13 @@ endif()
 # header only libraries must not be added here
 find_package(Boost CONFIG REQUIRED COMPONENTS container date_time filesystem json random regex system thread log log_setup program_options unit_test_framework)
 
-# SQLiteModernCpp project
+# SQLiteModernCpp
 set(SQLiteModernCpp_ROOT_DIR "${THIRDPARTY_BUILD_DIR}/SQLiteModernCpp")
 set(SQLiteModernCpp_DIR "${SQLiteModernCpp_ROOT_DIR}/lib/cmake/SQLiteModernCpp")
 set(SQLiteModernCpp_LIB_DIR "${SQLiteModernCpp_ROOT_DIR}/lib")
 set(SQLiteModernCpp_INCLUDE_DIR "${SQLiteModernCpp_ROOT_DIR}/include")
 
-# SQLiteModernCpp project
+# sqlite3
 set(sqlite3_ROOT_DIR "${THIRDPARTY_BUILD_DIR}/sqlite3")
 set(sqlite3_DIR "${sqlite3_ROOT_DIR}/lib/cmake/sqlite3")
 set(sqlite3_LIB_DIR "${sqlite3_ROOT_DIR}/lib")
@@ -404,7 +404,6 @@ find_package(LLVM CONFIG REQUIRED)
 set(nlohmann_json_DIR "${THIRDPARTY_BUILD_DIR}/json/share/cmake/nlohmann_json")
 find_package(nlohmann_json CONFIG REQUIRED)
 
-
 if(NOT DEFINED SUPERGENIUS_BUILD_DIR)
     # define third party directory
     if(NOT DEFINED SUPERGENIUS_DIR)
@@ -456,8 +455,6 @@ if(TESTING)
     include_directories(${GTest_INCLUDE_DIR})
 
     enable_testing()
-
-    # add_subdirectory(${PROJECT_ROOT}/test ${CMAKE_BINARY_DIR}/test)
 endif()
 
 # Build examples

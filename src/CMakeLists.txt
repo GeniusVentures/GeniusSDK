@@ -1,12 +1,12 @@
 file(GLOB ALL_HDRS
     "./*.h"
     "./*.hpp"
-    )
+)
 
 file(GLOB ALL_SRCS
     "./*.cpp"
     "./*.c"
-    )
+)
 
 add_library(GeniusSDK STATIC ${ALL_SRCS} ${ALL_HDRS})
 set_target_properties(GeniusSDK PROPERTIES
@@ -19,9 +19,8 @@ geniussdk_install(GeniusSDK)
 add_library(GeniusSDK_shared SHARED ${ALL_SRCS} ${ALL_HDRS})
 GENERATE_EXPORT_HEADER(GeniusSDK_shared EXPORT_FILE_NAME ${CMAKE_BINARY_DIR}/GeniusSDKExport.h)
 
-
 set_target_properties(GeniusSDK_shared PROPERTIES
-    OUTPUT_NAME GeniusSDK_shared  
+    OUTPUT_NAME GeniusSDK_shared
     PUBLIC_HEADER "${ALL_HDRS};${CMAKE_BINARY_DIR}/GeniusSDKExport.h"
 )
 
@@ -98,7 +97,7 @@ if(APPLE)
             PUBLIC
             "-framework Security"
             )
-        endif()        
+        endif()
     else()
         # macOS Bundle
         add_library(GeniusSDK_bundle MODULE ${ALL_SRCS} ${ALL_HDRS})
