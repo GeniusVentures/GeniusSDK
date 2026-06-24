@@ -6,5 +6,5 @@ install(FILES
     genius-archive-node.service
     genius-full-node.service
     genius-job-poster.service
-    DESTINATION ${CMAKE_INSTALL_BINDIR}
+    DESTINATION ${CMAKE_INSTALL_BINDIR}/services
 )

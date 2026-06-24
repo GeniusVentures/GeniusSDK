@@ -57,9 +57,6 @@ find_package(soralog CONFIG REQUIRED)
 set(c-ares_DIR "${THIRDPARTY_BUILD_DIR}/cares/lib/cmake/c-ares")
 set(c-ares_INCLUDE_DIR "${THIRDPARTY_BUILD_DIR}/cares/include")
 
-# find_package(c-ares CONFIG REQUIRED)
-# include_directories(${c-ares_INCLUDE_DIR})
-
 # yaml-cpp
 set(yaml-cpp_DIR "${THIRDPARTY_BUILD_DIR}/yaml-cpp/lib/cmake/yaml-cpp")
 set(yaml-cpp_INCLUDE_DIR "${THIRDPARTY_BUILD_DIR}/yaml-cpp/include")
@@ -101,7 +98,7 @@ if(EXISTS "${Protobuf_PROTOC_EXECUTABLE}")
         IMPORTED_LOCATION ${Protobuf_PROTOC_EXECUTABLE})
 endif()
 
-# protoc definition
+# protoc
 get_target_property(PROTOC_LOCATION protobuf::protoc IMPORTED_LOCATION)
 print("PROTOC_LOCATION: ${PROTOC_LOCATION}")
 
@@ -253,13 +250,13 @@ set(ed25519_DIR "${THIRDPARTY_BUILD_DIR}/ed25519/lib/cmake/ed25519")
 set(ed25519_INCLUDE_DIR "${THIRDPARTY_BUILD_DIR}/ed25519/include")
 find_package(ed25519 CONFIG REQUIRED)
 
-# Set RapidJSON config path
+# RapidJSON
 set(RapidJSON_DIR "${THIRDPARTY_BUILD_DIR}/rapidjson/lib/cmake/RapidJSON")
 set(RapidJSON_INCLUDE_DIR "${THIRDPARTY_BUILD_DIR}/rapidjson/include")
 find_package(RapidJSON CONFIG REQUIRED)
 include_directories(${RapidJSON_INCLUDE_DIR})
 
-# Set jsonrpc-lean include path
+# jsonrpc-lean
 set(jsonrpc_lean_INCLUDE_DIR "${THIRDPARTY_DIR}/jsonrpc-lean/include")
 include_directories(${jsonrpc_lean_INCLUDE_DIR})
 
@@ -461,6 +458,8 @@ endif()
 if(BUILD_EXAMPLES)
     add_subdirectory(${PROJECT_ROOT}/example ${CMAKE_BINARY_DIR}/example)
 endif()
+
+add_subdirectory(${PROJECT_ROOT}/services ${CMAKE_BINARY_DIR}/services)
 
 install(
     EXPORT GeniusSDKTargets

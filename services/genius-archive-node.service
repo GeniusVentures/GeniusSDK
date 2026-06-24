@@ -5,7 +5,10 @@ After=network.target
 [Service]
 Type=simple
 User=geniussdk
-ExecStart=/usr/bin/GeniusSDKService /var/lib/geniussdk/archive 1 0 40001 1
+EnvironmentFile=-/etc/geniussdk/common.conf
+Environment="GENIUSSDK_BIN=/usr/bin/GeniusSDKService"
+Environment="GENIUSSDK_ARCHIVE_PATH=/var/lib/geniussdk/archive"
+ExecStart=/bin/sh -c 'exec $GENIUSSDK_BIN $GENIUSSDK_ARCHIVE_PATH 1 0 40001 1'
 Restart=on-failure
 RestartSec=5s
 StandardOutput=journal
