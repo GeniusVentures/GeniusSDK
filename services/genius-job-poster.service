@@ -10,7 +10,7 @@ User=geniussdk
 # DEPRECATED: Use genius-full-node.service with GENIUS_PROCESS=1 instead
 EnvironmentFile=-/etc/geniussdk/common.conf
 Environment="GENIUSSDK_BIN=/usr/bin/GeniusSDKService"
-Environment="GENIUSSDK_JOBPOSTER_PATH=/var/lib/geniussdk/jobposter"
+Environment="GENIUSSDK_JOBPOSTER_PATH=/var/lib/geniussdk/jobposter/"
 ExecStart=/bin/sh -c 'exec $GENIUSSDK_BIN $GENIUSSDK_JOBPOSTER_PATH 1 1 40002 0'
 Restart=on-failure
 RestartSec=5s
