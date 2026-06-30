@@ -526,6 +526,24 @@ GNUS_VISIBILITY_DEFAULT GeniusTransactionStatus_t GeniusSDKGetTransactionStatus(
  */
 GNUS_VISIBILITY_DEFAULT GeniusProcessingStatusInfo GeniusSDKGetProcessingStatus();
 
+/**
+ * @brief       Returns the task IDs of jobs submitted by the active account.
+ * @param[in]   limit  Maximum number of task IDs to return.
+ * @param[in]   offset Number of task IDs to skip from the end of the list.
+ * @return      A null-terminated string containing newline-separated task IDs,
+ *              or null if the SDK is not initialized. Must be freed with GeniusSDKFree().
+ */
+GNUS_VISIBILITY_DEFAULT const char *GeniusSDKGetMyTaskIds( uint64_t limit, uint64_t offset );
+
+/**
+ * @brief       Retrieves the completed result for a specific task.
+ * @param[in]   task_id A null-terminated string representing the task ID (ipfs_block_id).
+ * @return      A GeniusArray containing the serialized protobuf bytes of TaskResult,
+ *              or {0, nullptr} if the task is not found or SDK is not initialized.
+ *              On success, the ptr field must be freed with GeniusSDKFree().
+ */
+GNUS_VISIBILITY_DEFAULT GeniusArray GeniusSDKGetTaskResult( const char *task_id );
+
 GNUS_EXPORT_END
 
 #endif

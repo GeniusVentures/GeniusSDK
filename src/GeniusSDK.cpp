@@ -30,6 +30,7 @@
 
 #include <base/buffer.hpp>
 #include <processing/processing_service.hpp>
+#include <processing/proto/SGProcessing.pb.h>
 
 namespace
 {
@@ -216,7 +217,7 @@ const char *GeniusSDKInit( const char *base_path, bool autodht, bool process, ui
 {
     return SDKInitHelper( base_path,
                           [&]( const auto &config )
-                          { return sgns::GeniusNode::New( config, autodht, process, baseport, is_full_node ); } );
+                          { return sgns::GeniusNode::New( config, autodht, baseport, is_full_node ); } );
 }
 
 const char *GeniusSDKInitWithKey( const char *base_path,
@@ -232,7 +233,6 @@ const char *GeniusSDKInitWithKey( const char *base_path,
                               return sgns::GeniusNode::NewFromPrivateKey( config,
                                                                           eth_private_key,
                                                                           autodht,
-                                                                          process,
                                                                           baseport,
                                                                           is_full_node );
                           } );
@@ -242,7 +242,6 @@ const char *GeniusSDKInitWithKeyAndDevConfig( const char *base_path,
                                               const char *dev_config,
                                               const char *eth_private_key,
                                               bool        autodht,
-                                              bool        process,
                                               uint16_t    baseport,
                                               bool        is_full_node )
 {
@@ -272,7 +271,6 @@ const char *GeniusSDKInitWithKeyAndDevConfig( const char *base_path,
     GeniusNodeInstance = sgns::GeniusNode::NewFromPrivateKey( load_config_ret.value(),
                                                               eth_private_key,
                                                               autodht,
-                                                              process,
                                                               baseport,
                                                               is_full_node );
     ret_val.append( load_config_ret.value().BaseWritePath );
@@ -290,7 +288,7 @@ const char *GeniusSDKInitWithMnemonic( const char *base_path,
     return SDKInitHelper(
         base_path,
         [&]( const auto &config )
-        { return sgns::GeniusNode::NewFromMnemonic( config, mnemonic, autodht, process, baseport, is_full_node ); } );
+        { return sgns::GeniusNode::NewFromMnemonic( config, mnemonic, autodht, baseport, is_full_node ); } );
 }
 
 const char *GeniusSDKInitMinimal( const char *base_path, const char *eth_private_key, uint16_t baseport )
@@ -874,4 +872,64 @@ GeniusProcessingStatusInfo GeniusSDKGetProcessingStatus()
 
     result.percentage = status_info.percentage;
     return result;
+}
+
+const char *GeniusSDKGetMyTaskIds( uint64_t limit, uint64_t offset )
+{
+    if ( !GeniusNodeInstance )
+    {
+        return nullptr;
+    }
+
+    auto task_ids = GeniusNodeInstance->GetMyTaskIds( limit, offset );
+
+    if ( task_ids.empty() )
+    {
+        char *ret = reinterpret_cast<char *>( malloc( 1 ) );
+        ret[0]    = '\0';
+        return ret;
+    }
+
+    // Calculate total size: each ID + '\n' separator, last entry gets '\0' instead
+    size_t total_size = 0;
+    for ( const auto &id : task_ids )
+    {
+        total_size += id.size() + 1; // id + separator
+    }
+
+    char *ret  = reinterpret_cast<char *>( malloc( total_size ) );
+    char *dest = ret;
+    for ( size_t i = 0; i < task_ids.size(); ++i )
+    {
+        memcpy( dest, task_ids[i].data(), task_ids[i].size() );
+        dest += task_ids[i].size();
+        *dest++ = ( i + 1 < task_ids.size() ) ? '\n' : '\0';
+    }
+
+    return ret;
+}
+
+GeniusArray GeniusSDKGetTaskResult( const char *task_id )
+{
+    if ( !GeniusNodeInstance || task_id == nullptr )
+    {
+        return { 0, nullptr };
+    }
+
+    auto result = GeniusNodeInstance->GetTaskResult( std::string( task_id ) );
+    if ( !result.has_value() )
+    {
+        return { 0, nullptr };
+    }
+
+    std::string serialized;
+    if ( !result.value().SerializeToString( &serialized ) )
+    {
+        return { 0, nullptr };
+    }
+
+    uint8_t *buf = reinterpret_cast<uint8_t *>( malloc( serialized.size() ) );
+    memcpy( buf, serialized.data(), serialized.size() );
+
+    return { serialized.size(), buf };
 }
