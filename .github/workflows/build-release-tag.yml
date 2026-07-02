@@ -22,7 +22,6 @@ on:
 permissions:
   contents: write
   packages: read
-  workflows: write
 jobs:
   resolve-runners:
     runs-on: ubuntu-latest

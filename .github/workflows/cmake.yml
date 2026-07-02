@@ -24,7 +24,6 @@ on:
 permissions:
   contents: write
   packages: read
-  workflows: write
 jobs:
   resolve-runners:
     runs-on: ubuntu-latest
@@ -572,16 +571,15 @@ jobs:
               if [ "$IS_TAG_RELEASE" == "false" ]; then
                   echo "Deleting existing release/tag $RELEASE_TAG..."
                   gh release delete "$RELEASE_TAG" --yes || true
-                  git push origin ":refs/tags/$RELEASE_TAG" || true
+                  gh api repos/${{ github.repository }}/git/refs/tags/$RELEASE_TAG -X DELETE || true
                   git tag -d "$RELEASE_TAG" || true
               fi
           fi
 
-          echo "Creating new tag $RELEASE_TAG..."
-          git tag -f "$RELEASE_TAG" "${{ github.sha }}"
-          git push origin "$RELEASE_TAG" --force
-
-          echo "Creating GitHub release $RELEASE_TAG..."
+          echo "Creating release $RELEASE_TAG..."
+          # gh release create --target handles both tag creation (via API) and release
+          # creation in one call — avoids git push which requires workflows permission
+          # when the tagged commit touches .github/workflows/ files.
           gh release create "$RELEASE_TAG" \
           --target "${{ github.sha }}" \
           -t "${{ matrix.target }} ${GITHUB_REF_NAME} ${{ matrix.build-type }} build" \
