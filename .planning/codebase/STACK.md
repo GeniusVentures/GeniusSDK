@@ -1,194 +1,141 @@
+---
+last_mapped_commit: 35507476cbaa482c1c9a6e3582f8475a9f39304c
+---
+
 # Technology Stack
 
-**Analysis Date:** 2026-06-08
+**Analysis Date:** 2026-07-03
 
 ## Languages
 
 **Primary:**
-- C++17 - All SDK source code (`src/GeniusSDK.cpp`, `src/GeniusSDK.h`)
-- C (extern "C" interface) - Public API surface in `src/GeniusSDK.h`
+- C++17 - All source code (SDK, services, examples, tests)
+  - Standard: `CMAKE_CXX_STANDARD 17`, `CMAKE_CXX_STANDARD_REQUIRED ON` (`build/CommonCompilerOptions.cmake`)
+  - Compiler families: Clang/AppleClang/GCC (POSIX), MSVC (Windows)
+  - C standard: C17 (`CMAKE_C_STANDARD 17`)
 
 **Secondary:**
-- CMake 3.22+ - Build system (all `CMakeLists.txt` files, cmake module files)
-- Objective-C/C++ - Apple platform toolchain support (`build/apple.toolchain.cmake`)
+- Rust - Android cross-compilation toolchain targets (`rustup target add` in CI: `aarch64-linux-android`, `armv7-linux-androideabi`)
+- CMake (build configuration language) - All build scripts and dependency management
 
 ## Runtime
 
-**Standard:**
-- C++17 (ISO C++17) enforced via `CMAKE_CXX_STANDARD 17` with `CMAKE_CXX_STANDARD_REQUIRED ON` and `CMAKE_CXX_EXTENSIONS OFF` in `build/CommonCompilerOptions.cmake`
-- C17 via `CMAKE_C_STANDARD 17` with `CMAKE_C_EXTENSIONS OFF`
+**Environment:**
+- Native C++ binaries (no managed runtime)
+- `libc++` or `libstdc++` depending on platform/compiler
+- Clang is the preferred compiler (CI configurations all default to `/usr/bin/clang++` on Linux)
 
-**Compiler Requirements:**
-- Apple: AppleClang via Xcode (macOS deployment target 13.0, iOS 15.0)
-- Linux: GCC or Clang
-- Windows: MSVC (Visual Studio 17 2022)
-- Android: NDK r25b, Clang toolchain, API level 28
-
-## Build System
-
-**Generator:**
-- Ninja (default/preferred for macOS/Linux)
-- Visual Studio 17 2022 (Windows)
-- Xcode (Apple combined/universal builds)
-
-**Build Config:**
-- CMake minimum 3.22
-- CMake module files in two locations:
-  - `build/cmake/` — build infrastructure (functions, definitions, install, print, toolchain)
-  - `cmake/` — project-level (CommonBuildParameters, CompilationFlags, functions, config)
-- Package generation: `GeniusSDKConfig.cmake` generated from `cmake/config.cmake.in`
-- Version file: `GeniusSDKConfigVersion.cmake` with `AnyNewerVersion` compatibility
-
-## Package Manager
-
-- No package manager used at build time. All dependencies are pre-built in a separate `thirdparty/` repository.
-- The `build/` directory is a git submodule pointing to `GeniusVentures/cmaketemplate`.
-- Thirdparty discovery: `get_third_party_dir()` function in `build/cmake/functions.cmake` walks up the directory tree to locate the `thirdparty/` sibling directory, verified by matching the git remote `GeniusVentures/thirdparty`.
-- If thirdparty is not present locally, `build/CommonCompilerOptions.cmake` auto-downloads it from GitHub releases.
+**Package Manager:**
+- CMake `find_package` with CONFIG mode — dependencies resolved via pre-built artifacts from GitHub releases
+- No traditional package manager (no vcpkg, Conan, or system package manager for SDK deps)
+- Lockfile: Not applicable (dependencies are versioned via GitHub release tags)
 
 ## Frameworks
 
 **Core:**
-- SuperGenius (sibling project `../SuperGenius`) - Genesis node, blockchain, transaction management, processing services
-  - Included via `find_package(SuperGenius CONFIG REQUIRED)` from `cmake/CommonBuildParameters.cmake`
-  - Target namespace: `sgns::`
+- Boost 1.85.0 - Primary general-purpose library (container, date_time, filesystem, json, random, regex, system, thread, log, log_setup, program_options, coroutine, context, unit_test_framework) (`cmake/CommonBuildParameters.cmake:2-4`, `cmake/CommonBuildParameters.cmake:202`)
+- Boost.DI - Dependency injection framework
+- zkLLVM / crypto3 - Zero-knowledge cryptography framework (algebra, block, blueprint, codec, math, multiprecision, pkpad, pubkey, random, zk) (`cmake/CommonBuildParameters.cmake:336-399`)
+- LLVM - Compiler infrastructure (used via zkLLVM) (`cmake/CommonBuildParameters.cmake:398-399`)
+
+**Networking & P2P:**
+- libp2p - Peer-to-peer networking stack (`cmake/CommonBuildParameters.cmake:221-224`)
+- c-ares - Async DNS resolution (`cmake/CommonBuildParameters.cmake:57-58`)
+- jsonrpc-lean - Lightweight JSON-RPC framework (`cmake/CommonBuildParameters.cmake:260-261`)
+
+**Storage:**
+- RocksDB - Embedded key-value store for blockchain state (`cmake/CommonBuildParameters.cmake:126-128`)
+- SQLite3 + SQLiteModernCpp - Local database storage (`cmake/CommonBuildParameters.cmake:204-215`)
+- IPFS-lite-cpp + ipfs-pubsub + ipfs-bitswap-cpp - Decentralized content-addressed storage (`cmake/CommonBuildParameters.cmake:232-246`)
+
+**Serialization & Data:**
+- Protocol Buffers (protobuf) - Binary serialization for processing messages (`cmake/CommonBuildParameters.cmake:76-99`)
+- RapidJSON - JSON parsing/writing (`src/GeniusSDK.cpp:26-29`, `cmake/CommonBuildParameters.cmake:253-257`)
+- nlohmann/json - Alternative JSON library (`cmake/CommonBuildParameters.cmake:401-402`)
+- YAML-cpp - YAML configuration parsing (`cmake/CommonBuildParameters.cmake:61-63`)
+
+**Cryptography & Identity:**
+- OpenSSL - TLS/crypto primitives (`cmake/CommonBuildParameters.cmake:113-119`)
+- libsecp256k1 - Elliptic curve cryptography (Bitcoin/Ethereum key handling) (`cmake/CommonBuildParameters.cmake:263-267`)
+- ed25519 - Ed25519 signature scheme (`cmake/CommonBuildParameters.cmake:248-251`)
+- TrustWalletCore - Ethereum wallet functionality (TrezorCrypto, wallet_core_rs, TrustWalletCore) (`cmake/CommonBuildParameters.cmake:310-325`)
+- xxHash - Fast non-cryptographic hash (`cmake/CommonBuildParameters.cmake:269-273`)
+
+**Compute & ML:**
+- MNN (Mobile Neural Network) - AI inference engine (`cmake/CommonBuildParameters.cmake:46-49`)
+- Vulkan - GPU compute API, with MoltenVK on Apple platforms (`cmake/CommonBuildParameters.cmake:10-30`)
+
+**Networking Utilities:**
+- libssh2 - SSH protocol library (`cmake/CommonBuildParameters.cmake:286-288`)
+- gnus_upnp - UPnP NAT traversal (`cmake/CommonBuildParameters.cmake:304-307`)
+- AsyncIOManager - Async I/O management (`cmake/CommonBuildParameters.cmake:298-301`)
+
+**Logging:**
+- spdlog - High-performance logging library (uses external fmt) (`src/GeniusSDK.cpp:15`, `cmake/CommonBuildParameters.cmake:143-146`)
+- soralog - Structured logging library (`cmake/CommonBuildParameters.cmake:52-54`)
+
+**Formatting & Utilities:**
+- fmt - Modern string formatting library (`cmake/CommonBuildParameters.cmake:41-43`)
+- Microsoft GSL (Guidelines Support Library) (`cmake/CommonBuildParameters.cmake:134-135`)
+- tsl::hat_trie - Hat-trie data structure (`cmake/CommonBuildParameters.cmake:153-156`)
+- Snappy - Google compression library (`cmake/CommonBuildParameters.cmake:122-123`)
+- stb - Single-file header libraries (image loading) (`cmake/CommonBuildParameters.cmake:131`)
+- zlib - Compression (`cmake/CommonBuildParameters.cmake:32-33`)
 
 **Testing:**
-- Google Test (GTest) - Test runner and assertions
-  - Configured in `cmake/CommonBuildParameters.cmake` via `find_package(GTest CONFIG REQUIRED)`
-  - Test helper: `addtest()` function in `cmake/functions.cmake` (also duplicated in `build/cmake/functions.cmake`)
-  - Output: xUnit XML at `${CMAKE_BINARY_DIR}/xunit/`
-  - Enabled by `TESTING` option (default `OFF` in project, default `ON` in `CommonCompilerOptions.cmake`)
+- Google Test (GTest) + Google Mock (GMock) - Unit testing framework (`cmake/CommonBuildParameters.cmake:36-38`, `cmake/functions.cmake:11-14`)
+- Boost.UnitTestFramework - Alternative test framework (included in Boost components)
 
-**Dependency Injection:**
-- Boost.DI (header-only compile-time DI framework) - Configured but no SDK source uses it directly; used by SuperGenius internals
-
-**Zero-Knowledge Proofs:**
-- zkLLVM + crypto3 (algebra, block, blueprint, codec, math, multiprecision, pkpad, pubkey, random, zk) - Interface targets
-- LLVM - Required for zkLLVM
-- Both auto-downloaded from GitHub releases if not present locally
-
-## Key Dependencies
-
-The full dependency map is defined in `cmake/CommonBuildParameters.cmake`. All are found via `CONFIG REQUIRED` from `${THIRDPARTY_BUILD_DIR}`.
-
-### Core Libraries
-
-| Package | Version | Purpose | Config Path Pattern |
-|---------|---------|---------|-------------------|
-| Boost | 1.85.0 | Multi-purpose (container, date_time, filesystem, json, random, regex, system, thread, log, log_setup, program_options, unit_test_framework) | `${_THIRDPARTY_BUILD_DIR}/boost/build/lib/cmake/Boost-1.85.0` |
-| Protobuf | (thirdparty) | Serialization, protoc code generation | `${THIRDPARTY_BUILD_DIR}/protobuf/lib/cmake/protobuf` |
-| OpenSSL | (thirdparty) | Cryptography, TLS | `${THIRDPARTY_BUILD_DIR}/openssl/build` |
-| libsecp256k1 | (thirdparty) | Elliptic curve cryptography (secp256k1) | `${THIRDPARTY_BUILD_DIR}/libsecp256k1/lib/cmake/libsecp256k1` |
-| ed25519 | (thirdparty) | Ed25519 signatures | `${THIRDPARTY_BUILD_DIR}/ed25519/lib/cmake/ed25519` |
-
-### Logging
-
-| Package | Purpose |
-|---------|---------|
-| fmt | Formatting backend (SPDLOG_FMT_EXTERNAL defined to use external fmt) |
-| spdlog | Structured logging |
-| soralog | Custom logging layer |
-
-### Storage
-
-| Package | Purpose |
-|---------|---------|
-| RocksDB | Key-value store | 
-| Snappy | Compression for RocksDB |
-| SQLite3 | Embedded relational database |
-| SQLiteModernCpp | Modern C++ SQLite wrapper |
-
-### P2P / Networking
-
-| Package | Purpose |
-|---------|---------|
-| libp2p | Peer-to-peer networking |
-| ipfs-lite-cpp | IPFS storage layer |
-| ipfs-pubsub | IPFS pub/sub |
-| ipfs-bitswap-cpp | IPFS bitswap |
-| c-ares | Async DNS resolution |
-| libssh2 | SSH2 protocol |
-| AsyncIOManager | Async I/O management |
-| gnus_upnp | UPnP/NAT traversal |
-
-### Data Formats & Parsing
-
-| Package | Purpose |
-|---------|---------|
-| RapidJSON | JSON parsing (used directly in GeniusSDK.cpp) |
-| nlohmann_json | JSON for modern C++ |
-| yaml-cpp | YAML parsing |
-| protobuf + absl + utf8_range | Protocol Buffers serialization |
-
-### Blockchain / Wallet
-
-| Package | Purpose |
-|---------|---------|
-| TrustWallet Core (wallet-core) | Multi-currency wallet implementation |
-| TrezorCrypto | Low-level crypto for wallet |
-
-### Hashing & Data Structures
-
-| Package | Purpose |
-|---------|---------|
-| xxHash | Fast non-cryptographic hash |
-| tsl_hat_trie | HAT-trie (cache-friendly trie) |
-| Microsoft.GSL | Guidelines Support Library (span, not_null, etc.) |
-| stb | Single-file public domain libraries (image I/O) |
-
-### UI / Graphics
-
-| Package | Purpose |
-|---------|---------|
-| Vulkan / MoltenVK | Graphics API (Apple platforms only, via `.xcframework`) |
-| MNN | Neural network inference |
+**Build/Dev:**
+- CMake - Build system (`cmake/CommonCompilerOptions.cmake`)
+- Ninja - Preferred build tool on POSIX (`build/README.md`)
+- ccache - Compiler cache (used in CI) (`.github/workflows/cmake.yml`)
+- clang-format - Code formatter (`.clang-format` - Microsoft-based style, C++17 standard)
+- clang-tidy - Static analysis (`.clang-tidy` - extensive rule set with boost, bugprone, cert, concurrency, cppcoreguidelines, modernize, performance, readability checks)
 
 ## Configuration
 
-**Environment Variables (build-time):**
-- `ANDROID_NDK` / `ANDROID_NDK_HOME` - Path to Android NDK (Android builds)
-- `VULKAN_SDK` - Path to Vulkan SDK (fallback if MoltenVK not configured)
+**Environment:**
+- No `.env` file used at build time
+- CI secrets via GitHub Actions secrets: `GNUS_TOKEN_1` (for GitHub API, GHCR container registry auth)
+- Service environment files: `/etc/geniussdk/common.conf`, `/etc/geniussdk/full-node.conf` (optional, read at runtime by Linux systemd services)
 
-**CMake Cache Variables (user-configurable):**
-- `THIRDPARTY_DIR` - Path to thirdparty repository root
-- `SUPERGENIUS_DIR` - Path to SuperGenius project root
-- `GENIUS_DEPENDENCY_BRANCH` - Branch name for downloading dependencies from GitHub releases
-- `BRANCH_IS_TAG` - Set ON when GENIUS_DEPENDENCY_BRANCH points to a tagged release
-- `SANITIZE_CODE` - Sanitizer type (address, thread, undefined, etc.)
-- `SGNS_STACKTRACE_BACKTRACE` - Enable Boost stacktrace with backtrace (POSIX)
+**Build:**
+- `build/CommonBuildParameters.cmake` - Master dependency configuration (delegates to `cmake/CommonBuildParameters.cmake`)
+- `build/CommonCompilerOptions.cmake` - C++ standard, build options, toolchain auto-download, sanitizer support
+- `cmake/CompilationFlags.cmake` - Compiler warning/error flags
+- `cmake/functions.cmake` - Custom CMake functions (`addtest`, `geniussdk_install`, etc.)
+- `build/CompilationFlags.cmake.example` - Example compilation flags template
+- `build/CommonBuildParameters.cmake.example` - Example build parameters template
+- Build type: `Debug`, `Release`, `RelWithDebInfo` (CMake `CMAKE_BUILD_TYPE`)
+- Platform subdirectories: `build/Android/`, `build/Linux/`, `build/OSX/`, `build/Windows/`, `build/iOS/`
+- Key CMake variables: `THIRDPARTY_DIR`, `THIRDPARTY_BUILD_DIR`, `SUPERGENIUS_DIR`, `SUPERGENIUS_BUILD_DIR`, `ZKLLVM_BUILD_DIR`, `SGNS_ENABLE_RELEASE_SYMBOLS`
 
-**Build Options:**
-- `BUILD_SHARED_LIBS` - Build shared libraries (`OFF` by default)
-- `TESTING` - Build tests (`OFF` by default in project, `ON` in CommonCompilerOptions.cmake)
-- `BUILD_EXAMPLES` - Build examples (`OFF` by default in project, `ON` in CommonCompilerOptions.cmake)
-
-**Build Configs:**
-- `.clang-format` - Formatting rules (BasedOnStyle: Microsoft, 120 cols, Allman braces, C++17)
-- `.clang-tidy` - Static analysis checks (bugprone, cert, modernize, performance, readability)
-- `.clangd` - Language server config
+**Runtime Configuration:**
+- `dev_config.json` - Developer configuration file (Address, Cut, TokenValue, TokenID) expected at node base path (`src/GeniusSDK.cpp:139-148`, `example/dev_config.json`)
+- `log_config.json` - Optional log level overrides loaded via `GeniusSDKLoadLogConfig()` (`src/GeniusSDK.cpp:641-647`)
+- Service systemd units with environment file support (`services/genius-*.service`)
 
 ## Platform Requirements
 
 **Development:**
-- macOS: Xcode with command-line tools, Ninja (recommended)
-- Linux: GCC/Clang, CMake 3.22+, Ninja (recommended)
-- Windows: Visual Studio 17 2022, CMake 3.22+
-- Android: NDK r25b, host CMake 3.22+
+- CMake 3.x+
+- Clang or GCC with C++17 support, or Visual Studio 2022 on Windows
+- Ninja (preferred) or Make
+- Android NDK r27b for Android builds
+- Rust toolchain (for Android cross-compilation targets)
+- Git with submodules support
+- ccache (optional, for faster rebuilds)
 
 **Production:**
-- Deployment targets: macOS 13.0+, iOS 15.0+, Android API 28+
-- All platforms build via `cmake --build .` from `build/<Platform>/<BuildType>/`
-- Install via `cmake --install .` from the build directory
-
-**Build Output:**
-- Static library: `libGeniusSDK.a`
-- Shared library: `libGeniusSDK_shared.{dylib|so|dll}`
-- macOS bundle: `GeniusSDK.bundle` (MODULE type)
-- iOS framework: `GeniusSDK.framework`
-- Export header: `GeniusSDKExport.h` (generated)
-- Package config: `GeniusSDKConfig.cmake`, `GeniusSDKConfigVersion.cmake`
+- Linux: systemd-based services (Debian Bullseye base), three node roles: full-node, archive-node, job-poster (deprecated)
+- macOS: Native bundle or framework (universal binary)
+- iOS: Framework (arm64)
+- Android: armeabi-v7a and arm64-v8a ABIs
+- Windows: x64 DLL
+- Service user: `geniussdk`
+- Install prefix: `${CMAKE_INSTALL_PREFIX}` (configurable)
 
 ---
 
-*Stack analysis: 2026-06-08*
+*Stack analysis: 2026-07-03*
