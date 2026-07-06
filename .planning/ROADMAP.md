@@ -21,8 +21,12 @@ Add `base_path` back to all C ABI init functions alongside `dev_config` JSON, st
   2. All 3 init functions call `GeniusNode::New(config, AccountSource{...})` via the unified factory — no references to `NewFromPrivateKey`, `NewFromMnemonic`, or old multi-param `New()` remain in `GeniusSDK.cpp`
   3. All caller files (`example/SDKExample.cpp`, `example/SDKIdleExample.cpp`, `services/service.cpp`) compile against the new signatures, passing `base_path` and `dev_config` JSON strings and no legacy params
   4. `GeniusSDKInitWithKeyAndDevConfig` and `GeniusSDKInitMinimal` are removed from both header and implementation
-  5. Examples and service ship `network_config.json` and `sgns_config.json` files matching their previous hardcoded defaults (port 40001, DHT on, full-node/processor per existing flags)
-**Plans**: TBD
+   5. Examples and service ship `network_config.json` and `sgns_config.json` files matching their previous hardcoded defaults (port 40001, DHT on, full-node/processor per existing flags)
+**Plans**: 2 plans
+
+Plans:
+- [ ] 01-01-PLAN.md — Header declarations + implementation refactoring (INIT-01..05, IMPL-01..06)
+- [ ] 01-02-PLAN.md — Caller migration + config files (CALL-01..04)
 **UI hint**: no
 
 ### Phase 2: Verification & Documentation
@@ -44,5 +48,5 @@ Phases execute in numeric order: 1 → 2
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Init Interface Modernization | 0/0 | Not started | - |
+| 1. Init Interface Modernization | 0/2 | Not started | - |
 | 2. Verification & Documentation | 0/0 | Not started | - |
