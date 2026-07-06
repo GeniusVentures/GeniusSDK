@@ -9,9 +9,9 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Init Signatures — Public Header
 
-- [ ] **INIT-01**: `GeniusSDKInit()` — strip `base_path`, `autodht`, `process`, `baseport`, `is_full_node`. New signature: `(const char *dev_config)`. Parses JSON to extract `BaseWritePath`, creates new account.
-- [ ] **INIT-02**: `GeniusSDKInitWithKey()` — strip `base_path`, `autodht`, `process`, `baseport`, `is_full_node`. New signature: `(const char *dev_config, const char *eth_private_key)`.
-- [ ] **INIT-03**: `GeniusSDKInitWithMnemonic()` — strip `base_path`, `autodht`, `process`, `baseport`, `is_full_node`. New signature: `(const char *dev_config, const char *mnemonic)`.
+- [ ] **INIT-01**: `GeniusSDKInit()` — strip `autodht`, `process`, `baseport`, `is_full_node`. New signature: `(const char *base_path, const char *dev_config)`. Parses JSON to extract `BaseWritePath`, creates new account.
+- [ ] **INIT-02**: `GeniusSDKInitWithKey()` — strip `autodht`, `process`, `baseport`, `is_full_node`. New signature: `(const char *base_path, const char *dev_config, const char *eth_private_key)`.
+- [ ] **INIT-03**: `GeniusSDKInitWithMnemonic()` — strip `autodht`, `process`, `baseport`, `is_full_node`. New signature: `(const char *base_path, const char *dev_config, const char *mnemonic)`.
 - [ ] **INIT-04**: `GeniusSDKInitWithKeyAndDevConfig()` — **removed**. Redundant — all init functions now take `dev_config` JSON as first parameter.
 - [ ] **INIT-05**: `GeniusSDKInitMinimal()` — **removed**. Redundant — same as `GeniusSDKInitWithKey(dev_config, key)`.
 
@@ -61,29 +61,29 @@ Deferred to future release.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| INIT-01 | — | Pending |
-| INIT-02 | — | Pending |
-| INIT-03 | — | Pending |
-| INIT-04 | — | Pending |
-| INIT-05 | — | Pending |
-| IMPL-01 | — | Pending |
-| IMPL-02 | — | Pending |
-| IMPL-03 | — | Pending |
-| IMPL-04 | — | Pending |
-| IMPL-05 | — | Pending |
-| IMPL-06 | — | Pending |
-| CALL-01 | — | Pending |
-| CALL-02 | — | Pending |
-| CALL-03 | — | Pending |
-| CALL-04 | — | Pending |
-| VER-01 | — | Pending |
-| VER-02 | — | Pending |
-| VER-03 | — | Pending |
+| INIT-01 | Phase 1 | Pending |
+| INIT-02 | Phase 1 | Pending |
+| INIT-03 | Phase 1 | Pending |
+| INIT-04 | Phase 1 | Pending |
+| INIT-05 | Phase 1 | Pending |
+| IMPL-01 | Phase 1 | Pending |
+| IMPL-02 | Phase 1 | Pending |
+| IMPL-03 | Phase 1 | Pending |
+| IMPL-04 | Phase 1 | Pending |
+| IMPL-05 | Phase 1 | Pending |
+| IMPL-06 | Phase 1 | Pending |
+| CALL-01 | Phase 1 | Pending |
+| CALL-02 | Phase 1 | Pending |
+| CALL-03 | Phase 1 | Pending |
+| CALL-04 | Phase 1 | Pending |
+| VER-01 | Phase 2 | Pending |
+| VER-02 | Phase 2 | Pending |
+| VER-03 | Phase 2 | Pending |
 
 **Coverage:**
 - v1 requirements: 17 total
-- Mapped to phases: 0 (pending roadmap)
-- Unmapped: 17
+- Mapped to phases: 17 (Phase 1: 14, Phase 2: 3)
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-07-03*
