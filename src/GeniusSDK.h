@@ -191,74 +191,35 @@ typedef struct
 } GeniusMnemonicAndInitPath;
 
 /**
- * @brief Inits the SDK with saved settings (no private key — uses existing wallet).
+ * @brief Inits the SDK with saved settings (no private key - uses existing wallet).
  * If no account exists, creates with a random mnemonic.
- * @param[in] base_path    Base path for node data storage. Must contain a `dev_config.json` file.
- * @param[in] autodht      Whether to auto-discover DHT peers.
- * @param[in] process      Whether to enable processing.
- * @param[in] baseport     Base network port for the node.
- * @param[in] is_full_node Whether to run as a full node.
+ * @param[in] base_path  Base path for node data storage.
+ * @param[in] dev_config Developer configuration JSON string (Address, Cut, TokenValue, TokenID).
  * @returns Initialization path in case of success, null on failure.
  */
-GNUS_VISIBILITY_DEFAULT const char *GeniusSDKInit( const char *base_path,
-                                                   bool        autodht,
-                                                   bool        process,
-                                                   uint16_t    baseport,
-                                                   bool        is_full_node );
+GNUS_VISIBILITY_DEFAULT const char *GeniusSDKInit( const char *base_path, const char *dev_config );
+
 /**
  * @brief Inits the SDK with an ethereum private key.
- * @param[in] base_path       Base path for node data storage. Must contain a `dev_config.json` file.
+ * @param[in] base_path       Base path for node data storage.
+ * @param[in] dev_config      Developer configuration JSON string.
  * @param[in] eth_private_key Valid HEX ethereum key, supports '0x' prefix.
- * @param[in] autodht         Whether to auto-discover DHT peers.
- * @param[in] process         Whether to enable processing.
- * @param[in] baseport        Base network port for the node.
- * @param[in] is_full_node    Whether to run as a full node.
  * @returns Initialization path in case of success, null on failure.
  */
 GNUS_VISIBILITY_DEFAULT const char *GeniusSDKInitWithKey( const char *base_path,
-                                                          const char *eth_private_key,
-                                                          bool        autodht,
-                                                          bool        process,
-                                                          uint16_t    baseport,
-                                                          bool        is_full_node );
+                                                          const char *dev_config,
+                                                          const char *eth_private_key );
 
+/**
+ * @brief Inits the SDK with a BIP39 mnemonic recovery phrase.
+ * @param[in] base_path  Base path for node data storage.
+ * @param[in] dev_config Developer configuration JSON string.
+ * @param[in] mnemonic   BIP39 mnemonic recovery phrase.
+ * @returns Initialization path in case of success, null on failure.
+ */
 GNUS_VISIBILITY_DEFAULT const char *GeniusSDKInitWithMnemonic( const char *base_path,
-                                                               const char *mnemonic,
-                                                               bool        autodht,
-                                                               bool        process,
-                                                               uint16_t    baseport,
-                                                               bool        is_full_node );
-
-/**
- * @brief Inits the SDK with an explicit developer config JSON string and an ethereum private key.
- * @param[in] base_path       Base path for node data storage.
- * @param[in] dev_config      Developer configuration as a JSON string (overrides dev_config.json).
- * @param[in] eth_private_key Valid HEX ethereum key, supports '0x' prefix.
- * @param[in] autodht         Whether to auto-discover DHT peers.
- * @param[in] process         Whether to enable processing.
- * @param[in] baseport        Base network port for the node.
- * @param[in] is_full_node    Whether to run as a full node.
- * @returns Initialization path in case of success, null on failure.
- */
-GNUS_VISIBILITY_DEFAULT const char *GeniusSDKInitWithKeyAndDevConfig( const char *base_path,
-                                                                      const char *dev_config,
-                                                                      const char *eth_private_key,
-                                                                      bool        autodht,
-                                                                      bool        process,
-                                                                      uint16_t    baseport,
-                                                                      bool        is_full_node );
-
-/**
- * @brief Inits the SDK with minimal configuration (convenience wrapper).
- * @details Equivalent to calling GeniusSDKInitWithKey() with autodht=true, process=true, is_full_node=false.
- * @param[in] base_path       Base path for node data storage.
- * @param[in] eth_private_key Valid HEX ethereum key, supports '0x' prefix.
- * @param[in] baseport        Base network port for the node.
- * @returns Initialization path in case of success, null on failure.
- */
-GNUS_VISIBILITY_DEFAULT const char *GeniusSDKInitMinimal( const char *base_path,
-                                                          const char *eth_private_key,
-                                                          uint16_t    baseport );
+                                                               const char *dev_config,
+                                                               const char *mnemonic );
 
 /**
  * @brief Shuts down the SDK and releases all node resources.
