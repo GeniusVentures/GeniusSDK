@@ -38,7 +38,10 @@ Plans:
   1. Every init function returns a non-null path string on success and `nullptr` on failure — the existing return contract is preserved across all code paths
   2. No references to old factory methods (`NewFromPrivateKey`, `NewFromMnemonic`, or old multi-param `New(autodht, ...)`) exist anywhere in `GeniusSDK.cpp`
   3. `GeniusSDK.h` Doxygen `@param` tags accurately describe the new signatures with no references to removed parameters
-**Plans**: TBD
+**Plans**: 1 plan
+
+Plans:
+- [ ] 02-01-PLAN.md — Static verification sweep (VER-01 return contract, VER-02 dead references, VER-03 Doxygen accuracy) + formal verification report
 **UI hint**: no
 
 ## Progress
