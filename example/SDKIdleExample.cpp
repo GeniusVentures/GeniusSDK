@@ -7,16 +7,23 @@
 
 #include "GeniusSDK.h"
 
+#include <fstream>
+#include <sstream>
+
 int main( int argc, char *argv[] )
 {
     const char *no_path = "./";
 
-    GeniusSDKInitWithKey( no_path,
-                          "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
-                          true,
-                          true,
-                          40001,
-                          false );
+    // Load dev_config.json from the current directory
+    std::ifstream cfg_file( std::string( no_path ) + "dev_config.json" );
+    if ( !cfg_file.is_open() ) return 1;
+    std::stringstream buf;
+    buf << cfg_file.rdbuf();
+    std::string dev_config = buf.str();
+    if ( dev_config.empty() ) return 1;
+
+    GeniusSDKInitWithKey( no_path, dev_config.c_str(),
+                          "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef" );
 
     while ( true )
     {
