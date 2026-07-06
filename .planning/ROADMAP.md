@@ -7,7 +7,7 @@ Add `base_path` back to all C ABI init functions alongside `dev_config` JSON, st
 ## Phases
 
 - [ ] **Phase 1: Init Interface Modernization** — Header signatures, implementation repointing, caller migration, and config file shipping
-- [ ] **Phase 2: Verification & Documentation** — Return contract validation, dead-reference cleanup, and Doxygen updates
+- [x] **Phase 2: Verification & Documentation** — Return contract validation, dead-reference cleanup, and Doxygen updates (completed 2026-07-06)
 
 ## Phase Details
 
@@ -41,7 +41,7 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
-- [ ] 02-01-PLAN.md — Static verification sweep (VER-01 return contract, VER-02 dead references, VER-03 Doxygen accuracy) + formal verification report
+- [x] 02-01-PLAN.md — Static verification sweep (VER-01 return contract, VER-02 dead references, VER-03 Doxygen accuracy) + formal verification report
 **UI hint**: no
 
 ## Progress
@@ -52,4 +52,4 @@ Phases execute in numeric order: 1 → 2
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Init Interface Modernization | 0/2 | Not started | - |
-| 2. Verification & Documentation | 0/0 | Not started | - |
+| 2. Verification & Documentation | 1/1 | Complete   | 2026-07-06 |

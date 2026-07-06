@@ -33,9 +33,9 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Verification
 
-- [ ] **VER-01**: All init functions return init path string on success, null on failure (existing contract preserved).
-- [ ] **VER-02**: No remaining references to old factory methods (`NewFromPrivateKey`, `NewFromMnemonic`, old-style `New(autodht, ...)`) in `GeniusSDK.cpp`.
-- [ ] **VER-03**: `GeniusSDK.h` Doxygen `@param` tags updated to match new signatures.
+- [x] **VER-01**: All init functions return init path string on success, null on failure (existing contract preserved).
+- [x] **VER-02**: No remaining references to old factory methods (`NewFromPrivateKey`, `NewFromMnemonic`, old-style `New(autodht, ...)`) in `GeniusSDK.cpp`.
+- [x] **VER-03**: `GeniusSDK.h` Doxygen `@param` tags updated to match new signatures.
 
 ## v2 Requirements
 
@@ -76,9 +76,9 @@ Deferred to future release.
 | CALL-02 | Phase 1 | Pending |
 | CALL-03 | Phase 1 | Pending |
 | CALL-04 | Phase 1 | Pending |
-| VER-01 | Phase 2 | Pending |
-| VER-02 | Phase 2 | Pending |
-| VER-03 | Phase 2 | Pending |
+| VER-01 | Phase 2 | Complete |
+| VER-02 | Phase 2 | Complete |
+| VER-03 | Phase 2 | Complete |
 
 **Coverage:**
 - v1 requirements: 17 total
