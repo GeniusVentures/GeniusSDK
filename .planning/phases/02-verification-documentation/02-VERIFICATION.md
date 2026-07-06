@@ -74,3 +74,148 @@ accurate Doxygen documentation. Phase 2 verification is complete.
 **Result: PASS** — No use-after-free risk, no cross-call state corruption, no dangling pointer returns.
 
 ### VER-01 Overall: PASS ✓
+
+---
+
+## VER-02: Dead Reference Audit
+
+**Requirement**: No remaining references to old factory methods (`NewFromPrivateKey`, `NewFromMnemonic`, old-style `New(autodht, ...)`) in `GeniusSDK.cpp`.
+
+### Scan 1: Old Factory Method — NewFromPrivateKey
+
+```
+$ grep -c 'NewFromPrivateKey' src/GeniusSDK.cpp
+0
+```
+
+**Expected**: 0   |   **Actual**: 0   |   **Result: PASS** ✓
+
+No references to the removed `NewFromPrivateKey` factory method anywhere in `GeniusSDK.cpp`.
+
+### Scan 2: Old Factory Method — NewFromMnemonic
+
+```
+$ grep -c 'NewFromMnemonic' src/GeniusSDK.cpp
+0
+```
+
+**Expected**: 0   |   **Actual**: 0   |   **Result: PASS** ✓
+
+No references to the removed `NewFromMnemonic` factory method anywhere in `GeniusSDK.cpp`.
+
+### Scan 3: Unified Factory — GeniusNode::New
+
+```
+$ grep -n 'GeniusNode::New(' src/GeniusSDK.cpp
+179:    GeniusNodeInstance = sgns::GeniusNode::New( cfg.value(), sgns::AccountSource{ sgns::NewAccount{} } );
+207:    GeniusNodeInstance = sgns::GeniusNode::New( cfg.value(), sgns::AccountSource{ sgns::FromPrivateKey{ key_copy } } );
+235:    GeniusNodeInstance = sgns::GeniusNode::New( cfg.value(), sgns::AccountSource{ sgns::FromMnemonic{ mnemonic_copy } } );
+```
+
+**Expected**: exactly 3   |   **Actual**: 3   |   **Result: PASS** ✓
+
+All 3 call sites use the unified `New(DevConfig_st, AccountSource{variant})` 2-arg signature:
+
+| Line | AccountSource Variant | Params |
+|------|-----------------------|--------|
+| 179 | `NewAccount{}` | 2 args: `(cfg.value(), AccountSource{...})` |
+| 207 | `FromPrivateKey{key_copy}` | 2 args: `(cfg.value(), AccountSource{...})` |
+| 235 | `FromMnemonic{mnemonic_copy}` | 2 args: `(cfg.value(), AccountSource{...})` |
+
+No `autodht`, `process`, `baseport`, or `is_full_node` visible in any call. All calls use the new 2-arg signature exclusively. ✓
+
+### Scan 4: Removed Functions — GeniusSDKInitWithKeyAndDevConfig / GeniusSDKInitMinimal
+
+```
+$ grep -c 'GeniusSDKInitWithKeyAndDevConfig\|GeniusSDKInitMinimal' src/GeniusSDK.cpp src/GeniusSDK.h
+src/GeniusSDK.cpp:0
+src/GeniusSDK.h:0
+```
+
+**Expected**: 0 on both files   |   **Actual**: 0   |   **Result: PASS** ✓
+
+Both removed functions (`GeniusSDKInitWithKeyAndDevConfig` and `GeniusSDKInitMinimal`) have zero references in header and implementation. Removal confirmed complete.
+
+### Scan 5: Stale Legacy Parameter Names
+
+```
+$ grep -c 'autodht\|baseport\|is_full_node' src/GeniusSDK.h
+0
+$ grep -c 'autodht\|baseport\|is_full_node' src/GeniusSDK.cpp
+0
+```
+
+**Expected**: 0   |   **Actual**: 0   |   **Result: PASS** ✓
+
+No references to the removed parameters `autodht`, `baseport`, or `is_full_node` in either file. (The parameter name `process` appears only in the unrelated `GeniusSDKProcess` / `GetProcessingStatus` functions and their Doxygen tags — none in init function context.)
+
+### VER-02 Overall: PASS ✓
+
+---
+
+## VER-03: Doxygen @param Accuracy
+
+**Requirement**: `GeniusSDK.h` Doxygen `@param` tags accurately describe the new signatures with no references to removed parameters.
+
+### Function 1: GeniusSDKInit (header lines 193–200)
+
+**Signature**: `GeniusSDKInit(const char *base_path, const char *dev_config)`
+
+| @param Tag | Present | Matches Signature? | Stale? |
+|------------|---------|---------------------|--------|
+| `@param[in] base_path` | ✓ | ✓ (param 1) | No |
+| `@param[in] dev_config` | ✓ | ✓ (param 2) | No |
+
+- Total @param tags: 2 — matches 2 function parameters ✓
+- `@returns` says "Initialization path in case of success, null on failure" — matches `const char *` return type ✓
+- No stray references to `autodht`, `baseport`, `is_full_node`, or `process` in the block ✓
+- No references to `WithKeyAndDevConfig`, `Minimal`, or any removed function ✓
+
+**Result: PASS** ✓
+
+### Function 2: GeniusSDKInitWithKey (header lines 202–211)
+
+**Signature**: `GeniusSDKInitWithKey(const char *base_path, const char *dev_config, const char *eth_private_key)`
+
+| @param Tag | Present | Matches Signature? | Stale? |
+|------------|---------|---------------------|--------|
+| `@param[in] base_path` | ✓ | ✓ (param 1) | No |
+| `@param[in] dev_config` | ✓ | ✓ (param 2) | No |
+| `@param[in] eth_private_key` | ✓ | ✓ (param 3) | No |
+
+- Total @param tags: 3 — matches 3 function parameters ✓
+- `@returns` says "Initialization path in case of success, null on failure" ✓
+- No stray references ✓
+
+**Result: PASS** ✓
+
+### Function 3: GeniusSDKInitWithMnemonic (header lines 213–222)
+
+**Signature**: `GeniusSDKInitWithMnemonic(const char *base_path, const char *dev_config, const char *mnemonic)`
+
+| @param Tag | Present | Matches Signature? | Stale? |
+|------------|---------|---------------------|--------|
+| `@param[in] base_path` | ✓ | ✓ (param 1) | No |
+| `@param[in] dev_config` | ✓ | ✓ (param 2) | No |
+| `@param[in] mnemonic` | ✓ | ✓ (param 3) | No |
+
+- Total @param tags: 3 — matches 3 function parameters ✓
+- `@returns` says "Initialization path in case of success, null on failure" ✓
+- No stray references ✓
+
+**Result: PASS** ✓
+
+### VER-03 Overall: PASS ✓
+
+---
+
+## Summary Table
+
+| Requirement | Checks | Passed | Failed | Overall |
+|-------------|--------|--------|--------|---------|
+| VER-01 | 4 | 4 | 0 | **PASS** |
+| VER-02 | 5 | 5 | 0 | **PASS** |
+| VER-03 | 3 | 3 | 0 | **PASS** |
+| **Total** | **12** | **12** | **0** | **PASS** |
+
+**Phase 2 — VERIFIED ✓** (12/12 checks passed)
