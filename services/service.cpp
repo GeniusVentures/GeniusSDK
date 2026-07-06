@@ -1,6 +1,7 @@
 #include "GeniusSDK.h"
 
 #include <cstdlib>
+#include <cstring>
 #include <fstream>
 #include <iostream>
 #include <sstream>
@@ -32,7 +33,13 @@ int main( int argc, char *argv[] )
         return 1;
     }
 
-    GeniusSDKInit( base_path, dev_config.c_str() );
+    const char *init_result = GeniusSDKInit( base_path, dev_config.c_str() );
+    if ( !init_result || strncmp( init_result, "Initialized", strlen( "Initialized" ) ) != 0 )
+    {
+        std::cerr << "Error: GeniusSDK initialization failed: "
+                  << ( init_result ? init_result : "No response" ) << "\n";
+        return 1;
+    }
 
     while ( true )
     {
