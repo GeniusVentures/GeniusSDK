@@ -44,11 +44,7 @@ static void shutdownSDK();
 #if ( SUPPRESS_OUTPUT == 1 )
 static void suppressSDKLogs();
 #endif
-static void     getSDKConfig( char     *base_path,
-                              char     *eth_private_key,
-                              int32_t  *autodht,
-                              int32_t  *process,
-                              uint16_t *baseport );
+static void     getSDKConfig( char *base_path, char *eth_private_key );
 static bool     loadJsonFromFile( const char *filename, JsonData_t jsonBuffer );
 static bool     parseGeniusTokenID( const char *hex, GeniusTokenID *out );
 static void     promptString( const char *prompt, char *destination, size_t maxLen, const char *defaultValue );
@@ -200,14 +196,21 @@ static void initSDK()
 {
     char     base_path[MAX_INPUT_SIZE]       = "./";
     char     eth_private_key[MAX_INPUT_SIZE] = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
-    int32_t  autodht                         = 1;
-    int32_t  process                         = 1;
-    uint16_t baseport                        = 40001;
+    JsonData_t dev_config = {0};
 
     userPrint( "\n--- SDK Initialization ---\n" );
-    getSDKConfig( base_path, eth_private_key, &autodht, &process, &baseport );
+    getSDKConfig( base_path, eth_private_key );
 
-    const char *init_result = GeniusSDKInitWithKey( base_path, eth_private_key, autodht, process, baseport, false );
+    // Load dev_config.json from base_path
+    char config_path[512];
+    snprintf( config_path, sizeof( config_path ), "%s/dev_config.json", base_path );
+    if ( !loadJsonFromFile( config_path, dev_config ) )
+    {
+        userPrint( "Failed to load dev_config.json from %s\n", config_path );
+        return;
+    }
+
+    const char *init_result = GeniusSDKInitWithKey( base_path, dev_config, eth_private_key );
     if ( !init_result || strncmp( init_result, "Initialized", strlen( "Initialized" ) ) != 0 )
     {
         userPrint( "Failed to initialize GeniusSDK. Error: %s\n", init_result ? init_result : "No response" );
@@ -460,15 +463,8 @@ static void suppressSDKLogs()
  * @brief Retrieves configuration values for initializing the GeniusSDK.
  * @param[out] base_path Buffer to store the base path.
  * @param[out] eth_private_key Buffer to store the Ethereum private key.
- * @param[out] autodht Pointer to store the AutoDHT flag.
- * @param[out] process Pointer to store the processing flag.
- * @param[out] baseport Pointer to store the base port number.
  */
-static void getSDKConfig( char     *base_path,
-                          char     *eth_private_key,
-                          int32_t  *autodht,
-                          int32_t  *process,
-                          uint16_t *baseport )
+static void getSDKConfig( char *base_path, char *eth_private_key )
 {
     userPrint( "\nConfigure GeniusSDK Initialization:\n" );
 
@@ -477,9 +473,6 @@ static void getSDKConfig( char     *base_path,
                   eth_private_key,
                   MAX_INPUT_SIZE,
                   "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef" );
-    *autodht  = promptInt( "Enable AutoDHT? (1 = Yes, 0 = No, Press Enter for default: 1): ", 1 );
-    *process  = promptInt( "Enable processing? (1 = Yes, 0 = No, Press Enter for default: 1): ", 1 );
-    *baseport = promptUShort( "Enter base port (Press Enter for default: 40001): ", 40001 );
 }
 
 /**
