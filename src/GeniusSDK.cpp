@@ -476,9 +476,10 @@ GeniusAddress GeniusSDKGetAddress()
 {
     GeniusAddress ret = {};
 
-    if ( GeniusNodeInstance )
+    auto node = GeniusNodeInstance;
+    if ( node )
     {
-        auto address   = GeniusNodeInstance->GetAddress();
+        auto address   = node->GetAddress();
         ret.address[0] = '0';
         ret.address[1] = 'x';
         std::copy( address.cbegin(), address.cend(), &ret.address[2] );
