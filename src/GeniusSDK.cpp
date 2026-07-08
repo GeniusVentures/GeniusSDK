@@ -128,25 +128,6 @@ namespace
         return outcome::success( config_from_file );
     }
 
-    outcome::result<DevConfig_st, JsonError> ReadDevConfigFromJSONStr( const std::string &base_path,
-                                                                       const std::string &jsonStr )
-    {
-        return ParseDevConfig( jsonStr, base_path );
-    }
-
-    outcome::result<DevConfig_st, JsonError> ReadDevConfigFromJSON( const std::string &base_path )
-    {
-        std::ifstream file( base_path + "dev_config.json" );
-        if ( !file.is_open() )
-        {
-            return outcome::failure( JsonError( "Configuration file \"dev_config.json\" not found on " + base_path ) );
-        }
-        std::stringstream buffer;
-        buffer << file.rdbuf();
-        std::string jsonStr = buffer.str();
-        return ParseDevConfig( jsonStr, base_path );
-    }
-
     GeniusMatrix matrix_from_vector_of_vector( const std::vector<std::vector<uint8_t>> &vec )
     {
         uint64_t size = vec.size();
@@ -180,120 +161,84 @@ namespace
     }
 
     std::shared_ptr<sgns::GeniusNode> GeniusNodeInstance;
+}
 
-    template <typename Creator>
-    const char *SDKInitHelper( const char *base_path, Creator create_node )
+const char *GeniusSDKInit( const char *base_path, const char *dev_config )
+{
+    if ( !base_path || !dev_config || dev_config[0] == '\0' )
     {
-        static std::string ret_val = "Initialized on ";
-
-        if ( base_path == nullptr )
-        {
-            SPDLOG_ERROR( "base_path should not be empty!\n" );
-            return nullptr;
-        }
-
-        auto load_config_ret = ReadDevConfigFromJSON( base_path );
-
-        if ( !load_config_ret )
-        {
-            ret_val.assign( load_config_ret.error().what() );
-            SPDLOG_ERROR( load_config_ret.error().what() );
-            return nullptr;
-        }
-
-        GeniusNodeInstance = create_node( load_config_ret.value() );
-
-        if ( GeniusNodeInstance == nullptr )
-        {
-            return nullptr;
-        }
-
-        ret_val.append( load_config_ret.value().BaseWritePath );
-        return ret_val.c_str();
+        SPDLOG_ERROR( "base_path and dev_config must not be empty!" );
+        return nullptr;
     }
-}
-
-const char *GeniusSDKInit( const char *base_path, bool autodht, bool process, uint16_t baseport, bool is_full_node )
-{
-    return SDKInitHelper( base_path,
-                          [&]( const auto &config )
-                          { return sgns::GeniusNode::New( config, autodht, baseport, is_full_node ); } );
-}
-
-const char *GeniusSDKInitWithKey( const char *base_path,
-                                  const char *eth_private_key,
-                                  bool        autodht,
-                                  bool        process,
-                                  uint16_t    baseport,
-                                  bool        is_full_node )
-{
-    return SDKInitHelper( base_path,
-                          [&]( const auto &config )
-                          {
-                              return sgns::GeniusNode::NewFromPrivateKey( config,
-                                                                          eth_private_key,
-                                                                          autodht,
-                                                                          baseport,
-                                                                          is_full_node );
-                          } );
-}
-
-const char *GeniusSDKInitWithKeyAndDevConfig( const char *base_path,
-                                              const char *dev_config,
-                                              const char *eth_private_key,
-                                              bool        autodht,
-                                              uint16_t    baseport,
-                                              bool        is_full_node )
-{
+    auto cfg = ParseDevConfig( std::string( dev_config ), std::string( base_path ) );
+    if ( !cfg )
+    {
+        SPDLOG_ERROR( "{}", cfg.error().what() );
+        return nullptr;
+    }
+    GeniusNodeInstance = sgns::GeniusNode::New( cfg.value(), sgns::AccountSource{ sgns::NewAccount{} } );
+    if ( !GeniusNodeInstance )
+        return nullptr;
     static std::string ret_val = "Initialized on ";
-
-    if ( base_path == nullptr )
-    {
-        SPDLOG_ERROR( "base_path should not be empty!\n" );
-        return nullptr;
-    }
-
-    if ( dev_config == nullptr )
-    {
-        SPDLOG_ERROR( "dev_config should not be empty!\n" );
-        return nullptr;
-    }
-
-    auto load_config_ret = ReadDevConfigFromJSONStr( base_path, dev_config );
-
-    if ( !load_config_ret )
-    {
-        ret_val.assign( load_config_ret.error().what() );
-        SPDLOG_ERROR( load_config_ret.error().what() );
-        return nullptr;
-    }
-
-    GeniusNodeInstance = sgns::GeniusNode::NewFromPrivateKey( load_config_ret.value(),
-                                                              eth_private_key,
-                                                              autodht,
-                                                              baseport,
-                                                              is_full_node );
-    ret_val.append( load_config_ret.value().BaseWritePath );
-
+    ret_val.assign( "Initialized on " );
+    ret_val.append( base_path );
     return ret_val.c_str();
 }
 
-const char *GeniusSDKInitWithMnemonic( const char *base_path,
-                                       const char *mnemonic,
-                                       bool        autodht,
-                                       bool        process,
-                                       uint16_t    baseport,
-                                       bool        is_full_node )
+const char *GeniusSDKInitWithKey( const char *base_path, const char *dev_config, const char *eth_private_key )
 {
-    return SDKInitHelper(
-        base_path,
-        [&]( const auto &config )
-        { return sgns::GeniusNode::NewFromMnemonic( config, mnemonic, autodht, baseport, is_full_node ); } );
+    if ( !base_path || !dev_config || dev_config[0] == '\0' )
+    {
+        SPDLOG_ERROR( "base_path and dev_config must not be empty!" );
+        return nullptr;
+    }
+    if ( !eth_private_key || eth_private_key[0] == '\0' )
+    {
+        SPDLOG_ERROR( "eth_private_key must not be empty!" );
+        return nullptr;
+    }
+    auto cfg = ParseDevConfig( std::string( dev_config ), std::string( base_path ) );
+    if ( !cfg )
+    {
+        SPDLOG_ERROR( "{}", cfg.error().what() );
+        return nullptr;
+    }
+    std::string key_copy( eth_private_key );
+    GeniusNodeInstance = sgns::GeniusNode::New( cfg.value(), sgns::AccountSource{ sgns::FromPrivateKey{ key_copy } } );
+    if ( !GeniusNodeInstance )
+        return nullptr;
+    static std::string ret_val = "Initialized on ";
+    ret_val.assign( "Initialized on " );
+    ret_val.append( base_path );
+    return ret_val.c_str();
 }
 
-const char *GeniusSDKInitMinimal( const char *base_path, const char *eth_private_key, uint16_t baseport )
+const char *GeniusSDKInitWithMnemonic( const char *base_path, const char *dev_config, const char *mnemonic )
 {
-    return GeniusSDKInitWithKey( base_path, eth_private_key, true, true, baseport, false );
+    if ( !base_path || !dev_config || dev_config[0] == '\0' )
+    {
+        SPDLOG_ERROR( "base_path and dev_config must not be empty!" );
+        return nullptr;
+    }
+    if ( !mnemonic || mnemonic[0] == '\0' )
+    {
+        SPDLOG_ERROR( "mnemonic must not be empty!" );
+        return nullptr;
+    }
+    auto cfg = ParseDevConfig( std::string( dev_config ), std::string( base_path ) );
+    if ( !cfg )
+    {
+        SPDLOG_ERROR( "{}", cfg.error().what() );
+        return nullptr;
+    }
+    std::string mnemonic_copy( mnemonic );
+    GeniusNodeInstance = sgns::GeniusNode::New( cfg.value(), sgns::AccountSource{ sgns::FromMnemonic{ mnemonic_copy } } );
+    if ( !GeniusNodeInstance )
+        return nullptr;
+    static std::string ret_val = "Initialized on ";
+    ret_val.assign( "Initialized on " );
+    ret_val.append( base_path );
+    return ret_val.c_str();
 }
 
 GeniusNodeReturnValue_t GeniusSDKProcess( const JsonData_t jsondata )

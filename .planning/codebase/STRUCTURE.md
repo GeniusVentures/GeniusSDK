@@ -1,205 +1,239 @@
+---
+last_mapped_commit: 35507476cbaa482c1c9a6e3582f8475a9f39304c
+refreshed: 2026-07-03
+---
+
 # Codebase Structure
 
-**Analysis Date:** 2026-06-08
+**Analysis Date:** 2026-07-03
 
 ## Directory Layout
 
 ```
-GeniusSDK/                           # Project root
-├── .clang-format                    # Code formatting rules (Microsoft-based, 4-space, Allman)
-├── .clang-tidy                      # Static analysis checks (bugprone, modernize, performance, etc.)
-├── .clangd                          # Language server config
-├── .gitignore                       # Build artifacts, secrets, IDE files
-├── .gitmodules                      # Submodule: build -> ../cmaketemplate
-├── Readme.md                        # Build instructions per platform
-├── AgentDocs/                       # Agent instruction files
-│   └── CLAUDE.md
-├── cmake/                           # Project-level CMake (5 files)
-│   ├── CommonBuildParameters.cmake  # Central dependency config (593 lines, 40+ find_package calls)
-│   ├── CompilationFlags.cmake       # Compiler warning flags (46 lines)
-│   ├── functions.cmake              # Project helper functions: addtest, add_flag, geniussdk_install
-│   ├── config.cmake.in              # Package config template
-│   ├── GeniusSDK_Info_Mac.plist     # macOS bundle Info.plist
-│   └── GeniusSDK_Info_ios.plist     # iOS framework Info.plist
-├── build/                           # Build infrastructure (git submodule from cmaketemplate)
-│   ├── README.md                    # Build template documentation
-│   ├── apple.toolchain.cmake        # Apple platform toolchain (ios-cmake fork, 1182 lines)
-│   ├── CommonBuildParameters.cmake  # Thin include bridge -> ../../cmake/CommonBuildParameters.cmake
-│   ├── CommonCompilerOptions.cmake  # C++17 standard, thirdparty/zkLLVM discovery + auto-download (240 lines)
-│   ├── CompilationFlags.cmake       # Per-platform compiler flags (symlink/copy template)
-│   ├── cmake/                       # Build helper modules
-│   │   ├── functions.cmake          # get_third_party_dir, addtest_mock, compile_proto_to_cpp, whole-archive linking
-│   │   ├── definition.cmake         # ADD_COMPILE_FLAG, ADD_CXX_FLAG, ADD_LINK_FLAG, NDEBUG scrubbing
-│   │   ├── install.cmake            # project_install, project_install_setup
-│   │   ├── print.cmake              # print(), fatal_error() macros
-│   │   ├── compile_option_by_platform/
-│   │   │   └── Windows.cmake        # MSVC-specific flags (/wd4146, /WX-, /O2, stack size)
-│   │   └── toolchain/
-│   │       └── cxx17.cmake          # C++17 standard enforcement (3 lines)
-│   ├── OSX/                         # macOS build directory
-│   │   ├── CMakeLists.txt           # Platform config: MAC_UNIVERSAL, deployment target 13.0
-│   │   ├── Debug/                   # Debug build artifacts (populated after cmake)
-│   │   └── Release/                 # Release build artifacts (populated after cmake)
-│   ├── Linux/                       # Linux build directory
-│   │   └── CMakeLists.txt           # Architecture detection (x86_64/aarch64), ABI subfolder
-│   ├── Windows/                     # Windows build directory
-│   │   └── CMakeLists.txt           # MSVC runtime config, Win32 libraries (wsock32, crypt32, userenv)
-│   ├── iOS/                         # iOS build directory
-│   │   ├── CMakeLists.txt           # Platform OS64, deployment target 15.0, static libs
-│   │   ├── Debug/                   # Debug build artifacts
-│   │   └── RelWithDebInfo/          # RelWithDebInfo build artifacts
-│   └── Android/                     # Android build directory
-│       └── CMakeLists.txt           # NDK toolchain, API level 28, ABI defaults, Boost clang compiler
-├── src/                             # Source code (2 files)
-│   ├── CMakeLists.txt               # Build targets: GeniusSDK (static), GeniusSDK_shared (shared), framework/bundle
-│   ├── GeniusSDK.h                  # Public C API header (345 lines)
-│   └── GeniusSDK.cpp                # Implementation (21961 lines)
-├── example/                         # Example executables (6 files)
-│   ├── CMakeLists.txt               # Three executable targets with whole-archive linking
-│   ├── SDKExample.cpp               # Full SDK example
-│   ├── SDKIdleExample.cpp           # Idle/minimal example
-│   ├── SDKExampleCredentials.cpp    # Credentials-based init example
-│   └── dev_config.json              # Dev configuration for examples
-└── test/                            # Test sources (1 file)
-    └── CMakeLists.txt               # Three test targets (test source files not checked in)
+GeniusSDK/
+├── src/                          # SDK source (public API + implementation)
+│   ├── GeniusSDK.h               # Public C ABI header (~50 functions, all types)
+│   ├── GeniusSDK.cpp             # Implementation (935 lines — facade to sgns::GeniusNode)
+│   └── CMakeLists.txt            # Build: static lib, shared lib, macOS bundle, iOS framework
+│
+├── example/                      # Example consumer applications
+│   ├── SDKExample.cpp            # Interactive menu-driven demo (710 lines)
+│   ├── SDKIdleExample.cpp        # Minimal init + idle loop (25 lines)
+│   ├── SDKExampleCredentials.cpp # (stub — not compiled)
+│   ├── dev_config.json           # Example dev config (Address, Cut, TokenValue, TokenID)
+│   └── CMakeLists.txt            # Build examples linked whole-archive against GeniusSDK static lib
+│
+├── test/                         # Unit tests (sources not committed — CMakeLists only)
+│   └── CMakeLists.txt            # Registers 3 tests: TransactionDataTest, TransactionBlocksTest, GeniusSDKTest
+│
+├── services/                     # Headless daemon and systemd unit files
+│   ├── service.cpp               # CLI server: parses args, GeniusSDKInit, loops forever
+│   ├── CMakeLists.txt            # Builds GeniusSDKService executable + installs .service files
+│   ├── genius-archive-node.service # systemd unit for archive node
+│   ├── genius-full-node.service  # systemd unit for full node (with processing)
+│   └── genius-job-poster.service # DEPRECATED systemd unit (legacy job poster)
+│
+├── cmake/                        # Project CMake modules
+│   ├── CommonBuildParameters.cmake  # All dependency find_package() calls and thirdparty paths (501 lines)
+│   ├── CompilationFlags.cmake       # C++ compiler warnings/errors configuration
+│   ├── functions.cmake              # addtest(), geniussdk_install(), disable_clang_tidy(), add_flag()
+│   ├── config.cmake.in              # Template for generated GeniusSDKConfig.cmake
+│   ├── GeniusSDK_Info_ios.plist     # iOS framework Info.plist
+│   └── GeniusSDK_Info_Mac.plist     # macOS bundle Info.plist
+│
+├── build/                        # Git submodule → GeniusVentures/cmaketemplate
+│   ├── CMakeLists.txt            # (top-level build entry point — NOT present)
+│   ├── README.md                 # Build instructions for all platforms
+│   ├── Android/CMakeLists.txt    # Android NDK cross-compile entry
+│   ├── iOS/CMakeLists.txt        # iOS cross-compile entry
+│   ├── Linux/CMakeLists.txt      # Linux native build entry (x86_64, aarch64)
+│   ├── OSX/CMakeLists.txt        # macOS native build entry (universal binary)
+│   ├── Windows/CMakeLists.txt    # Windows MSVC build entry
+│   ├── CommonCompilerOptions.cmake  # C++17 standard, dependency auto-download, compiler config
+│   ├── CommonBuildParameters.cmake.example  # Example/override for CommonBuildParameters.cmake
+│   ├── CompilationFlags.cmake       # Delegates to cmake/CompilationFlags.cmake
+│   ├── apple.toolchain.cmake        # Apple platform toolchain (macOS + iOS, from ios-cmake)
+│   ├── .gitignore                   # Git ignore for build directory
+│   └── cmake/                       # Build infrastructure
+│       ├── functions.cmake          # TARGET_LINK_LIBRARIES_WHOLE_ARCHIVE, add_proto_library, compile_proto_to_cpp, get_third_party_dir
+│       ├── definition.cmake         # CMake definitions
+│       ├── install.cmake            # Install helpers
+│       ├── print.cmake              # Message helpers
+│       ├── compile_option_by_platform/  # Per-OS compiler flags
+│       └── toolchain/               # Toolchain files
+│
+├── .github/workflows/            # CI/CD
+│   ├── cmake.yml                 # Main CI: push/PR on develop/main triggers matrix build (593 lines)
+│   └── build-release-tag.yml     # Tag-based release build with override deps (518 lines)
+│
+├── .clang-format                 # Microsoft-based, 120 cols, Allman braces, C++17
+├── .clang-tidy                   # bugprone, cert, modernize, performance, readability checks
+├── .clangd                       # Language server config
+├── .gitignore                    # Compiled objects, IDEs, CMake artifacts, build outputs, .env
+├── .gitmodules                   # Submodule: build → ../cmaketemplate
+├── Readme.md                     # Build instructions, folder structure diagram, cmake --install
+├── AGENTS.md                     # Agent instructions (ponytail/lazy mode)
+└── AgentDocs/CLAUDE.md           # Comprehensive C++ coding standards, testing practices (298 lines)
 ```
 
 ## Directory Purposes
 
-**`cmake/`:**
-- Purpose: Project-level CMake configuration that is unique to GeniusSDK (not shared via the cmaketemplate submodule)
-- Contains: Dependency configuration, compiler flags, helper functions, packaging templates, Apple plists
-- Key files: `CommonBuildParameters.cmake` (all third-party dependency config), `functions.cmake` (addtest, geniussdk_install), `CompilationFlags.cmake` (compiler warnings)
+**src/:**
+- Purpose: The SDK itself — public header and single implementation file
+- Contains: `GeniusSDK.h` (C ABI declarations), `GeniusSDK.cpp` (facade implementation), `CMakeLists.txt` (4 build targets)
+- Key files: `GeniusSDK.h` (API contract), `GeniusSDK.cpp` (all business logic)
+- Note: The source is intentionally flat — no subdirectories, no modular files. All functionality channels through `sgns::GeniusNode`.
 
-**`build/`:**
-- Purpose: Cross-platform build infrastructure, shared across GeniusNetwork projects via the `GeniusVentures/cmaketemplate` git submodule
-- Contains: Platform CMakeLists, common compiler options, toolchains, helper functions, thirdparty auto-download logic
-- Key files: `CommonCompilerOptions.cmake` (C++17, thirdparty/zkLLVM discovery and download), `apple.toolchain.cmake` (Apple cross-compile), platform `CMakeLists.txt` files
+**example/:**
+- Purpose: Demonstrate SDK usage for game developers integrating the library
+- Contains: Two C++ consumer apps (`SDKExample` interactive, `SDKIdleExample` minimal), example dev_config
+- Key files: `SDKExample.cpp` (full integration demo), `dev_config.json` (required config template)
+- Build: Linked whole-archive against GeniusSDK static lib
 
-**`src/`:**
-- Purpose: Library source code — the entire SDK implementation
-- Contains: Single public header and single implementation file
-- Key files: `GeniusSDK.h` (C API), `GeniusSDK.cpp` (implementation), `CMakeLists.txt` (4 library targets)
+**test/:**
+- Purpose: Unit test definitions (test source files reside in SuperGenius repo, not committed here)
+- Contains: `CMakeLists.txt` only (registers 3 test targets: `TransactionDataTest`, `TransactionBlocksTest`, `GeniusSDKTest`)
+- Note: Test source files (`.cpp`) were not found in this repo — they likely live in the SuperGenius sibling project or are generated/templated elsewhere
 
-**`example/`:**
-- Purpose: Standalone executables demonstrating SDK usage patterns
-- Contains: Three example programs with whole-archive linking to ensure all SDK symbols are pulled in
-- Key files: `SDKExample.cpp`, `SDKIdleExample.cpp`, `SDKExampleCredentials.cpp`, `CMakeLists.txt`
+**services/:**
+- Purpose: Headless daemon for running GeniusSDK as a long-running node process on Linux servers
+- Contains: One C++ CLI program (`service.cpp`), three systemd unit files
+- Key files: `service.cpp` (minimal: init + infinite loop), `genius-full-node.service` (systemd unit with processing enabled)
 
-**`test/`:**
-- Purpose: Unit tests
-- Contains: CMakeLists.txt referencing test source files (test `.cpp` files appear to not be committed in the current checkout)
-- Key files: `CMakeLists.txt`
+**cmake/:**
+- Purpose: Project-level CMake configuration shared across all platform builds
+- Contains: Dependency declarations (`CommonBuildParameters.cmake`), compiler flags, install helpers, framework plists
+- Key files: `CommonBuildParameters.cmake` (501 lines — the entire dependency graph), `CompilationFlags.cmake` (warning/error flags)
 
-**`AgentDocs/`:**
-- Purpose: Agent instruction files for AI-assisted development
-- Contains: `CLAUDE.md` with project-specific instructions
+**build/:**
+- Purpose: Platform-specific CMake entry points and toolchains (git submodule from `GeniusVentures/cmaketemplate`)
+- Contains: Per-platform `CMakeLists.txt`, common compiler options, toolchain files, build helper functions
+- Generated: No — source-controlled git submodule
+- Committed: Yes — referenced by `.gitmodules`
+
+**.github/workflows/:**
+- Purpose: Automated CI/CD pipeline
+- Contains: Matrix builds across 5 platforms × (Debug+Release), self-hosted runners, artifact publishing to GitHub releases
+- Key files: `cmake.yml` (push/PR CI), `build-release-tag.yml` (manual tag-driven release)
 
 ## Key File Locations
 
-**Entry Points (Build):**
-- `build/OSX/CMakeLists.txt`: macOS build entry
-- `build/Linux/CMakeLists.txt`: Linux build entry
-- `build/Windows/CMakeLists.txt`: Windows build entry
-- `build/iOS/CMakeLists.txt`: iOS build entry
-- `build/Android/CMakeLists.txt`: Android build entry
-
-**Entry Points (Code):**
-- `src/GeniusSDK.h`: All public API functions (C linkage)
+**Entry Points:**
+- `src/GeniusSDK.h`: Public API entry point — all 50+ `extern "C"` functions declared here
+- `services/service.cpp`: Headless daemon entry point — `main()` that calls `GeniusSDKInit()` and loops
+- `example/SDKExample.cpp`: Demo app entry point — menu-driven interactive main
+- `example/SDKIdleExample.cpp`: Minimal demo entry point — init hardcoded key and idle
 
 **Configuration:**
-- `cmake/CommonBuildParameters.cmake`: All 40+ third-party dependency find_package calls
-- `build/CommonCompilerOptions.cmake`: C++ standard, thirdparty/zkLLVM discovery, sanitizer support
-- `.clang-format`: Code formatting rules
-- `.clang-tidy`: Static analysis checks
-- `build/cmake/compile_option_by_platform/Windows.cmake`: Windows-specific compiler flags
+- `example/dev_config.json`: Required runtime config template (Address, Cut, TokenValue, TokenID)
+- `.clang-format`: Code formatting rules (Microsoft-based, 120 cols, Allman braces)
+- `.clang-tidy`: Static analysis rules (bugprone, cert, modernize, performance, readability, m_ prefix for members)
+- `.clangd`: Language server settings
+- `.gitignore`: Excludes build artifacts, IDE files, compiled objects, .env files
 
 **Core Logic:**
-- `src/GeniusSDK.cpp`: All SDK implementation (init, balance, mint, transfer, processing, transactions)
+- `src/GeniusSDK.cpp`: All 50+ function implementations, JSON config parsing, C↔C++ type conversions
+- `src/CMakeLists.txt`: Build targets: GeniusSDK (static), GeniusSDK_shared (shared), GeniusSDK_bundle (macOS MODULE), GeniusSDK_framework (iOS)
 
-**Examples:**
-- `example/SDKExample.cpp`: Full SDK usage demonstration
-- `example/SDKIdleExample.cpp`: Minimal SDK initialization
-- `example/SDKExampleCredentials.cpp`: Credentials-based initialization
+**Build Infrastructure:**
+- `build/OSX/CMakeLists.txt`: macOS CMake entry
+- `build/Linux/CMakeLists.txt`: Linux CMake entry
+- `build/Android/CMakeLists.txt`: Android NDK CMake entry
+- `build/iOS/CMakeLists.txt`: iOS CMake entry
+- `build/Windows/CMakeLists.txt`: Windows CMake entry
+- `build/CommonCompilerOptions.cmake`: C++17 standard, auto-download logic, thirdparty discovery
+- `cmake/CommonBuildParameters.cmake`: All ~40 dependency `find_package()` calls
 
 **Testing:**
-- `test/CMakeLists.txt`: Test target definitions
-- Test source files (`.cpp`): Referenced in `test/CMakeLists.txt` but not currently committed
+- `test/CMakeLists.txt`: Test registration (3 tests registered, source files not in this repo)
 
-**Build Helpers:**
-- `build/cmake/functions.cmake`: `get_third_party_dir()`, `addtest()`, `compile_proto_to_cpp()`, `add_proto_library()`, `TARGET_LINK_LIBRARIES_WHOLE_ARCHIVE()`
-- `cmake/functions.cmake`: `addtest()`, `addtest_part()`, `geniussdk_install()`, `disable_clang_tidy()`
-- `build/cmake/definition.cmake`: `ADD_COMPILE_FLAG()`, `ADD_CXX_FLAG()`, `ADD_LINK_FLAG()`, `ADD_DEBUG_COMPILE_FLAG()`, `ADD_NONDEBUG_COMPILE_FLAG()`
+**Agent Instructions:**
+- `AGENTS.md`: High-level agent behavior (ponytail/lazy mode)
+- `AgentDocs/CLAUDE.md`: Comprehensive C++ coding standards (298 lines — Effective C++, Modern Effective C++, API Design principles, testing patterns)
 
 ## Naming Conventions
 
 **Files:**
-- CMake modules: PascalCase or snake_case with `.cmake` extension (`CommonBuildParameters.cmake`, `functions.cmake`)
-- Source files: PascalCase matching class/target name (`GeniusSDK.cpp`, `GeniusSDK.h`)
-- Example files: PascalCase with SDK prefix (`SDKExample.cpp`, `SDKIdleExample.cpp`)
-- Test files: PascalCase with Test suffix (`GeniusSDKTest.cpp`)
-- Config files: lowercase with hyphens (`.clang-format`, `.clang-tidy`)
+- PascalCase for SDK and example source files: `GeniusSDK.cpp`, `SDKExample.cpp`, `SDKIdleExample.cpp`
+- snake_case for service files: `service.cpp`
+- kebab-case for systemd unit files: `genius-archive-node.service`, `genius-full-node.service`
+- PascalCase or snake_case for CMake modules: `CommonBuildParameters.cmake`, `CompilationFlags.cmake`, `functions.cmake`
 
 **Directories:**
-- Platform build directories: OS name proper case (`OSX`, `Linux`, `Windows`, `iOS`, `Android`)
-- Build type directories: PascalCase (`Debug`, `Release`, `RelWithDebInfo`)
-- Module directories: lowercase (`cmake`, `src`, `example`, `test`, `build`)
+- Platform directories in `build/` match OS names: `Android`, `iOS`, `OSX`, `Linux`, `Windows`
+- Lowercase for other directories: `src`, `example`, `test`, `services`, `cmake`
 
-**CMake Targets:**
-- Library targets: PascalCase (`GeniusSDK`, `GeniusSDK_shared`, `GeniusSDK_bundle`, `GeniusSDK_framework`)
-- Example targets: PascalCase with SDK prefix (`SDKExample`, `SDKIdleExample`, `SDKExampleCredentials`)
-- Test targets: PascalCase (`TransactionDataTest`, `TransactionBlocksTest`, `GeniusSDKTest`)
-- Third-party imported targets: namespace::name (`protobuf::libprotobuf`, `crypto3::algebra`, `sgns::genius_node`)
+**Functions (public C API):**
+- PascalCase prefixed with `GeniusSDK`: `GeniusSDKInit`, `GeniusSDKShutdown`, `GeniusSDKGetBalance`
+- Verb-noun pattern: `GeniusSDKGetAddress`, `GeniusSDKProcess`, `GeniusSDKMint`, `GeniusSDKTransfer`
 
-**CMake Variables:**
-- Cache variables: UPPER_SNAKE_CASE (`THIRDPARTY_BUILD_DIR`, `SUPERGENIUS_DIR`, `ZKLLVM_BUILD_DIR`, `BOOST_VERSION`)
-- Internal variables: mixed with underscores (`_THIRDPARTY_BUILD_DIR`, `_BOOST_ROOT`, `_PLATFORM`)
-- Options: UPPER_SNAKE_CASE (`BUILD_SHARED_LIBS`, `TESTING`, `BUILD_EXAMPLES`)
+**Types:**
+- PascalCase with suffix hints: `GeniusArray`, `GeniusMatrix`, `GeniusAddress`, `GeniusTokenValue`, `GeniusTokenID`
+- Enum values: `UPPER_CASE` with `GENIUS_` prefix: `GENIUS_NODE_RET_OK`, `GENIUS_NODE_ERROR_NOT_INITIALIZED`
+- Typedef aliases: PascalCase with `_t` suffix: `PayAmount_t`, `GeniusNodeReturnValue_t`, `GeniusNodeState_t`
+
+**Constants/macros:**
+- `UPPER_CASE` for defines: `GENIUS_SDK_ADDRESS_SIZE`, `GENIUS_SDK_MAX_MNEMONIC_SIZE`, `GNUS_VISIBILITY_DEFAULT`
+
+**Member variables (C++ — per .clang-tidy):**
+- `m_` prefix: class members use `m_memberName` convention
 
 ## Where to Add New Code
 
-**New Public API Function:**
-- Declaration: Add to `src/GeniusSDK.h` within the `GNUS_EXPORT_BEGIN`/`GNUS_EXPORT_END` block, mark with `GNUS_VISIBILITY_DEFAULT`
-- Implementation: Add to `src/GeniusSDK.cpp`
-- If the function introduces significant new logic (>200 lines), create a new `.cpp` file under `src/` and add it to `src/CMakeLists.txt`
+**New public API function:**
+1. Declare in `src/GeniusSDK.h` inside the `GNUS_EXPORT_BEGIN`/`GNUS_EXPORT_END` block — use `GNUS_VISIBILITY_DEFAULT` and document with Doxygen `@brief`/`@param`/`@return`
+2. Implement in `src/GeniusSDK.cpp` — delegate to `GeniusNodeInstance->SomeMethod(...)`, handle null-guard, convert types, return error code
+3. If the function allocates memory for the caller, document that the caller must free with `GeniusSDKFree()`
 
-**New Third-Party Dependency:**
-- Add `find_package` configuration to `cmake/CommonBuildParameters.cmake` (following the THIRDPARTY_BUILD_DIR/DIR pattern)
-- Add the include directory to the `GENIUSSDK_THIRDPARTY_INCLUDE_DIRS` list in `cmake/CommonBuildParameters.cmake` for SDK package install
-- Ensure the dependency is built in the thirdparty repository first
+**New C-compatible type:**
+1. Define POD struct in `src/GeniusSDK.h` before the `GNUS_EXPORT_BEGIN` block
+2. Keep all types stack-allocatable (no pointers to heap unless caller manages lifecycle)
+3. Prefix with `Genius` to avoid namespace collisions
 
-**New Example:**
-- Create new `.cpp` file in `example/`
-- Add `add_executable` + `target_link_libraries` block to `example/CMakeLists.txt` (follow the whole-archive linking pattern)
-- Copy `dev_config.json` in POST_BUILD if needed
+**New example:**
+1. Create `example/NewExample.cpp` — include `GeniusSDK.h`, call init, exercise API
+2. Add `add_executable(NewExample NewExample.cpp)` + `TARGET_LINK_LIBRARIES_WHOLE_ARCHIVE(NewExample GeniusSDK)` to `example/CMakeLists.txt`
 
-**New Test:**
-- Create test `.cpp` file in `test/`
-- Add `addtest(TestName TestFile.cpp)` to `test/CMakeLists.txt`
-- Link against `GeniusSDK` target
-- Google Test conventions: descriptive test names, `addtest()` helper handles gtest_main linking and xUnit output
+**New test:**
+1. Add test source file in `test/` (not currently present — tests may live in SuperGenius repo)
+2. Register in `test/CMakeLists.txt` using the `addtest(TestName source.cpp)` macro
+3. Link against `GeniusSDK` static lib
 
-**New Build Platform:**
-- Create `build/<PlatformName>/CMakeLists.txt` following the pattern of existing platforms
-- Must include: `include(../cmake/functions.cmake)`, `get_default_root()`, `project()`, `include(../CommonCompilerOptions.cmake)`, `include(../CommonBuildParameters.cmake)`
+**New platform target:**
+1. Create `build/NewPlatform/CMakeLists.txt` following the pattern of existing platforms
+2. Add new matrix entries in `.github/workflows/cmake.yml` and `.github/workflows/build-release-tag.yml`
+
+**New dependency:**
+1. Add `find_package(NewDep CONFIG REQUIRED)` in `cmake/CommonBuildParameters.cmake`
+2. Set `NewDep_DIR` and `NewDep_INCLUDE_DIR` to `${THIRDPARTY_BUILD_DIR}/newdep/...`
+3. Ensure the dependency is pre-built and available in the `thirdparty/` sibling repo
+
+**New CMake module:**
+1. Add `.cmake` file in `cmake/` for project-level config, or `build/cmake/` for build infrastructure
+2. Include from the appropriate `CMakeLists.txt` or `CommonBuildParameters.cmake`
 
 ## Special Directories
 
-**`build/`:**
-- Purpose: Build infrastructure shared across GeniusNetwork projects via git submodule
-- Generated: No (committed as submodule)
-- Committed: Yes (as submodule pointer to `GeniusVentures/cmaketemplate`)
+**build/:**
+- Purpose: Cross-platform CMake scaffold and build output directory
+- Generated: Output subdirectories (Debug, Release) are generated at build time
+- Committed: The CMake files are committed (git submodule); build outputs are gitignored
 
-**`build/<Platform>/<BuildType>/`:**
-- Purpose: Platform-specific build output directories (created by cmake configure step)
-- Generated: Yes
-- Committed: No (in `.gitignore` under `build/` for the subdirectory pattern)
+**AgentDocs/:**
+- Purpose: AI agent instructions and coding standards reference
+- Generated: No — manually curated
+- Committed: Yes — contains `CLAUDE.md` with 298 lines of coding rules
 
-**`build/<Platform>/<BuildType>/<ProjectName>/`:**
-- Purpose: Install staging directory (`CMAKE_INSTALL_PREFIX` defaults to `${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}`)
-- Generated: Yes (by cmake --install)
-- Committed: No
+**.planning/:**
+- Purpose: GSD planning artifacts (codebase maps, phase plans, todos)
+- Generated: Yes — by GSD commands
+- Committed: Yes — tracked for team visibility
+
+**.github/:**
+- Purpose: CI/CD workflows
+- Generated: No — manually written
+- Committed: Yes
 
 ---
 
-*Structure analysis: 2026-06-08*
+*Structure analysis: 2026-07-03*

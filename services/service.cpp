@@ -1,39 +1,48 @@
 #include "GeniusSDK.h"
 
 #include <cstdlib>
+#include <cstring>
+#include <fstream>
 #include <iostream>
+#include <sstream>
 
 int main( int argc, char *argv[] )
 {
     if ( argc < 2 )
     {
-        std::cerr << "Usage: " << argv[0] << " <base_path> [autodht] [process] [baseport] [is_full_node]\n"
-                  << "  base_path    - Base path for node data storage (required)\n"
-                  << "  autodht      - Auto-discover DHT peers (1/0, true/false, default: true)\n"
-                  << "  process      - Enable processing (1/0, true/false, default: true)\n"
-                  << "  baseport     - Base network port (uint16_t, default: 40001)\n"
-                  << "  is_full_node - Run as full node (1/0, true/false, default: false)\n";
+        std::cerr << "Usage: " << argv[0] << " <base_path>\n"
+                  << "  base_path - Base path for node data storage (must contain dev_config.json)\n";
         return 1;
     }
 
-    auto parse_bool = []( const char *arg, bool default_val ) -> bool
+    const char *base_path = argv[1];
+
+    // Load dev_config.json from base_path
+    std::ifstream cfg_file( std::string( base_path ) + "dev_config.json" );
+    if ( !cfg_file.is_open() )
     {
-        if ( !arg )
-        {
-            return default_val;
-        }
-        return arg[0] == '1' || arg[0] == 't' || arg[0] == 'T';
-    };
+        std::cerr << "Error: dev_config.json not found at " << base_path << "\n";
+        return 1;
+    }
+    std::stringstream buf;
+    buf << cfg_file.rdbuf();
+    std::string dev_config = buf.str();
+    if ( dev_config.empty() )
+    {
+        std::cerr << "Error: dev_config.json is empty\n";
+        return 1;
+    }
 
-    const char    *base_path    = argv[1];
-    const bool     autodht      = ( argc > 2 ) ? parse_bool( argv[2], true ) : true;
-    const bool     process      = ( argc > 3 ) ? parse_bool( argv[3], true ) : true;
-    const uint16_t baseport     = ( argc > 4 ) ? static_cast<uint16_t>( std::atoi( argv[4] ) ) : 40001;
-    const bool     is_full_node = ( argc > 5 ) ? parse_bool( argv[5], false ) : false;
-
-    GeniusSDKInit( base_path, autodht, process, baseport, is_full_node );
+    const char *init_result = GeniusSDKInit( base_path, dev_config.c_str() );
+    if ( !init_result || strncmp( init_result, "Initialized", strlen( "Initialized" ) ) != 0 )
+    {
+        std::cerr << "Error: GeniusSDK initialization failed: "
+                  << ( init_result ? init_result : "No response" ) << "\n";
+        return 1;
+    }
 
     while ( true )
     {
     }
+    return 0;
 }
