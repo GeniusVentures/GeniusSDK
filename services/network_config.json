@@ -1,4 +1,4 @@
 {
-    "port": 40001,
-    "enable_dht": true
+    "port_seed": 40001,
+    "auto_dht": true
 }

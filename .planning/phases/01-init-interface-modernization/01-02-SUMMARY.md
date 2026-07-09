@@ -15,7 +15,7 @@ key-decisions:
   - "SDKExample initSDK loads dev_config.json from base_path before calling 3-arg GeniusSDKInitWithKey"
   - "SDKIdleExample reads dev_config.json from ./ before calling 3-arg GeniusSDKInitWithKey"
   - "service.cpp accepts only <base_path> CLI arg, loads dev_config.json, calls 2-arg GeniusSDKInit"
-  - "network_config.json (port 40001, enable_dht: true) and sgns_config.json (enable_processing: true, is_full_node: false) shipped in both example/ and services/ directories"
+  - "network_config.json (port 40001, auto_dht: true) and sgns_config.json (enable_processing: true, is_full_node: false) shipped in both example/ and services/ directories"
 tech-stack:
   added: []
   patterns:
@@ -57,9 +57,9 @@ Four new JSON config files created, encoding the previous hardcoded defaults:
 
 | File | Content |
 |------|---------|
-| `example/network_config.json` | `{"port": 40001, "enable_dht": true}` |
+| `example/network_config.json` | `{"port_seed": 40001, "auto_dht": true}` |
 | `example/sgns_config.json` | `{"enable_processing": true, "is_full_node": false}` |
-| `services/network_config.json` | `{"port": 40001, "enable_dht": true}` |
+| `services/network_config.json` | `{"port_seed": 40001, "auto_dht": true}` |
 | `services/sgns_config.json` | `{"enable_processing": true, "is_full_node": false}` |
 
 ### Build Integration

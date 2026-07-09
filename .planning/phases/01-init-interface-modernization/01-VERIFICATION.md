@@ -29,8 +29,8 @@ overrides_applied: 0
 | P2-1 | SDKExample.cpp calls GeniusSDKInitWithKey with (base_path, dev_config, key) — no legacy params | ✓ VERIFIED | `example/SDKExample.cpp` L213: `GeniusSDKInitWithKey( base_path, dev_config, eth_private_key )` — 3 args, zero legacy params in initSDK or getSDKConfig |
 | P2-2 | SDKIdleExample.cpp calls GeniusSDKInitWithKey with (base_path, dev_config, key) — no legacy params | ✓ VERIFIED | `example/SDKIdleExample.cpp` L25-26: `GeniusSDKInitWithKey( no_path, dev_config.c_str(), "deadbeef...")` — 3 args, includes `<fstream>`/`<sstream>` |
 | P2-3 | service.cpp calls GeniusSDKInit with (base_path, dev_config) — no CLI flags for DHT/port/full-node | ✓ VERIFIED | `services/service.cpp` L35: `GeniusSDKInit( base_path, dev_config.c_str() )` — 2 args, usage shows only `<base_path>` |
-| P2-4 | example/ ships network_config.json and sgns_config.json matching hardcoded defaults | ✓ VERIFIED | `example/network_config.json`: `{"port": 40001, "enable_dht": true}`; `example/sgns_config.json`: `{"enable_processing": true, "is_full_node": false}` |
-| P2-5 | services/ ships network_config.json and sgns_config.json matching same defaults | ✓ VERIFIED | `services/network_config.json`: `{"port": 40001, "enable_dht": true}`; `services/sgns_config.json`: `{"enable_processing": true, "is_full_node": false}` |
+| P2-4 | example/ ships network_config.json and sgns_config.json matching hardcoded defaults | ✓ VERIFIED | `example/network_config.json`: `{"port_seed": 40001, "auto_dht": true}`; `example/sgns_config.json`: `{"enable_processing": true, "is_full_node": false}` |
+| P2-5 | services/ ships network_config.json and sgns_config.json matching same defaults | ✓ VERIFIED | `services/network_config.json`: `{"port_seed": 40001, "auto_dht": true}`; `services/sgns_config.json`: `{"enable_processing": true, "is_full_node": false}` |
 
 **Score:** 11/11 truths verified
 
