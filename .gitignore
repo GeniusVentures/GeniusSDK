@@ -93,8 +93,11 @@ examples/.env
 examples/.env.*
 !examples/.env.example
 
-# Build outputs
-build/
+# Build outputs inside platform template directories
+/build/*/Debug*/
+/build/*/Release*/
+/build/*/RelWithDebInfo*/
+/build/*/MinSizeRel*/
 
 # macOS
 .DS_Store
@@ -146,5 +149,4 @@ out/
 modules.xml
 .idea/misc.xml
 *.ipr
-
 
