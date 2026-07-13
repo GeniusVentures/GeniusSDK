@@ -12,6 +12,7 @@
 #include <blockchain/Blockchain.hpp>
 #include <cstdint>
 #include <memory>
+#include <mutex>
 #include <spdlog/spdlog.h>
 #include <string>
 #include <cstring>
@@ -161,10 +162,22 @@ namespace
     }
 
     std::shared_ptr<sgns::GeniusNode> GeniusNodeInstance;
+    // ponytail: serialize SDK calls with one lock; if this becomes a bottleneck, split node lifetime from read/write API locks.
+    std::recursive_mutex GeniusSDKMutex;
+
+    const char *MakeInitReturnValue( const char *base_path )
+    {
+        thread_local std::string ret_val;
+        ret_val.assign( "Initialized on " );
+        ret_val.append( base_path );
+        return ret_val.c_str();
+    }
 }
 
 const char *GeniusSDKInit( const char *base_path, const char *dev_config )
 {
+    const std::lock_guard<std::recursive_mutex> lock( GeniusSDKMutex );
+
     if ( !base_path || !dev_config || dev_config[0] == '\0' )
     {
         SPDLOG_ERROR( "base_path and dev_config must not be empty!" );
@@ -178,15 +191,16 @@ const char *GeniusSDKInit( const char *base_path, const char *dev_config )
     }
     GeniusNodeInstance = sgns::GeniusNode::New( cfg.value(), sgns::AccountSource{ sgns::NewAccount{} } );
     if ( !GeniusNodeInstance )
+    {
         return nullptr;
-    static std::string ret_val = "Initialized on ";
-    ret_val.assign( "Initialized on " );
-    ret_val.append( base_path );
-    return ret_val.c_str();
+    }
+    return MakeInitReturnValue( base_path );
 }
 
 const char *GeniusSDKInitWithKey( const char *base_path, const char *dev_config, const char *eth_private_key )
 {
+    const std::lock_guard<std::recursive_mutex> lock( GeniusSDKMutex );
+
     if ( !base_path || !dev_config || dev_config[0] == '\0' )
     {
         SPDLOG_ERROR( "base_path and dev_config must not be empty!" );
@@ -206,15 +220,16 @@ const char *GeniusSDKInitWithKey( const char *base_path, const char *dev_config,
     std::string key_copy( eth_private_key );
     GeniusNodeInstance = sgns::GeniusNode::New( cfg.value(), sgns::AccountSource{ sgns::FromPrivateKey{ key_copy } } );
     if ( !GeniusNodeInstance )
+    {
         return nullptr;
-    static std::string ret_val = "Initialized on ";
-    ret_val.assign( "Initialized on " );
-    ret_val.append( base_path );
-    return ret_val.c_str();
+    }
+    return MakeInitReturnValue( base_path );
 }
 
 const char *GeniusSDKInitWithMnemonic( const char *base_path, const char *dev_config, const char *mnemonic )
 {
+    const std::lock_guard<std::recursive_mutex> lock( GeniusSDKMutex );
+
     if ( !base_path || !dev_config || dev_config[0] == '\0' )
     {
         SPDLOG_ERROR( "base_path and dev_config must not be empty!" );
@@ -232,22 +247,29 @@ const char *GeniusSDKInitWithMnemonic( const char *base_path, const char *dev_co
         return nullptr;
     }
     std::string mnemonic_copy( mnemonic );
-    GeniusNodeInstance = sgns::GeniusNode::New( cfg.value(), sgns::AccountSource{ sgns::FromMnemonic{ mnemonic_copy } } );
+    GeniusNodeInstance = sgns::GeniusNode::New( cfg.value(),
+                                                sgns::AccountSource{ sgns::FromMnemonic{ mnemonic_copy } } );
     if ( !GeniusNodeInstance )
+    {
         return nullptr;
-    static std::string ret_val = "Initialized on ";
-    ret_val.assign( "Initialized on " );
-    ret_val.append( base_path );
-    return ret_val.c_str();
+    }
+    return MakeInitReturnValue( base_path );
 }
 
 GeniusNodeReturnValue_t GeniusSDKProcess( const JsonData_t jsondata )
 {
+    const std::lock_guard<std::recursive_mutex> lock( GeniusSDKMutex );
+
     GeniusNodeReturnValue ret = GENIUS_NODE_ERROR_NOT_INITIALIZED;
     do
     {
         if ( !GeniusNodeInstance )
         {
+            break;
+        }
+        if ( jsondata == nullptr )
+        {
+            ret = GENIUS_NODE_INVALID_ARGUMENT;
             break;
         }
         auto result = GeniusNodeInstance->ProcessImage( std::string{ jsondata } );
@@ -266,7 +288,13 @@ GeniusNodeReturnValue_t GeniusSDKProcess( const JsonData_t jsondata )
 
 bool GeniusSDKCheckJobValidity( const JsonData_t jsondata )
 {
+    const std::lock_guard<std::recursive_mutex> lock( GeniusSDKMutex );
+
     if ( !GeniusNodeInstance )
+    {
+        return false;
+    }
+    if ( jsondata == nullptr )
     {
         return false;
     }
@@ -277,6 +305,13 @@ bool GeniusSDKCheckJobValidity( const JsonData_t jsondata )
 
 double GeniusSDKGetGNUSPrice()
 {
+    const std::lock_guard<std::recursive_mutex> lock( GeniusSDKMutex );
+
+    if ( !GeniusNodeInstance )
+    {
+        return 0;
+    }
+
     auto result = GeniusNodeInstance->GetGNUSPrice();
 
     if ( !result.has_value() )
@@ -289,21 +324,44 @@ double GeniusSDKGetGNUSPrice()
 
 const char *GeniusSDKGetVersion()
 {
-    static std::string version = GeniusNodeInstance->GetVersion();
+    const std::lock_guard<std::recursive_mutex> lock( GeniusSDKMutex );
+
+    if ( !GeniusNodeInstance )
+    {
+        return nullptr;
+    }
+
+    thread_local std::string version;
+    version = GeniusNodeInstance->GetVersion();
     return version.c_str();
 }
 
 uint64_t GeniusSDKGetBalance( GeniusTokenID token_id )
 {
+    const std::lock_guard<std::recursive_mutex> lock( GeniusSDKMutex );
+
+    if ( !GeniusNodeInstance )
+    {
+        return 0;
+    }
+
     return GeniusNodeInstance->GetBalance( sgns::TokenID::FromBytes( token_id.data, sizeof( token_id.data ) ) );
 }
 
 GeniusTokenValue GeniusSDKGetBalanceGNUS()
 {
+    const std::lock_guard<std::recursive_mutex> lock( GeniusSDKMutex );
+
+    GeniusTokenValue tv = {};
+    if ( !GeniusNodeInstance )
+    {
+        std::strncpy( tv.value, "0", sizeof( tv.value ) - 1 );
+        return tv;
+    }
+
     uint64_t raw = GeniusNodeInstance->GetBalance( sgns::TokenID::FromBytes( { 0x00 } ) );
 
-    GeniusTokenValue tv;
-    auto             fmt = GeniusNodeInstance->FormatTokens( raw, sgns::TokenID::FromBytes( { 0x00 } ) );
+    auto fmt = GeniusNodeInstance->FormatTokens( raw, sgns::TokenID::FromBytes( { 0x00 } ) );
     if ( fmt.has_value() )
     {
         std::strncpy( tv.value, fmt.value().c_str(), sizeof( tv.value ) - 1 );
@@ -318,10 +376,16 @@ GeniusTokenValue GeniusSDKGetBalanceGNUS()
 
 const char *GeniusSDKGetBalanceGNUSString()
 {
+    const std::lock_guard<std::recursive_mutex> lock( GeniusSDKMutex );
+
+    if ( !GeniusNodeInstance )
+    {
+        return nullptr;
+    }
+
     uint64_t balance = GeniusNodeInstance->GetBalance( sgns::TokenID::FromBytes( { 0x00 } ) );
 
-    // Use a static buffer to store the string (not thread-safe but should work for your needs)
-    static char buffer[64];
+    thread_local char buffer[64];
 
     auto fmtRes = GeniusNodeInstance->FormatTokens( balance, sgns::TokenID::FromBytes( { 0x00 } ) );
 
@@ -342,11 +406,25 @@ const char *GeniusSDKGetBalanceGNUSString()
 
 GeniusMatrix GeniusSDKGetOutTransactions()
 {
+    const std::lock_guard<std::recursive_mutex> lock( GeniusSDKMutex );
+
+    if ( !GeniusNodeInstance )
+    {
+        return { 0, nullptr };
+    }
+
     return matrix_from_vector_of_vector( GeniusNodeInstance->GetOutTransactions() );
 }
 
 GeniusMatrix GeniusSDKGetInTransactions()
 {
+    const std::lock_guard<std::recursive_mutex> lock( GeniusSDKMutex );
+
+    if ( !GeniusNodeInstance )
+    {
+        return { 0, nullptr };
+    }
+
     return matrix_from_vector_of_vector( GeniusNodeInstance->GetInTransactions() );
 }
 
@@ -364,11 +442,18 @@ GeniusNodeReturnValue_t GeniusSDKMint( uint64_t      amount,
                                        const char   *chain_id,
                                        GeniusTokenID token_id )
 {
+    const std::lock_guard<std::recursive_mutex> lock( GeniusSDKMutex );
+
     GeniusNodeReturnValue ret = GENIUS_NODE_ERROR_NOT_INITIALIZED;
     do
     {
         if ( !GeniusNodeInstance )
         {
+            break;
+        }
+        if ( transaction_hash == nullptr || chain_id == nullptr )
+        {
+            ret = GENIUS_NODE_INVALID_ARGUMENT;
             break;
         }
         auto result = GeniusNodeInstance->MintTokens(
@@ -393,11 +478,18 @@ GeniusNodeReturnValue_t GeniusSDKMintGNUS( const GeniusTokenValue *amount,
                                            const char             *transaction_hash,
                                            const char             *chain_id )
 {
+    const std::lock_guard<std::recursive_mutex> lock( GeniusSDKMutex );
+
     GeniusNodeReturnValue ret = GENIUS_NODE_ERROR_NOT_INITIALIZED;
     do
     {
         if ( !GeniusNodeInstance )
         {
+            break;
+        }
+        if ( amount == nullptr )
+        {
+            ret = GENIUS_NODE_INVALID_ARGUMENT;
             break;
         }
         auto parseRes = GeniusNodeInstance->ParseTokens( std::string( amount->value ),
@@ -419,6 +511,8 @@ GeniusNodeReturnValue_t GeniusSDKMintGNUS( const GeniusTokenValue *amount,
 
 GeniusAddress GeniusSDKGetAddress()
 {
+    const std::lock_guard<std::recursive_mutex> lock( GeniusSDKMutex );
+
     GeniusAddress ret = {};
 
     auto node = GeniusNodeInstance;
@@ -435,6 +529,8 @@ GeniusAddress GeniusSDKGetAddress()
 
 GeniusMnemonic GeniusSDKGetMnemonic()
 {
+    const std::lock_guard<std::recursive_mutex> lock( GeniusSDKMutex );
+
     if ( !GeniusNodeInstance )
     {
         return {};
@@ -456,11 +552,18 @@ GeniusMnemonic GeniusSDKGetMnemonic()
 
 GeniusNodeReturnValue_t GeniusSDKTransfer( uint64_t amount, GeniusAddress *dest, GeniusTokenID token_id )
 {
+    const std::lock_guard<std::recursive_mutex> lock( GeniusSDKMutex );
+
     GeniusNodeReturnValue ret = GENIUS_NODE_ERROR_NOT_INITIALIZED;
     do
     {
         if ( !GeniusNodeInstance )
         {
+            break;
+        }
+        if ( dest == nullptr )
+        {
+            ret = GENIUS_NODE_INVALID_ARGUMENT;
             break;
         }
         std::string destination( dest->address );
@@ -481,6 +584,8 @@ GeniusNodeReturnValue_t GeniusSDKTransfer( uint64_t amount, GeniusAddress *dest,
 
 GeniusNodeReturnValue_t GeniusSDKTransferGNUS( const GeniusTokenValue *amount, GeniusAddress *dest )
 {
+    const std::lock_guard<std::recursive_mutex> lock( GeniusSDKMutex );
+
     GeniusNodeReturnValue ret = GENIUS_NODE_ERROR_NOT_INITIALIZED;
     do
     {
@@ -515,6 +620,8 @@ GeniusNodeReturnValue_t GeniusSDKTransferGNUS( const GeniusTokenValue *amount, G
 
 GeniusNodeReturnValue_t GeniusSDKPayDev( uint64_t amount, GeniusTokenID token_id )
 {
+    const std::lock_guard<std::recursive_mutex> lock( GeniusSDKMutex );
+
     GeniusNodeReturnValue ret = GENIUS_NODE_ERROR_NOT_INITIALIZED;
     do
     {
@@ -537,6 +644,17 @@ GeniusNodeReturnValue_t GeniusSDKPayDev( uint64_t amount, GeniusTokenID token_id
 
 uint64_t GeniusSDKGetCost( const JsonData_t jsondata )
 {
+    const std::lock_guard<std::recursive_mutex> lock( GeniusSDKMutex );
+
+    if ( !GeniusNodeInstance )
+    {
+        return 0;
+    }
+    if ( jsondata == nullptr )
+    {
+        return 0;
+    }
+
     auto procmgr = sgns::sgprocessing::ProcessingManager::Create( jsondata );
     if ( !procmgr )
     {
@@ -547,34 +665,41 @@ uint64_t GeniusSDKGetCost( const JsonData_t jsondata )
 
 GeniusTokenValue GeniusSDKGetCostGNUS( const JsonData_t jsondata )
 {
-    GeniusTokenValue tv;
-    if ( GeniusNodeInstance )
-    {
-        auto procmgr = sgns::sgprocessing::ProcessingManager::Create( jsondata );
-        if ( !procmgr )
-        {
-            std::strncpy( tv.value, "0", sizeof( tv.value ) - 1 );
-            tv.value[sizeof( tv.value ) - 1] = '\0';
-            return tv;
-        }
-        uint64_t rawCost = GeniusNodeInstance->GetProcessCost( procmgr.value() );
+    const std::lock_guard<std::recursive_mutex> lock( GeniusSDKMutex );
 
-        auto fmt = GeniusNodeInstance->FormatTokens( rawCost, sgns::TokenID::FromBytes( { 0x00 } ) );
-        if ( fmt.has_value() )
-        {
-            std::strncpy( tv.value, fmt.value().c_str(), sizeof( tv.value ) - 1 );
-        }
-        else
-        {
-            std::strncpy( tv.value, "0", sizeof( tv.value ) - 1 );
-        }
-        tv.value[sizeof( tv.value ) - 1] = '\0';
+    GeniusTokenValue tv = {};
+    if ( !GeniusNodeInstance || jsondata == nullptr )
+    {
+        std::strncpy( tv.value, "0", sizeof( tv.value ) - 1 );
+        return tv;
     }
+
+    auto procmgr = sgns::sgprocessing::ProcessingManager::Create( jsondata );
+    if ( !procmgr )
+    {
+        std::strncpy( tv.value, "0", sizeof( tv.value ) - 1 );
+        tv.value[sizeof( tv.value ) - 1] = '\0';
+        return tv;
+    }
+    uint64_t rawCost = GeniusNodeInstance->GetProcessCost( procmgr.value() );
+
+    auto fmt = GeniusNodeInstance->FormatTokens( rawCost, sgns::TokenID::FromBytes( { 0x00 } ) );
+    if ( fmt.has_value() )
+    {
+        std::strncpy( tv.value, fmt.value().c_str(), sizeof( tv.value ) - 1 );
+    }
+    else
+    {
+        std::strncpy( tv.value, "0", sizeof( tv.value ) - 1 );
+    }
+    tv.value[sizeof( tv.value ) - 1] = '\0';
     return tv;
 }
 
 GeniusNodeReturnValue_t GeniusSDKShutdown()
 {
+    const std::lock_guard<std::recursive_mutex> lock( GeniusSDKMutex );
+
     GeniusNodeReturnValue ret = GENIUS_NODE_RET_OK;
     if ( GeniusNodeInstance )
     {
@@ -586,6 +711,8 @@ GeniusNodeReturnValue_t GeniusSDKShutdown()
 
 void GeniusSDKLoadLogConfig()
 {
+    const std::lock_guard<std::recursive_mutex> lock( GeniusSDKMutex );
+
     if ( GeniusNodeInstance )
     {
         GeniusNodeInstance->LoadLogConfig();
@@ -599,6 +726,8 @@ void GeniusSDKFree( void *ptr )
 
 GeniusStatusInfo GeniusSDKGetInitializationStatus()
 {
+    const std::lock_guard<std::recursive_mutex> lock( GeniusSDKMutex );
+
     if ( !GeniusNodeInstance )
     {
         return {};
@@ -611,6 +740,8 @@ GeniusStatusInfo GeniusSDKGetInitializationStatus()
 
 const char *GeniusSDKGetAvailableAccounts()
 {
+    const std::lock_guard<std::recursive_mutex> lock( GeniusSDKMutex );
+
     // +1 for separator
     constexpr uint64_t SECTION_SIZE = GENIUS_SDK_ADDRESS_SIZE + 1;
 
@@ -645,9 +776,15 @@ const char *GeniusSDKGetAvailableAccounts()
 
 GeniusNodeReturnValue_t GeniusSDKAddAccountWithPrivateKey( const char *private_key )
 {
+    const std::lock_guard<std::recursive_mutex> lock( GeniusSDKMutex );
+
     if ( !GeniusNodeInstance )
     {
         return GENIUS_NODE_ERROR_NOT_INITIALIZED;
+    }
+    if ( private_key == nullptr )
+    {
+        return GENIUS_NODE_INVALID_ARGUMENT;
     }
     if ( GeniusNodeInstance->AddAccountWithKey( private_key ).has_value() )
     {
@@ -658,9 +795,15 @@ GeniusNodeReturnValue_t GeniusSDKAddAccountWithPrivateKey( const char *private_k
 
 GeniusNodeReturnValue_t GeniusSDKAddAccountWithMnemonic( const char *mnemonic )
 {
+    const std::lock_guard<std::recursive_mutex> lock( GeniusSDKMutex );
+
     if ( !GeniusNodeInstance )
     {
         return GENIUS_NODE_ERROR_NOT_INITIALIZED;
+    }
+    if ( mnemonic == nullptr )
+    {
+        return GENIUS_NODE_INVALID_ARGUMENT;
     }
     if ( GeniusNodeInstance->AddAccountWithMnemonic( std::string( mnemonic ) ).has_value() )
     {
@@ -671,6 +814,8 @@ GeniusNodeReturnValue_t GeniusSDKAddAccountWithMnemonic( const char *mnemonic )
 
 GeniusMnemonicAndStatus GeniusSDKAddAccountWithRandomMnemonic()
 {
+    const std::lock_guard<std::recursive_mutex> lock( GeniusSDKMutex );
+
     if ( !GeniusNodeInstance )
     {
         return { GENIUS_NODE_ERROR_NOT_INITIALIZED, {} };
@@ -687,9 +832,15 @@ GeniusMnemonicAndStatus GeniusSDKAddAccountWithRandomMnemonic()
 
 GeniusNodeReturnValue_t GeniusSDKSelectGeniusAccount( const char *public_address )
 {
+    const std::lock_guard<std::recursive_mutex> lock( GeniusSDKMutex );
+
     if ( !GeniusNodeInstance )
     {
         return GENIUS_NODE_ERROR_NOT_INITIALIZED;
+    }
+    if ( public_address == nullptr )
+    {
+        return GENIUS_NODE_INVALID_ARGUMENT;
     }
 
     if ( GeniusNodeInstance->SelectAccount( public_address ).has_value() )
@@ -701,9 +852,15 @@ GeniusNodeReturnValue_t GeniusSDKSelectGeniusAccount( const char *public_address
 
 GeniusNodeReturnValue_t GeniusSDKTransferGeniusAccount( const char *public_address )
 {
+    const std::lock_guard<std::recursive_mutex> lock( GeniusSDKMutex );
+
     if ( !GeniusNodeInstance )
     {
         return GENIUS_NODE_ERROR_NOT_INITIALIZED;
+    }
+    if ( public_address == nullptr )
+    {
+        return GENIUS_NODE_INVALID_ARGUMENT;
     }
 
     if ( GeniusNodeInstance->TransferAccount( public_address ).has_value() )
@@ -715,9 +872,15 @@ GeniusNodeReturnValue_t GeniusSDKTransferGeniusAccount( const char *public_addre
 
 GeniusNodeReturnValue_t GeniusSDKMergeGeniusAccount( const char *public_address )
 {
+    const std::lock_guard<std::recursive_mutex> lock( GeniusSDKMutex );
+
     if ( !GeniusNodeInstance )
     {
         return GENIUS_NODE_ERROR_NOT_INITIALIZED;
+    }
+    if ( public_address == nullptr )
+    {
+        return GENIUS_NODE_INVALID_ARGUMENT;
     }
 
     if ( GeniusNodeInstance->MergeAccount( public_address ).has_value() )
@@ -729,9 +892,15 @@ GeniusNodeReturnValue_t GeniusSDKMergeGeniusAccount( const char *public_address 
 
 GeniusNodeReturnValue_t GeniusSDKDeleteAccount( const char *public_address )
 {
+    const std::lock_guard<std::recursive_mutex> lock( GeniusSDKMutex );
+
     if ( !GeniusNodeInstance )
     {
         return GENIUS_NODE_ERROR_NOT_INITIALIZED;
+    }
+    if ( public_address == nullptr )
+    {
+        return GENIUS_NODE_INVALID_ARGUMENT;
     }
 
     if ( GeniusNodeInstance->DeleteAccount( public_address ).has_value() )
@@ -743,9 +912,15 @@ GeniusNodeReturnValue_t GeniusSDKDeleteAccount( const char *public_address )
 
 GeniusNodeReturnValue_t GeniusSDKSetPayoutAddress( const char *public_address )
 {
+    const std::lock_guard<std::recursive_mutex> lock( GeniusSDKMutex );
+
     if ( !GeniusNodeInstance )
     {
         return GENIUS_NODE_ERROR_NOT_INITIALIZED;
+    }
+    if ( public_address == nullptr )
+    {
+        return GENIUS_NODE_INVALID_ARGUMENT;
     }
 
     if ( GeniusNodeInstance->SetPayoutAddress( public_address ).has_value() )
@@ -757,6 +932,8 @@ GeniusNodeReturnValue_t GeniusSDKSetPayoutAddress( const char *public_address )
 
 GeniusTransactionManagerState_t GeniusSDKGetTransactionManagerState()
 {
+    const std::lock_guard<std::recursive_mutex> lock( GeniusSDKMutex );
+
     if ( !GeniusNodeInstance )
     {
         return GENIUS_TM_STATE_CREATING;
@@ -766,6 +943,8 @@ GeniusTransactionManagerState_t GeniusSDKGetTransactionManagerState()
 
 GeniusNodeState_t GeniusSDKGetNodeState()
 {
+    const std::lock_guard<std::recursive_mutex> lock( GeniusSDKMutex );
+
     if ( !GeniusNodeInstance )
     {
         return GENIUS_NODE_CREATING;
@@ -775,6 +954,8 @@ GeniusNodeState_t GeniusSDKGetNodeState()
 
 GeniusTransactionStatus_t GeniusSDKGetTransactionStatus( const char *tx_id )
 {
+    const std::lock_guard<std::recursive_mutex> lock( GeniusSDKMutex );
+
     if ( !GeniusNodeInstance || tx_id == nullptr )
     {
         return GENIUS_TX_STATUS_INVALID;
@@ -787,6 +968,8 @@ GeniusTransactionStatus_t GeniusSDKGetTransactionStatus( const char *tx_id )
 
 GeniusProcessingStatusInfo GeniusSDKGetProcessingStatus()
 {
+    const std::lock_guard<std::recursive_mutex> lock( GeniusSDKMutex );
+
     using Status = sgns::processing::ProcessingServiceImpl::Status;
 
     GeniusProcessingStatusInfo result;
@@ -822,6 +1005,8 @@ GeniusProcessingStatusInfo GeniusSDKGetProcessingStatus()
 
 const char *GeniusSDKGetMyTaskIds( uint64_t limit, uint64_t offset )
 {
+    const std::lock_guard<std::recursive_mutex> lock( GeniusSDKMutex );
+
     if ( !GeniusNodeInstance )
     {
         return nullptr;
@@ -848,8 +1033,8 @@ const char *GeniusSDKGetMyTaskIds( uint64_t limit, uint64_t offset )
     for ( size_t i = 0; i < task_ids.size(); ++i )
     {
         memcpy( dest, task_ids[i].data(), task_ids[i].size() );
-        dest += task_ids[i].size();
-        *dest++ = ( i + 1 < task_ids.size() ) ? '\n' : '\0';
+        dest    += task_ids[i].size();
+        *dest++  = ( i + 1 < task_ids.size() ) ? '\n' : '\0';
     }
 
     return ret;
@@ -857,6 +1042,8 @@ const char *GeniusSDKGetMyTaskIds( uint64_t limit, uint64_t offset )
 
 GeniusArray GeniusSDKGetTaskResult( const char *task_id )
 {
+    const std::lock_guard<std::recursive_mutex> lock( GeniusSDKMutex );
+
     if ( !GeniusNodeInstance || task_id == nullptr )
     {
         return { 0, nullptr };
