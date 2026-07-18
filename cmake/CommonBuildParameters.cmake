@@ -199,7 +199,7 @@ if(SGNS_STACKTRACE_BACKTRACE)
 endif()
 
 # header only libraries must not be added here
-find_package(Boost CONFIG REQUIRED COMPONENTS container date_time filesystem json random regex system thread log log_setup program_options unit_test_framework)
+find_package(Boost CONFIG REQUIRED COMPONENTS container date_time filesystem json random regex system thread log log_setup program_options unit_test_framework coroutine)
 
 # SQLiteModernCpp
 set(SQLiteModernCpp_ROOT_DIR "${THIRDPARTY_BUILD_DIR}/SQLiteModernCpp")
