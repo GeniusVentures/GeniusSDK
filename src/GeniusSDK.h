@@ -82,6 +82,31 @@ typedef struct
     unsigned char data[32]; ///< 32-byte raw token ID used internally
 } GeniusTokenID;
 
+#define GENIUS_SDK_MAX_METADATA_STRING_SIZE 128 ///< Bound for opaque caller-supplied registration metadata strings
+
+/**
+ * @brief Caller-supplied registration metadata for a child wallet, mirroring the
+ *        SGTransaction::RegistrationMetadata proto fields.
+ */
+typedef struct
+{
+    char     game_id[GENIUS_SDK_MAX_METADATA_STRING_SIZE];      ///< Opaque game identifier string
+    char     publisher_id[GENIUS_SDK_MAX_METADATA_STRING_SIZE]; ///< Opaque publisher identifier string
+    char     dev_wallet[GENIUS_SDK_MAX_METADATA_STRING_SIZE];   ///< Opaque developer wallet identifier bytes/string
+    uint64_t peers_cut;                                         ///< Peers' cut value
+} GeniusRegistrationMetadata;
+
+/**
+ * @brief A single child-wallet registration discovered via GeniusSDKGetRegistrationsForMain.
+ */
+typedef struct
+{
+    GeniusAddress              child_address; ///< Registered child wallet's public address
+    GeniusAddress              main_address;  ///< Main wallet public address the child is registered under
+    uint64_t                   sequence;      ///< Registration sequence number
+    GeniusRegistrationMetadata metadata;      ///< Registration metadata submitted at registration time
+} GeniusRegistrationDiscoveryEntry;
+
 typedef char     JsonData_t[2048]; ///< ID/Path of the image to be processed
 typedef uint64_t PayAmount_t;      ///< Amount to be paid for the processing
 typedef int32_t  GeniusNodeReturnValue_t;
@@ -98,7 +123,8 @@ typedef enum
     GENIUS_NODE_ERROR_MINT,
     GENIUS_NODE_INVALID_ARGUMENT,
     GENIUS_NODE_ERROR_TRANSFER,
-    GENIUS_NODE_ERROR_PAY_DEV
+    GENIUS_NODE_ERROR_PAY_DEV,
+    GENIUS_NODE_ERROR_REGISTRATION ///< GeniusSDKRegisterChild submission failure or GeniusSDKGetRegistrationsForMain discovery-query failure
 } GeniusNodeReturnValue;
 
 /**
@@ -504,6 +530,62 @@ GNUS_VISIBILITY_DEFAULT const char *GeniusSDKGetMyTaskIds( uint64_t limit, uint6
  *              On success, the ptr field must be freed with GeniusSDKFree().
  */
 GNUS_VISIBILITY_DEFAULT GeniusArray GeniusSDKGetTaskResult( const char *task_id );
+
+/* --- Child Wallet Interfaces (v2.2) --- */
+
+/**
+ * @brief     Registers this node as a child wallet under a main wallet address.
+ *            Wraps the auto-derived-sequence overload of `GeniusNode::RegisterChild` —
+ *            the registration sequence number is derived automatically from this node's
+ *            existing reg/ CRDT record; no sequence value is accepted by this function.
+ * @param[in] main_address Null-terminated string representing the main wallet's public address.
+ * @param[in] metadata     Registration metadata (game_id, publisher_id, dev_wallet, peers_cut).
+ * @return @ref GENIUS_NODE_RET_OK on success, @ref GENIUS_NODE_ERROR_NOT_INITIALIZED if the SDK
+ *         is not initialized, @ref GENIUS_NODE_INVALID_ARGUMENT if `main_address` is null/empty,
+ *         or @ref GENIUS_NODE_ERROR_REGISTRATION if registration submission failed.
+ */
+GNUS_VISIBILITY_DEFAULT GeniusNodeReturnValue_t GeniusSDKRegisterChild( const char                 *main_address,
+                                                                        GeniusRegistrationMetadata  metadata );
+
+/**
+ * @brief      Enumerates child wallets registered under a given main wallet address.
+ *             Wraps `GeniusNode::GetRegistrationsForMain`.
+ * @param[in]  main_address Null-terminated string representing the main wallet's public address.
+ * @param[out] out_entries  On success, set to a heap-allocated array of discovered registrations
+ *                          (caller must free with @ref GeniusSDKFree); set to null on failure or
+ *                          when there are zero registrations.
+ * @param[out] out_count    On success, set to the number of entries in `*out_entries` (may be 0,
+ *                          which is a valid empty result, not a failure); set to 0 on failure.
+ * @return @ref GENIUS_NODE_RET_OK on success (including the zero-registrations case),
+ *         @ref GENIUS_NODE_ERROR_NOT_INITIALIZED if the SDK is not initialized,
+ *         @ref GENIUS_NODE_INVALID_ARGUMENT if `main_address`, `out_entries`, or `out_count`
+ *         is null, or @ref GENIUS_NODE_ERROR_REGISTRATION if the discovery query failed.
+ */
+GNUS_VISIBILITY_DEFAULT GeniusNodeReturnValue_t GeniusSDKGetRegistrationsForMain(
+    const char                        *main_address,
+    GeniusRegistrationDiscoveryEntry **out_entries,
+    uint64_t                          *out_count );
+
+/**
+ * @brief Retrieves a child wallet's balance for a specific token, read from the locally-synced
+ *        CRDT UTXO view. Wraps the token-filtered overload of `GeniusNode::GetChildBalance`.
+ * @param[in] child_address Null-terminated string representing the child wallet's public address.
+ * @param[in] token_id      Token identifier to filter by.
+ * @return The balance amount as a `uint64_t` value (in Minion Tokens), or 0 if the SDK is not
+ *         initialized or `child_address` is null. As with @ref GeniusSDKGetBalance, 0 is
+ *         inherently ambiguous (no balance vs. not-yet-synced).
+ */
+GNUS_VISIBILITY_DEFAULT uint64_t GeniusSDKGetChildBalance( const char *child_address, GeniusTokenID token_id );
+
+/**
+ * @brief Retrieves a child wallet's total balance across all tokens, read from the locally-synced
+ *        CRDT UTXO view. Wraps the all-tokens overload of `GeniusNode::GetChildBalance`.
+ * @param[in] child_address Null-terminated string representing the child wallet's public address.
+ * @return The total balance amount as a `uint64_t` value (in Minion Tokens), or 0 if the SDK is
+ *         not initialized or `child_address` is null. Same 0-ambiguity caveat as
+ *         @ref GeniusSDKGetChildBalance applies.
+ */
+GNUS_VISIBILITY_DEFAULT uint64_t GeniusSDKGetChildBalanceAll( const char *child_address );
 
 GNUS_EXPORT_END
 
