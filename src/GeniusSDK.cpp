@@ -161,6 +161,50 @@ namespace
         return matrix;
     }
 
+    SGTransaction::RegistrationMetadata ToRegistrationMetadataProto( const GeniusRegistrationMetadata &metadata )
+    {
+        SGTransaction::RegistrationMetadata proto_metadata;
+
+        proto_metadata.set_game_id(
+            std::string( metadata.game_id, strnlen( metadata.game_id, sizeof( metadata.game_id ) ) ) );
+        proto_metadata.set_publisher_id(
+            std::string( metadata.publisher_id, strnlen( metadata.publisher_id, sizeof( metadata.publisher_id ) ) ) );
+        proto_metadata.set_dev_wallet(
+            std::string( metadata.dev_wallet, strnlen( metadata.dev_wallet, sizeof( metadata.dev_wallet ) ) ) );
+        proto_metadata.set_peers_cut( metadata.peers_cut );
+
+        return proto_metadata;
+    }
+
+    GeniusRegistrationMetadata FromRegistrationMetadataProto( const SGTransaction::RegistrationMetadata &proto )
+    {
+        GeniusRegistrationMetadata metadata = {};
+
+        std::strncpy( metadata.game_id, proto.game_id().c_str(), sizeof( metadata.game_id ) - 1 );
+        metadata.game_id[sizeof( metadata.game_id ) - 1] = '\0';
+
+        std::strncpy( metadata.publisher_id, proto.publisher_id().c_str(), sizeof( metadata.publisher_id ) - 1 );
+        metadata.publisher_id[sizeof( metadata.publisher_id ) - 1] = '\0';
+
+        std::strncpy( metadata.dev_wallet, proto.dev_wallet().c_str(), sizeof( metadata.dev_wallet ) - 1 );
+        metadata.dev_wallet[sizeof( metadata.dev_wallet ) - 1] = '\0';
+
+        metadata.peers_cut = proto.peers_cut();
+
+        return metadata;
+    }
+
+    GeniusAddress MakeGeniusAddress( const std::string &address )
+    {
+        GeniusAddress ret = {};
+
+        ret.address[0] = '0';
+        ret.address[1] = 'x';
+        std::copy( address.cbegin(), address.cend(), &ret.address[2] );
+
+        return ret;
+    }
+
     std::shared_ptr<sgns::GeniusNode> GeniusNodeInstance;
     // ponytail: serialize SDK calls with one lock; if this becomes a bottleneck, split node lifetime from read/write API locks.
     std::recursive_mutex GeniusSDKMutex;
@@ -1065,4 +1109,121 @@ GeniusArray GeniusSDKGetTaskResult( const char *task_id )
     memcpy( buf, serialized.data(), serialized.size() );
 
     return { serialized.size(), buf };
+}
+
+GeniusNodeReturnValue_t GeniusSDKRegisterChild( const char *main_address, GeniusRegistrationMetadata metadata )
+{
+    const std::lock_guard<std::recursive_mutex> lock( GeniusSDKMutex );
+
+    GeniusNodeReturnValue ret = GENIUS_NODE_ERROR_NOT_INITIALIZED;
+    do
+    {
+        if ( !GeniusNodeInstance )
+        {
+            break;
+        }
+        if ( main_address == nullptr || main_address[0] == '\0' )
+        {
+            ret = GENIUS_NODE_INVALID_ARGUMENT;
+            break;
+        }
+        auto proto_metadata = ToRegistrationMetadataProto( metadata );
+        auto result         = GeniusNodeInstance->RegisterChild( std::string( main_address ), proto_metadata );
+
+        if ( !result.has_value() )
+        {
+            ret = GENIUS_NODE_ERROR_REGISTRATION;
+            std::cerr << "Error registering child: " << result.error() << std::endl;
+            break;
+        }
+        ret = GENIUS_NODE_RET_OK;
+    } while ( 0 );
+
+    return ret;
+}
+
+GeniusNodeReturnValue_t GeniusSDKGetRegistrationsForMain( const char                        *main_address,
+                                                           GeniusRegistrationDiscoveryEntry **out_entries,
+                                                           uint64_t                          *out_count )
+{
+    const std::lock_guard<std::recursive_mutex> lock( GeniusSDKMutex );
+
+    if ( out_entries != nullptr )
+    {
+        *out_entries = nullptr;
+    }
+    if ( out_count != nullptr )
+    {
+        *out_count = 0;
+    }
+
+    GeniusNodeReturnValue ret = GENIUS_NODE_ERROR_NOT_INITIALIZED;
+    do
+    {
+        if ( !GeniusNodeInstance )
+        {
+            break;
+        }
+        if ( main_address == nullptr || main_address[0] == '\0' || out_entries == nullptr || out_count == nullptr )
+        {
+            ret = GENIUS_NODE_INVALID_ARGUMENT;
+            break;
+        }
+        auto result = GeniusNodeInstance->GetRegistrationsForMain( std::string( main_address ) );
+
+        if ( !result.has_value() )
+        {
+            ret = GENIUS_NODE_ERROR_REGISTRATION;
+            std::cerr << "Error getting registrations for main: " << result.error() << std::endl;
+            break;
+        }
+
+        const auto &entries = result.value();
+        *out_count           = entries.size();
+
+        if ( !entries.empty() )
+        {
+            auto *array = reinterpret_cast<GeniusRegistrationDiscoveryEntry *>(
+                malloc( entries.size() * sizeof( GeniusRegistrationDiscoveryEntry ) ) );
+
+            for ( size_t i = 0; i < entries.size(); ++i )
+            {
+                array[i].child_address = MakeGeniusAddress( entries[i].child_addr );
+                array[i].main_address  = MakeGeniusAddress( entries[i].main_addr );
+                array[i].sequence      = entries[i].sequence;
+                array[i].metadata      = FromRegistrationMetadataProto( entries[i].metadata );
+            }
+
+            *out_entries = array;
+        }
+
+        ret = GENIUS_NODE_RET_OK;
+    } while ( 0 );
+
+    return ret;
+}
+
+uint64_t GeniusSDKGetChildBalance( const char *child_address, GeniusTokenID token_id )
+{
+    const std::lock_guard<std::recursive_mutex> lock( GeniusSDKMutex );
+
+    if ( !GeniusNodeInstance || child_address == nullptr )
+    {
+        return 0;
+    }
+
+    return GeniusNodeInstance->GetChildBalance( std::string( child_address ),
+                                                sgns::TokenID::FromBytes( token_id.data, sizeof( token_id.data ) ) );
+}
+
+uint64_t GeniusSDKGetChildBalanceAll( const char *child_address )
+{
+    const std::lock_guard<std::recursive_mutex> lock( GeniusSDKMutex );
+
+    if ( !GeniusNodeInstance || child_address == nullptr )
+    {
+        return 0;
+    }
+
+    return GeniusNodeInstance->GetChildBalance( std::string( child_address ) );
 }
