@@ -587,6 +587,78 @@ GNUS_VISIBILITY_DEFAULT uint64_t GeniusSDKGetChildBalance( const char *child_add
  */
 GNUS_VISIBILITY_DEFAULT uint64_t GeniusSDKGetChildBalanceAll( const char *child_address );
 
+/* --- Child Wallet Transfers (v2.3) --- */
+
+/**
+ * @brief     Funds a registered child wallet by transferring tokens to it (in **Minion Tokens**).
+ *            Wraps the fire-and-forget overload of `GeniusNode::TransferFunds` — this is an
+ *            ordinary transfer to the child's address, no new consensus mechanics involved.
+ * @param[in] amount        The amount to transfer in Minion Tokens.
+ * @param[in] child_address Null-terminated string representing the child wallet's public address.
+ * @param[in] token_id      Token identifier.
+ * @return @ref GENIUS_NODE_RET_OK on successful submission (submitted, not confirmed by
+ *         consensus — see @ref GeniusSDKRecoverFromChild's @note for the related caveat),
+ *         @ref GENIUS_NODE_ERROR_NOT_INITIALIZED if the SDK is not initialized,
+ *         @ref GENIUS_NODE_INVALID_ARGUMENT if `child_address` is null/empty,
+ *         or @ref GENIUS_NODE_ERROR_TRANSFER on submission failure.
+ */
+GNUS_VISIBILITY_DEFAULT GeniusNodeReturnValue_t GeniusSDKFundChild( uint64_t       amount,
+                                                                     const char    *child_address,
+                                                                     GeniusTokenID  token_id );
+
+/**
+ * @brief     Funds a registered child wallet using a **Genius Token** string representation.
+ *            Parses `amount` via `GeniusNode::ParseTokens` then delegates to
+ *            @ref GeniusSDKFundChild, mirroring how `GeniusSDKTransferGNUS` delegates to
+ *            `GeniusSDKTransfer`.
+ * @param[in] amount        Pointer to a `GeniusTokenValue` struct representing the amount in GNUS.
+ * @param[in] child_address Null-terminated string representing the child wallet's public address.
+ * @return @ref GENIUS_NODE_RET_OK on successful submission, @ref GENIUS_NODE_ERROR_NOT_INITIALIZED
+ *         if the SDK is not initialized, @ref GENIUS_NODE_INVALID_ARGUMENT if `amount` is null or
+ *         `child_address` is null/empty, or @ref GENIUS_NODE_ERROR_TRANSFER on submission failure.
+ */
+GNUS_VISIBILITY_DEFAULT GeniusNodeReturnValue_t GeniusSDKFundChildGNUS( const GeniusTokenValue *amount,
+                                                                         const char             *child_address );
+
+/**
+ * @brief     Recovers funds from a registered child wallet back to this node's address
+ *            (in **Minion Tokens**). Wraps the fire-and-forget overload of
+ *            `GeniusNode::RecoverFromChild`. This wrapper's own parameter order
+ *            (`amount`, `child_address`, `token_id`) mirrors @ref GeniusSDKFundChild for API
+ *            symmetry, even though `GeniusNode::RecoverFromChild`'s actual signature takes
+ *            `child_address` first.
+ * @param[in] amount        The amount to recover in Minion Tokens.
+ * @param[in] child_address Null-terminated string representing the child wallet's public address.
+ * @param[in] token_id      Token identifier.
+ * @return @ref GENIUS_NODE_RET_OK on successful submission, @ref GENIUS_NODE_ERROR_NOT_INITIALIZED
+ *         if the SDK is not initialized, @ref GENIUS_NODE_INVALID_ARGUMENT if `child_address` is
+ *         null/empty, or @ref GENIUS_NODE_ERROR_TRANSFER on submission failure (the same code
+ *         @ref GeniusSDKFundChild uses — no dedicated recovery error value).
+ * @note This call is fire-and-forget and reports submission-time status only; the
+ *       destination-mismatch rejection performed by `CheckParentChildAuthority` is only
+ *       evaluated at consensus finalization and cannot be observed by this synchronous
+ *       wrapper — @ref GENIUS_NODE_RET_OK means "submitted," not "confirmed by consensus."
+ */
+GNUS_VISIBILITY_DEFAULT GeniusNodeReturnValue_t GeniusSDKRecoverFromChild( uint64_t      amount,
+                                                                            const char   *child_address,
+                                                                            GeniusTokenID token_id );
+
+/**
+ * @brief     Recovers funds from a registered child wallet using a **Genius Token** string
+ *            representation. Parses `amount` via `GeniusNode::ParseTokens` then delegates to
+ *            @ref GeniusSDKRecoverFromChild, mirroring how `GeniusSDKTransferGNUS` delegates to
+ *            `GeniusSDKTransfer`.
+ * @param[in] amount        Pointer to a `GeniusTokenValue` struct representing the amount in GNUS.
+ * @param[in] child_address Null-terminated string representing the child wallet's public address.
+ * @return @ref GENIUS_NODE_RET_OK on successful submission, @ref GENIUS_NODE_ERROR_NOT_INITIALIZED
+ *         if the SDK is not initialized, @ref GENIUS_NODE_INVALID_ARGUMENT if `amount` is null or
+ *         `child_address` is null/empty, or @ref GENIUS_NODE_ERROR_TRANSFER on submission failure.
+ * @note Same fire-and-forget/D-21-observability limitation as @ref GeniusSDKRecoverFromChild
+ *       applies — see that function's @note.
+ */
+GNUS_VISIBILITY_DEFAULT GeniusNodeReturnValue_t GeniusSDKRecoverFromChildGNUS( const GeniusTokenValue *amount,
+                                                                                const char             *child_address );
+
 GNUS_EXPORT_END
 
 #endif
