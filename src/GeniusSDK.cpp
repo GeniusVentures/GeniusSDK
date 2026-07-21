@@ -1227,3 +1227,136 @@ uint64_t GeniusSDKGetChildBalanceAll( const char *child_address )
 
     return GeniusNodeInstance->GetChildBalance( std::string( child_address ) );
 }
+
+GeniusNodeReturnValue_t GeniusSDKFundChild( uint64_t amount, const char *child_address, GeniusTokenID token_id )
+{
+    const std::lock_guard<std::recursive_mutex> lock( GeniusSDKMutex );
+
+    GeniusNodeReturnValue ret = GENIUS_NODE_ERROR_NOT_INITIALIZED;
+    do
+    {
+        if ( !GeniusNodeInstance )
+        {
+            break;
+        }
+        if ( child_address == nullptr || child_address[0] == '\0' )
+        {
+            ret = GENIUS_NODE_INVALID_ARGUMENT;
+            break;
+        }
+        auto result = GeniusNodeInstance->TransferFunds(
+            amount,
+            std::string( child_address ),
+            sgns::TokenID::FromBytes( token_id.data, sizeof( token_id.data ) ) );
+        if ( !result.has_value() )
+        {
+            ret = GENIUS_NODE_ERROR_TRANSFER;
+            break;
+        }
+        ret = GENIUS_NODE_RET_OK;
+    } while ( 0 );
+
+    return ret;
+}
+
+GeniusNodeReturnValue_t GeniusSDKFundChildGNUS( const GeniusTokenValue *amount, const char *child_address )
+{
+    const std::lock_guard<std::recursive_mutex> lock( GeniusSDKMutex );
+
+    GeniusNodeReturnValue ret = GENIUS_NODE_ERROR_NOT_INITIALIZED;
+    do
+    {
+        if ( !GeniusNodeInstance )
+        {
+            break;
+        }
+        if ( amount == nullptr )
+        {
+            ret = GENIUS_NODE_INVALID_ARGUMENT;
+            break;
+        }
+        if ( child_address == nullptr || child_address[0] == '\0' )
+        {
+            ret = GENIUS_NODE_INVALID_ARGUMENT;
+            break;
+        }
+        auto parseRes = GeniusNodeInstance->ParseTokens( std::string( amount->value ),
+                                                         sgns::TokenID::FromBytes( { 0x00 } ) );
+        if ( !parseRes.has_value() )
+        {
+            ret = GENIUS_NODE_INVALID_ARGUMENT;
+            break;
+        }
+        GeniusTokenID gnus_id;
+        memset( gnus_id.data, 0, sizeof( gnus_id.data ) );
+        ret = static_cast<GeniusNodeReturnValue>( GeniusSDKFundChild( parseRes.value(), child_address, gnus_id ) );
+    } while ( 0 );
+
+    return ret;
+}
+
+GeniusNodeReturnValue_t GeniusSDKRecoverFromChild( uint64_t amount, const char *child_address, GeniusTokenID token_id )
+{
+    const std::lock_guard<std::recursive_mutex> lock( GeniusSDKMutex );
+
+    GeniusNodeReturnValue ret = GENIUS_NODE_ERROR_NOT_INITIALIZED;
+    do
+    {
+        if ( !GeniusNodeInstance )
+        {
+            break;
+        }
+        if ( child_address == nullptr || child_address[0] == '\0' )
+        {
+            ret = GENIUS_NODE_INVALID_ARGUMENT;
+            break;
+        }
+        auto result = GeniusNodeInstance->RecoverFromChild( std::string( child_address ), amount,
+            sgns::TokenID::FromBytes( token_id.data, sizeof( token_id.data ) ) );
+        if ( !result.has_value() )
+        {
+            ret = GENIUS_NODE_ERROR_TRANSFER;
+            break;
+        }
+        ret = GENIUS_NODE_RET_OK;
+    } while ( 0 );
+
+    return ret;
+}
+
+GeniusNodeReturnValue_t GeniusSDKRecoverFromChildGNUS( const GeniusTokenValue *amount, const char *child_address )
+{
+    const std::lock_guard<std::recursive_mutex> lock( GeniusSDKMutex );
+
+    GeniusNodeReturnValue ret = GENIUS_NODE_ERROR_NOT_INITIALIZED;
+    do
+    {
+        if ( !GeniusNodeInstance )
+        {
+            break;
+        }
+        if ( amount == nullptr )
+        {
+            ret = GENIUS_NODE_INVALID_ARGUMENT;
+            break;
+        }
+        if ( child_address == nullptr || child_address[0] == '\0' )
+        {
+            ret = GENIUS_NODE_INVALID_ARGUMENT;
+            break;
+        }
+        auto parseRes = GeniusNodeInstance->ParseTokens( std::string( amount->value ),
+                                                         sgns::TokenID::FromBytes( { 0x00 } ) );
+        if ( !parseRes.has_value() )
+        {
+            ret = GENIUS_NODE_INVALID_ARGUMENT;
+            break;
+        }
+        GeniusTokenID gnus_id;
+        memset( gnus_id.data, 0, sizeof( gnus_id.data ) );
+        ret = static_cast<GeniusNodeReturnValue>(
+            GeniusSDKRecoverFromChild( parseRes.value(), child_address, gnus_id ) );
+    } while ( 0 );
+
+    return ret;
+}
