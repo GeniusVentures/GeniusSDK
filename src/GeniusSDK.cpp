@@ -1360,3 +1360,90 @@ GeniusNodeReturnValue_t GeniusSDKRecoverFromChildGNUS( const GeniusTokenValue *a
 
     return ret;
 }
+
+GeniusNodeReturnValue_t GeniusSDKDetachChild( GeniusRegistrationMetadata metadata )
+{
+    const std::lock_guard<std::recursive_mutex> lock( GeniusSDKMutex );
+
+    GeniusNodeReturnValue ret = GENIUS_NODE_ERROR_NOT_INITIALIZED;
+    do
+    {
+        if ( !GeniusNodeInstance )
+        {
+            break;
+        }
+        auto proto_metadata = ToRegistrationMetadataProto( metadata );
+        auto result         = GeniusNodeInstance->DetachChild( proto_metadata );
+
+        if ( !result.has_value() )
+        {
+            ret = GENIUS_NODE_ERROR_REGISTRATION;
+            std::cerr << "Error detaching child: " << result.error() << std::endl;
+            break;
+        }
+        ret = GENIUS_NODE_RET_OK;
+    } while ( 0 );
+
+    return ret;
+}
+
+GeniusNodeReturnValue_t GeniusSDKReplaceMain( const char *new_main_address, GeniusRegistrationMetadata metadata )
+{
+    const std::lock_guard<std::recursive_mutex> lock( GeniusSDKMutex );
+
+    GeniusNodeReturnValue ret = GENIUS_NODE_ERROR_NOT_INITIALIZED;
+    do
+    {
+        if ( !GeniusNodeInstance )
+        {
+            break;
+        }
+        if ( new_main_address == nullptr || new_main_address[0] == '\0' )
+        {
+            ret = GENIUS_NODE_INVALID_ARGUMENT;
+            break;
+        }
+        auto proto_metadata = ToRegistrationMetadataProto( metadata );
+        auto result         = GeniusNodeInstance->ReplaceMain( std::string( new_main_address ), proto_metadata );
+
+        if ( !result.has_value() )
+        {
+            ret = GENIUS_NODE_ERROR_REGISTRATION;
+            std::cerr << "Error replacing main: " << result.error() << std::endl;
+            break;
+        }
+        ret = GENIUS_NODE_RET_OK;
+    } while ( 0 );
+
+    return ret;
+}
+
+GeniusNodeReturnValue_t GeniusSDKRevokeChild( const char *child_address )
+{
+    const std::lock_guard<std::recursive_mutex> lock( GeniusSDKMutex );
+
+    GeniusNodeReturnValue ret = GENIUS_NODE_ERROR_NOT_INITIALIZED;
+    do
+    {
+        if ( !GeniusNodeInstance )
+        {
+            break;
+        }
+        if ( child_address == nullptr || child_address[0] == '\0' )
+        {
+            ret = GENIUS_NODE_INVALID_ARGUMENT;
+            break;
+        }
+        auto result = GeniusNodeInstance->RevokeChild( std::string( child_address ) );
+
+        if ( !result.has_value() )
+        {
+            ret = GENIUS_NODE_ERROR_REGISTRATION;
+            std::cerr << "Error revoking child: " << result.error() << std::endl;
+            break;
+        }
+        ret = GENIUS_NODE_RET_OK;
+    } while ( 0 );
+
+    return ret;
+}
