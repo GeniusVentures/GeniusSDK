@@ -124,7 +124,9 @@ typedef enum
     GENIUS_NODE_INVALID_ARGUMENT,
     GENIUS_NODE_ERROR_TRANSFER,
     GENIUS_NODE_ERROR_PAY_DEV,
-    GENIUS_NODE_ERROR_REGISTRATION ///< GeniusSDKRegisterChild submission failure or GeniusSDKGetRegistrationsForMain discovery-query failure
+    GENIUS_NODE_ERROR_REGISTRATION ///< GeniusSDKRegisterChild submission failure, GeniusSDKGetRegistrationsForMain
+                                    ///< discovery-query failure, or GeniusSDKDetachChild/GeniusSDKReplaceMain/
+                                    ///< GeniusSDKRevokeChild lifecycle-change submission failure
 } GeniusNodeReturnValue;
 
 /**
@@ -658,6 +660,54 @@ GNUS_VISIBILITY_DEFAULT GeniusNodeReturnValue_t GeniusSDKRecoverFromChild( uint6
  */
 GNUS_VISIBILITY_DEFAULT GeniusNodeReturnValue_t GeniusSDKRecoverFromChildGNUS( const GeniusTokenValue *amount,
                                                                                 const char             *child_address );
+
+/* --- Child Wallet Lifecycle (v2.4) --- */
+
+/**
+ * @brief     Creates a child-initiated Detach transaction, ending this node's own child-wallet
+ *            registration under its current main (D-35). Wraps the auto-derived-sequence
+ *            overload of `GeniusNode::DetachChild` — the registration sequence number is derived
+ *            automatically from this node's existing reg/ CRDT record; no address parameter is
+ *            required since this node acts as the child on its own registration.
+ * @param[in] metadata Registration metadata carried forward on the lifecycle-change transaction.
+ * @return @ref GENIUS_NODE_RET_OK on successful submission, @ref GENIUS_NODE_ERROR_NOT_INITIALIZED
+ *         if the SDK is not initialized, or @ref GENIUS_NODE_ERROR_REGISTRATION if submission
+ *         failed — including the case where no prior reg/ record exists for this node (the
+ *         auto-derive overload's own fail-closed behavior, not a wrapper-level argument check).
+ */
+GNUS_VISIBILITY_DEFAULT GeniusNodeReturnValue_t GeniusSDKDetachChild( GeniusRegistrationMetadata metadata );
+
+/**
+ * @brief     Creates a child-initiated Replace-Main transaction, changing this node's registered
+ *            main wallet address (D-37). Wraps the auto-derived-sequence overload of
+ *            `GeniusNode::ReplaceMain`.
+ * @param[in] new_main_address Null-terminated string representing the new main wallet's public
+ *                             address (128-hex).
+ * @param[in] metadata         Registration metadata carried forward on the lifecycle-change
+ *                             transaction.
+ * @return @ref GENIUS_NODE_RET_OK on successful submission, @ref GENIUS_NODE_ERROR_NOT_INITIALIZED
+ *         if the SDK is not initialized, @ref GENIUS_NODE_INVALID_ARGUMENT if `new_main_address`
+ *         is null/empty, or @ref GENIUS_NODE_ERROR_REGISTRATION if submission failed — including
+ *         the no-prior-reg/-record fail-closed case, same caveat as @ref GeniusSDKDetachChild.
+ */
+GNUS_VISIBILITY_DEFAULT GeniusNodeReturnValue_t GeniusSDKReplaceMain( const char *new_main_address, GeniusRegistrationMetadata metadata );
+
+/**
+ * @brief     Creates a main-initiated Revoke transaction against a registered child wallet
+ *            (D-36). Wraps the fire-and-forget overload of `GeniusNode::RevokeChild` — mirrors
+ *            @ref GeniusSDKRecoverFromChild's choice of the non-timeout overload.
+ * @param[in] child_address Null-terminated string representing the registered child wallet's
+ *                          public address being revoked.
+ * @return @ref GENIUS_NODE_RET_OK on successful submission, @ref GENIUS_NODE_ERROR_NOT_INITIALIZED
+ *         if the SDK is not initialized, @ref GENIUS_NODE_INVALID_ARGUMENT if `child_address` is
+ *         null/empty, or @ref GENIUS_NODE_ERROR_REGISTRATION on submission failure.
+ * @note This call is fire-and-forget and reports submission-time status only; unauthorized-revoke
+ *       rejection (non-main caller, sequence mismatch — enforced by the `CheckParentChildAuthority`
+ *       revoke branch and `FilterRegistration` gate 3b) is only evaluated at consensus finalization
+ *       and cannot be observed by this synchronous wrapper — @ref GENIUS_NODE_RET_OK means
+ *       "submitted," not "confirmed by consensus."
+ */
+GNUS_VISIBILITY_DEFAULT GeniusNodeReturnValue_t GeniusSDKRevokeChild( const char *child_address );
 
 GNUS_EXPORT_END
 
