@@ -87,10 +87,10 @@ namespace
         return outcome::success( sgns::TokenID::FromBytes( buf.data(), buf.size() ) );
     }
 
-    // Helper function to parse JSON string into DevConfig_st
-    outcome::result<DevConfig_st, JsonError> ParseDevConfig( const std::string &jsonStr, const std::string &base_path )
+    // Helper function to parse JSON string into GeniusNodeConfig
+    outcome::result<GeniusNodeConfig, JsonError> ParseDevConfig( const std::string &jsonStr, const std::string &base_path )
     {
-        DevConfig_st           config_from_file = {};
+        GeniusNodeConfig       config_from_file = {};
         rapidjson::Document    document;
         rapidjson::ParseResult parseResult = document.Parse( jsonStr.c_str() );
         if ( parseResult == nullptr )
