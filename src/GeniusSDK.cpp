@@ -7,6 +7,8 @@
 
 #include "GeniusSDK.h"
 
+#include "GeniusSDK.hpp"
+
 #include <account/GeniusAccount.hpp>
 #include <algorithm>
 #include <blockchain/Blockchain.hpp>
@@ -172,6 +174,12 @@ namespace
         ret_val.append( base_path );
         return ret_val.c_str();
     }
+}
+
+std::shared_ptr<sgns::GeniusNode> GeniusSDKGetNode()
+{
+    const std::lock_guard<std::recursive_mutex> lock( GeniusSDKMutex );
+    return GeniusNodeInstance; // shared_ptr copy — safe handoff
 }
 
 const char *GeniusSDKInit( const char *base_path, const char *dev_config )
