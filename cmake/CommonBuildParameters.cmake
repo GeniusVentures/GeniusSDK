@@ -19,15 +19,27 @@ if(APPLE)
     endif()
 endif()
 
+set(VulkanHeaders_DIR "${THIRDPARTY_BUILD_DIR}/Vulkan-Headers/share/cmake/VulkanHeaders" CACHE PATH "Path to Vulkan-Headers install folder")
+find_package(VulkanHeaders CONFIG REQUIRED)
 find_package(Vulkan)
 
 if(NOT TARGET Vulkan::Vulkan)
+    set(Vulkan_INCLUDE_DIR "${THIRDPARTY_BUILD_DIR}/Vulkan-Headers/include")
     if(NOT DEFINED $ENV{VULKAN_SDK})
         set(ENV{VULKAN_SDK} "${THIRDPARTY_BUILD_DIR}/Vulkan-Loader")
     endif()
 
     find_package(Vulkan REQUIRED)
 endif()
+
+# Force Vulkan::Vulkan to use the vendored Vulkan-Headers on every platform,
+# even when find_package(Vulkan) resolves against a system-installed SDK.
+# vk-bootstrap here is built against the vendored v1.4 headers, so mixing in
+# a different system header version causes unknown-type errors in
+# VkBootstrapDispatch.h / VkBootstrapFeatureChain.h.
+set_target_properties(Vulkan::Vulkan PROPERTIES
+    INTERFACE_INCLUDE_DIRECTORIES "${THIRDPARTY_BUILD_DIR}/Vulkan-Headers/include"
+)
 
 set(ZLIB_DIR "${THIRDPARTY_BUILD_DIR}/zlib/lib/cmake/zlib")
 find_package(ZLIB CONFIG REQUIRED)
