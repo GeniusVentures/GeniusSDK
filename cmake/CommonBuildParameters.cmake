@@ -443,6 +443,19 @@ set(SGProcessingManager_DIR "${SUPERGENIUS_BUILD_DIR}/SuperGenius/lib/cmake/SGPr
 
 print("SuperGenius_DIR: ${SuperGenius_DIR}")
 
+# shaderc installs no CMake package config, so SuperGenius hand-rolls this
+# IMPORTED target rather than exporting one; SGProcessingManagerTargets.cmake's
+# SGShaderCompiler link interface references shaderc::shaderc directly, so
+# consumers of that export (like this file) must define the same target
+# themselves before find_package(SGProcessingManager) resolves it below.
+if(NOT TARGET shaderc::shaderc)
+    add_library(shaderc::shaderc STATIC IMPORTED GLOBAL)
+    set_target_properties(shaderc::shaderc PROPERTIES
+        IMPORTED_LOCATION "${THIRDPARTY_BUILD_DIR}/shaderc/lib/${CMAKE_STATIC_LIBRARY_PREFIX}shaderc_combined${CMAKE_STATIC_LIBRARY_SUFFIX}"
+        INTERFACE_INCLUDE_DIRECTORIES "${THIRDPARTY_BUILD_DIR}/shaderc/include"
+    )
+endif()
+
 find_package(evmrelay CONFIG REQUIRED)
 find_package(ProofSystem CONFIG REQUIRED)
 find_package(SGProcessingManager CONFIG REQUIRED)
