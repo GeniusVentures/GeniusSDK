@@ -503,6 +503,16 @@ GNUS_VISIBILITY_DEFAULT GeniusTransactionManagerState_t GeniusSDKGetTransactionM
 GNUS_VISIBILITY_DEFAULT GeniusNodeState_t GeniusSDKGetNodeState();
 
 /**
+ * @brief       Retrieves an opaque handle to the running node's shared PubSub instance.
+ * @return      Opaque handle to the node's `sgns::ipfs_pubsub::GossipPubSub`, or `nullptr`
+ *              if the SDK has not been initialized yet (no active node) or the node has
+ *              not started its PubSub service. Ownership remains with the SDK's internal
+ *              node instance — the handle must NOT be passed to GeniusSDKFree() and is
+ *              only valid for as long as the initialized node remains alive.
+ */
+GNUS_VISIBILITY_DEFAULT void *GeniusSDKGetPubSub();
+
+/**
  * @brief       Retrieves the status of a specific transaction.
  * @param[in]   tx_id A null-terminated string representing the transaction ID.
  * @return      The transaction status as a @ref GeniusTransactionStatus enum value.

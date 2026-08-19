@@ -996,6 +996,17 @@ GeniusNodeState_t GeniusSDKGetNodeState()
     return static_cast<GeniusNodeState>( GeniusNodeInstance->GetState() );
 }
 
+void *GeniusSDKGetPubSub()
+{
+    const std::lock_guard<std::recursive_mutex> lock( GeniusSDKMutex );
+
+    if ( !GeniusNodeInstance )
+    {
+        return nullptr;
+    }
+    return static_cast<void *>( GeniusNodeInstance->GetPubSub().get() );
+}
+
 GeniusTransactionStatus_t GeniusSDKGetTransactionStatus( const char *tx_id )
 {
     const std::lock_guard<std::recursive_mutex> lock( GeniusSDKMutex );
