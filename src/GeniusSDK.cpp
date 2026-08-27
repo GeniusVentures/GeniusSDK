@@ -668,7 +668,7 @@ uint64_t GeniusSDKGetCost( const JsonData_t jsondata )
     {
         return 0;
     }
-    return GeniusNodeInstance->GetProcessCost( procmgr.value() );
+    return GeniusNodeInstance->GetProcessCost( *procmgr.value() );
 }
 
 GeniusTokenValue GeniusSDKGetCostGNUS( const JsonData_t jsondata )
@@ -689,7 +689,7 @@ GeniusTokenValue GeniusSDKGetCostGNUS( const JsonData_t jsondata )
         tv.value[sizeof( tv.value ) - 1] = '\0';
         return tv;
     }
-    uint64_t rawCost = GeniusNodeInstance->GetProcessCost( procmgr.value() );
+    uint64_t rawCost = GeniusNodeInstance->GetProcessCost( *procmgr.value() );
 
     auto fmt = GeniusNodeInstance->FormatTokens( rawCost, sgns::TokenID::FromBytes( { 0x00 } ) );
     if ( fmt.has_value() )
