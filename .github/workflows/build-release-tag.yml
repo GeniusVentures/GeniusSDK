@@ -351,11 +351,21 @@ jobs:
           gh release download ${THIRDPARTY_TAG} --repo GeniusVentures/thirdparty -p "${FILE_NAME}"
           tar -zxf "${FILE_NAME}"
 
+          # THIRDPARTY_DIR must be exported from inside this bash step, not
+          # via the ${{github.workspace}} template expression in the configure
+          # steps below. For container jobs (Linux), github.workspace is the
+          # HOST runner path (/home/<user>/...); inside the container the
+          # workspace is mounted at /__w/... A host-path THIRDPARTY_DIR makes
+          # the EXISTS check in CommonCompilerOptions.cmake fail and pushes
+          # cmake into its self-download branch (which downloads develop, not
+          # the pinned tag, and then fails to extract).
           if [ "${{ matrix.target }}" = "Windows" ]; then
             # Convert Unix path to Windows path for Windows builds
             echo "THIRDPARTY_BUILD_DIR=$(pwd -W)/${BUILD_DIRECTORY}" >> $GITHUB_ENV
+            echo "THIRDPARTY_DIR=$(pwd -W)" >> $GITHUB_ENV
           else
             echo "THIRDPARTY_BUILD_DIR=$(pwd)/${BUILD_DIRECTORY}" >> $GITHUB_ENV
+            echo "THIRDPARTY_DIR=$(pwd)" >> $GITHUB_ENV
           fi
 
       - name: Download zkLLVM release
@@ -446,27 +456,27 @@ jobs:
       - name: Configure CMake for Android
         if: ${{ matrix.target == 'Android'}}
         working-directory: ${{github.workspace}}/GeniusSDK
-        run: cmake -S build/${{matrix.target}} -B $BUILD_DIRECTORY -DCMAKE_BUILD_TYPE=${{matrix.build-type}} -DANDROID_ABI=${{matrix.abi}} -DTHIRDPARTY_DIR=${{github.workspace}}/thirdparty -DTHIRDPARTY_BUILD_DIR=${{env.THIRDPARTY_BUILD_DIR}} -DZKLLVM_DIR=${{env.ZKLLVM_BUILD_DIR}} -DZKLLVM_BUILD_DIR=${{env.ZKLLVM_BUILD_DIR}} -DSUPERGENIUS_SRC_DIR=${{env.SUPERGENIUS_DIR}} -DSUPERGENIUS_DIR=${{env.SUPERGENIUS_DIR}}
+        run: cmake -S build/${{matrix.target}} -B $BUILD_DIRECTORY -DCMAKE_BUILD_TYPE=${{matrix.build-type}} -DANDROID_ABI=${{matrix.abi}} -DTHIRDPARTY_DIR=${{env.THIRDPARTY_DIR}} -DTHIRDPARTY_BUILD_DIR=${{env.THIRDPARTY_BUILD_DIR}} -DZKLLVM_DIR=${{env.ZKLLVM_BUILD_DIR}} -DZKLLVM_BUILD_DIR=${{env.ZKLLVM_BUILD_DIR}} -DSUPERGENIUS_SRC_DIR=${{env.SUPERGENIUS_DIR}} -DSUPERGENIUS_DIR=${{env.SUPERGENIUS_DIR}}
 
       - name: Configure CMake for Mac
         if: ${{ matrix.target == 'OSX'}}
         working-directory: ${{github.workspace}}/GeniusSDK
-        run: cmake -S build/${{matrix.target}} -B $BUILD_DIRECTORY -DCMAKE_BUILD_TYPE=${{matrix.build-type}} -DPLATFORM=MAC_UNIVERSAL -DTHIRDPARTY_DIR=${{github.workspace}}/thirdparty -DTHIRDPARTY_BUILD_DIR=${{env.THIRDPARTY_BUILD_DIR}} -DZKLLVM_DIR=${{env.ZKLLVM_BUILD_DIR}} -DZKLLVM_BUILD_DIR=${{env.ZKLLVM_BUILD_DIR}} -DSUPERGENIUS_SRC_DIR=${{env.SUPERGENIUS_DIR}} -DSUPERGENIUS_DIR=${{env.SUPERGENIUS_DIR}}
+        run: cmake -S build/${{matrix.target}} -B $BUILD_DIRECTORY -DCMAKE_BUILD_TYPE=${{matrix.build-type}} -DPLATFORM=MAC_UNIVERSAL -DTHIRDPARTY_DIR=${{env.THIRDPARTY_DIR}} -DTHIRDPARTY_BUILD_DIR=${{env.THIRDPARTY_BUILD_DIR}} -DZKLLVM_DIR=${{env.ZKLLVM_BUILD_DIR}} -DZKLLVM_BUILD_DIR=${{env.ZKLLVM_BUILD_DIR}} -DSUPERGENIUS_SRC_DIR=${{env.SUPERGENIUS_DIR}} -DSUPERGENIUS_DIR=${{env.SUPERGENIUS_DIR}}
 
       - name: Configure CMake for iOS
         if: ${{ matrix.target == 'iOS'}}
         working-directory: ${{github.workspace}}/GeniusSDK
-        run: cmake -S build/${{matrix.target}} -B $BUILD_DIRECTORY -DCMAKE_BUILD_TYPE=${{matrix.build-type}} -DPLATFORM=OS64 -DTHIRDPARTY_DIR=${{github.workspace}}/thirdparty -DTHIRDPARTY_BUILD_DIR=${{env.THIRDPARTY_BUILD_DIR}} -DZKLLVM_DIR=${{env.ZKLLVM_BUILD_DIR}} -DZKLLVM_BUILD_DIR=${{env.ZKLLVM_BUILD_DIR}} -DSUPERGENIUS_SRC_DIR=${{env.SUPERGENIUS_DIR}} -DSUPERGENIUS_DIR=${{env.SUPERGENIUS_DIR}}
+        run: cmake -S build/${{matrix.target}} -B $BUILD_DIRECTORY -DCMAKE_BUILD_TYPE=${{matrix.build-type}} -DPLATFORM=OS64 -DTHIRDPARTY_DIR=${{env.THIRDPARTY_DIR}} -DTHIRDPARTY_BUILD_DIR=${{env.THIRDPARTY_BUILD_DIR}} -DZKLLVM_DIR=${{env.ZKLLVM_BUILD_DIR}} -DZKLLVM_BUILD_DIR=${{env.ZKLLVM_BUILD_DIR}} -DSUPERGENIUS_SRC_DIR=${{env.SUPERGENIUS_DIR}} -DSUPERGENIUS_DIR=${{env.SUPERGENIUS_DIR}}
 
       - name: Configure CMake for Linux
         if: ${{matrix.target == 'Linux'}}
         working-directory: ${{github.workspace}}/GeniusSDK
-        run: cmake -S build/${{matrix.target}} -B $BUILD_DIRECTORY -DCMAKE_BUILD_TYPE=${{matrix.build-type}} -DTHIRDPARTY_DIR=${{github.workspace}}/thirdparty -DTHIRDPARTY_BUILD_DIR=${{env.THIRDPARTY_BUILD_DIR}} -DZKLLVM_DIR=${{env.ZKLLVM_BUILD_DIR}} -DZKLLVM_BUILD_DIR=${{env.ZKLLVM_BUILD_DIR}} -DSUPERGENIUS_SRC_DIR=${{env.SUPERGENIUS_DIR}} -DSUPERGENIUS_DIR=${{env.SUPERGENIUS_DIR}} -DABI_SUBFOLDER_NAME='/${{matrix.abi}}'
+        run: cmake -S build/${{matrix.target}} -B $BUILD_DIRECTORY -DCMAKE_BUILD_TYPE=${{matrix.build-type}} -DTHIRDPARTY_DIR=${{env.THIRDPARTY_DIR}} -DTHIRDPARTY_BUILD_DIR=${{env.THIRDPARTY_BUILD_DIR}} -DZKLLVM_DIR=${{env.ZKLLVM_BUILD_DIR}} -DZKLLVM_BUILD_DIR=${{env.ZKLLVM_BUILD_DIR}} -DSUPERGENIUS_SRC_DIR=${{env.SUPERGENIUS_DIR}} -DSUPERGENIUS_DIR=${{env.SUPERGENIUS_DIR}} -DABI_SUBFOLDER_NAME='/${{matrix.abi}}'
 
       - name: Configure CMake for Windows
         if: ${{matrix.target == 'Windows'}}
         working-directory: ${{github.workspace}}/GeniusSDK
-        run: cmake -S build/${{matrix.target}} -B $env:BUILD_DIRECTORY -DCMAKE_BUILD_TYPE=${{matrix.build-type}} -DTHIRDPARTY_DIR=${{github.workspace}}/thirdparty -DTHIRDPARTY_BUILD_DIR=${{env.THIRDPARTY_BUILD_DIR}} -DZKLLVM_DIR=${{env.ZKLLVM_BUILD_DIR}} -DZKLLVM_BUILD_DIR=${{env.ZKLLVM_BUILD_DIR}} -DSUPERGENIUS_SRC_DIR=${{env.SUPERGENIUS_DIR}} -DSUPERGENIUS_DIR=${{env.SUPERGENIUS_DIR}}
+        run: cmake -S build/${{matrix.target}} -B $env:BUILD_DIRECTORY -DCMAKE_BUILD_TYPE=${{matrix.build-type}} -DTHIRDPARTY_DIR=${{env.THIRDPARTY_DIR}} -DTHIRDPARTY_BUILD_DIR=${{env.THIRDPARTY_BUILD_DIR}} -DZKLLVM_DIR=${{env.ZKLLVM_BUILD_DIR}} -DZKLLVM_BUILD_DIR=${{env.ZKLLVM_BUILD_DIR}} -DSUPERGENIUS_SRC_DIR=${{env.SUPERGENIUS_DIR}} -DSUPERGENIUS_DIR=${{env.SUPERGENIUS_DIR}}
 
       - name: Build GeniusSDK
         working-directory: ${{github.workspace}}/GeniusSDK/${{env.BUILD_DIRECTORY}}
