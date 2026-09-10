@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <blockchain/Blockchain.hpp>
 #include <cstdint>
+#include <cstdlib>
 #include <memory>
 #include <mutex>
 #include <spdlog/spdlog.h>
@@ -104,7 +105,11 @@ namespace
         {
             return outcome::failure( JsonError( "Missing or invalid 'Address'" ) );
         }
-        if ( !document.HasMember( "Cut" ) || !document["Cut"].IsString() )
+        // JSON key stays "Cut" for compatibility with shipped dev_config.json
+        // files (GeniusWallet assets, SDK example). SuperGenius renamed the
+        // struct member DevCut (std::string) -> DevFraction (double) in
+        // 3c2386269, so accept both string and numeric forms here.
+        if ( !document.HasMember( "Cut" ) || ( !document["Cut"].IsString() && !document["Cut"].IsNumber() ) )
         {
             return outcome::failure( JsonError( "Missing or invalid 'Cut'" ) );
         }
@@ -123,7 +128,14 @@ namespace
         }
 
         config_from_file.Addr = std::string( document["Address"].GetString(), document["Address"].GetStringLength() );
-        config_from_file.Cut  = document["Cut"].GetString();
+        if ( document["Cut"].IsString() )
+        {
+            config_from_file.DevFraction = std::strtod( document["Cut"].GetString(), nullptr );
+        }
+        else
+        {
+            config_from_file.DevFraction = document["Cut"].GetDouble();
+        }
         config_from_file.TokenValueInGNUS = document["TokenValue"].GetString();
         config_from_file.TokenID          = tidRes.value();
         config_from_file.BaseWritePath    = base_path;
