@@ -7,6 +7,8 @@
 
 #include "GeniusSDK.h"
 
+#include "GeniusSDK.hpp"
+
 #include <account/GeniusAccount.hpp>
 #include <algorithm>
 #include <blockchain/Blockchain.hpp>
@@ -216,6 +218,12 @@ namespace
         ret_val.append( base_path );
         return ret_val.c_str();
     }
+}
+
+std::shared_ptr<sgns::GeniusNode> GeniusSDKGetNode()
+{
+    const std::lock_guard<std::recursive_mutex> lock( GeniusSDKMutex );
+    return GeniusNodeInstance; // shared_ptr copy — safe handoff
 }
 
 const char *GeniusSDKInit( const char *base_path, const char *dev_config )
@@ -704,7 +712,7 @@ uint64_t GeniusSDKGetCost( const JsonData_t jsondata )
     {
         return 0;
     }
-    return GeniusNodeInstance->GetProcessCost( procmgr.value() );
+    return GeniusNodeInstance->GetProcessCost( *procmgr.value() );
 }
 
 GeniusTokenValue GeniusSDKGetCostGNUS( const JsonData_t jsondata )
@@ -725,7 +733,7 @@ GeniusTokenValue GeniusSDKGetCostGNUS( const JsonData_t jsondata )
         tv.value[sizeof( tv.value ) - 1] = '\0';
         return tv;
     }
-    uint64_t rawCost = GeniusNodeInstance->GetProcessCost( procmgr.value() );
+    uint64_t rawCost = GeniusNodeInstance->GetProcessCost( *procmgr.value() );
 
     auto fmt = GeniusNodeInstance->FormatTokens( rawCost, sgns::TokenID::FromBytes( { 0x00 } ) );
     if ( fmt.has_value() )
