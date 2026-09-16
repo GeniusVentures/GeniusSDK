@@ -123,7 +123,7 @@ namespace
         }
 
         config_from_file.Addr = std::string( document["Address"].GetString(), document["Address"].GetStringLength() );
-        config_from_file.Cut  = document["Cut"].GetString();
+        config_from_file.DevFraction = document["Cut"].GetString();
         config_from_file.TokenValueInGNUS = document["TokenValue"].GetString();
         config_from_file.TokenID          = tidRes.value();
         config_from_file.BaseWritePath    = base_path;
