@@ -107,9 +107,9 @@ namespace
         }
         // JSON key stays "Cut" for compatibility with shipped dev_config.json
         // files (GeniusWallet assets, SDK example). SuperGenius renamed the
-        // struct member DevCut (std::string) -> DevFraction (double) in
-        // 3c2386269, so accept both string and numeric forms here.
-        if ( !document.HasMember( "Cut" ) || ( !document["Cut"].IsString() && !document["Cut"].IsNumber() ) )
+        // struct member DevCut -> DevFraction (std::string, decimal form
+        // "0.35" = 35%), so the value must be a string.
+        if ( !document.HasMember( "Cut" ) || !document["Cut"].IsString() )
         {
             return outcome::failure( JsonError( "Missing or invalid 'Cut'" ) );
         }
@@ -128,14 +128,7 @@ namespace
         }
 
         config_from_file.Addr = std::string( document["Address"].GetString(), document["Address"].GetStringLength() );
-        if ( document["Cut"].IsString() )
-        {
-            config_from_file.DevFraction = std::strtod( document["Cut"].GetString(), nullptr );
-        }
-        else
-        {
-            config_from_file.DevFraction = document["Cut"].GetDouble();
-        }
+        config_from_file.DevFraction = document["Cut"].GetString();
         config_from_file.TokenValueInGNUS = document["TokenValue"].GetString();
         config_from_file.TokenID          = tidRes.value();
         config_from_file.BaseWritePath    = base_path;
