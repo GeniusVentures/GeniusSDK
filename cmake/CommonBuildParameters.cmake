@@ -19,15 +19,27 @@ if(APPLE)
     endif()
 endif()
 
+set(VulkanHeaders_DIR "${THIRDPARTY_BUILD_DIR}/Vulkan-Headers/share/cmake/VulkanHeaders" CACHE PATH "Path to Vulkan-Headers install folder")
+find_package(VulkanHeaders CONFIG REQUIRED)
 find_package(Vulkan)
 
 if(NOT TARGET Vulkan::Vulkan)
+    set(Vulkan_INCLUDE_DIR "${THIRDPARTY_BUILD_DIR}/Vulkan-Headers/include")
     if(NOT DEFINED $ENV{VULKAN_SDK})
         set(ENV{VULKAN_SDK} "${THIRDPARTY_BUILD_DIR}/Vulkan-Loader")
     endif()
 
     find_package(Vulkan REQUIRED)
 endif()
+
+# Force Vulkan::Vulkan to use the vendored Vulkan-Headers on every platform,
+# even when find_package(Vulkan) resolves against a system-installed SDK.
+# vk-bootstrap here is built against the vendored v1.4 headers, so mixing in
+# a different system header version causes unknown-type errors in
+# VkBootstrapDispatch.h / VkBootstrapFeatureChain.h.
+set_target_properties(Vulkan::Vulkan PROPERTIES
+    INTERFACE_INCLUDE_DIRECTORIES "${THIRDPARTY_BUILD_DIR}/Vulkan-Headers/include"
+)
 
 set(ZLIB_DIR "${THIRDPARTY_BUILD_DIR}/zlib/lib/cmake/zlib")
 find_package(ZLIB CONFIG REQUIRED)
@@ -47,6 +59,10 @@ set(MNN_INCLUDE_DIR "${THIRDPARTY_BUILD_DIR}/MNN/include")
 set(MNN_DIR "${THIRDPARTY_BUILD_DIR}/MNN/lib/cmake/MNN")
 find_package(MNN CONFIG REQUIRED)
 include_directories(${MNN_INCLUDE_DIR})
+
+# vk-bootstrap
+set(vk-bootstrap_DIR "${THIRDPARTY_BUILD_DIR}/vk-bootstrap/lib/cmake/vk-bootstrap")
+find_package(vk-bootstrap CONFIG REQUIRED)
 
 # soralog
 set(soralog_DIR "${THIRDPARTY_BUILD_DIR}/soralog/lib/cmake/soralog")
@@ -199,7 +215,7 @@ if(SGNS_STACKTRACE_BACKTRACE)
 endif()
 
 # header only libraries must not be added here
-find_package(Boost CONFIG REQUIRED COMPONENTS container date_time filesystem json random regex system thread log log_setup program_options unit_test_framework)
+find_package(Boost CONFIG REQUIRED COMPONENTS container date_time filesystem json random regex system thread log log_setup program_options unit_test_framework coroutine)
 
 # SQLiteModernCpp
 set(SQLiteModernCpp_ROOT_DIR "${THIRDPARTY_BUILD_DIR}/SQLiteModernCpp")
@@ -426,6 +442,19 @@ set(ProofSystem_DIR "${SUPERGENIUS_BUILD_DIR}/SuperGenius/lib/cmake/ProofSystem/
 set(SGProcessingManager_DIR "${SUPERGENIUS_BUILD_DIR}/SuperGenius/lib/cmake/SGProcessingManager/")
 
 print("SuperGenius_DIR: ${SuperGenius_DIR}")
+
+# shaderc installs no CMake package config, so SuperGenius hand-rolls this
+# IMPORTED target rather than exporting one; SGProcessingManagerTargets.cmake's
+# SGShaderCompiler link interface references shaderc::shaderc directly, so
+# consumers of that export (like this file) must define the same target
+# themselves before find_package(SGProcessingManager) resolves it below.
+if(NOT TARGET shaderc::shaderc)
+    add_library(shaderc::shaderc STATIC IMPORTED GLOBAL)
+    set_target_properties(shaderc::shaderc PROPERTIES
+        IMPORTED_LOCATION "${THIRDPARTY_BUILD_DIR}/shaderc/lib/${CMAKE_STATIC_LIBRARY_PREFIX}shaderc_combined${CMAKE_STATIC_LIBRARY_SUFFIX}"
+        INTERFACE_INCLUDE_DIRECTORIES "${THIRDPARTY_BUILD_DIR}/shaderc/include"
+    )
+endif()
 
 find_package(evmrelay CONFIG REQUIRED)
 find_package(ProofSystem CONFIG REQUIRED)

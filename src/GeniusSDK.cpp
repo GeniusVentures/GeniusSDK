@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <blockchain/Blockchain.hpp>
 #include <cstdint>
+#include <cstdlib>
 #include <memory>
 #include <mutex>
 #include <spdlog/spdlog.h>
@@ -104,6 +105,10 @@ namespace
         {
             return outcome::failure( JsonError( "Missing or invalid 'Address'" ) );
         }
+        // JSON key stays "Cut" for compatibility with shipped dev_config.json
+        // files (GeniusWallet assets, SDK example). SuperGenius renamed the
+        // struct member DevCut -> DevFraction (std::string, decimal form
+        // "0.35" = 35%), so the value must be a string.
         if ( !document.HasMember( "Cut" ) || !document["Cut"].IsString() )
         {
             return outcome::failure( JsonError( "Missing or invalid 'Cut'" ) );
@@ -161,6 +166,50 @@ namespace
         }
 
         return matrix;
+    }
+
+    SGTransaction::RegistrationMetadata ToRegistrationMetadataProto( const GeniusRegistrationMetadata &metadata )
+    {
+        SGTransaction::RegistrationMetadata proto_metadata;
+
+        proto_metadata.set_game_id(
+            std::string( metadata.game_id, strnlen( metadata.game_id, sizeof( metadata.game_id ) ) ) );
+        proto_metadata.set_publisher_id(
+            std::string( metadata.publisher_id, strnlen( metadata.publisher_id, sizeof( metadata.publisher_id ) ) ) );
+        proto_metadata.set_dev_wallet(
+            std::string( metadata.dev_wallet, strnlen( metadata.dev_wallet, sizeof( metadata.dev_wallet ) ) ) );
+        proto_metadata.set_peers_cut( metadata.peers_cut );
+
+        return proto_metadata;
+    }
+
+    GeniusRegistrationMetadata FromRegistrationMetadataProto( const SGTransaction::RegistrationMetadata &proto )
+    {
+        GeniusRegistrationMetadata metadata = {};
+
+        std::strncpy( metadata.game_id, proto.game_id().c_str(), sizeof( metadata.game_id ) - 1 );
+        metadata.game_id[sizeof( metadata.game_id ) - 1] = '\0';
+
+        std::strncpy( metadata.publisher_id, proto.publisher_id().c_str(), sizeof( metadata.publisher_id ) - 1 );
+        metadata.publisher_id[sizeof( metadata.publisher_id ) - 1] = '\0';
+
+        std::strncpy( metadata.dev_wallet, proto.dev_wallet().c_str(), sizeof( metadata.dev_wallet ) - 1 );
+        metadata.dev_wallet[sizeof( metadata.dev_wallet ) - 1] = '\0';
+
+        metadata.peers_cut = proto.peers_cut();
+
+        return metadata;
+    }
+
+    GeniusAddress MakeGeniusAddress( const std::string &address )
+    {
+        GeniusAddress ret = {};
+
+        ret.address[0] = '0';
+        ret.address[1] = 'x';
+        std::copy( address.cbegin(), address.cend(), &ret.address[2] );
+
+        return ret;
     }
 
     std::shared_ptr<sgns::GeniusNode> GeniusNodeInstance;
@@ -960,6 +1009,17 @@ GeniusNodeState_t GeniusSDKGetNodeState()
     return static_cast<GeniusNodeState>( GeniusNodeInstance->GetState() );
 }
 
+void *GeniusSDKGetPubSub()
+{
+    const std::lock_guard<std::recursive_mutex> lock( GeniusSDKMutex );
+
+    if ( !GeniusNodeInstance )
+    {
+        return nullptr;
+    }
+    return static_cast<void *>( GeniusNodeInstance->GetPubSub().get() );
+}
+
 GeniusTransactionStatus_t GeniusSDKGetTransactionStatus( const char *tx_id )
 {
     const std::lock_guard<std::recursive_mutex> lock( GeniusSDKMutex );
@@ -1073,4 +1133,341 @@ GeniusArray GeniusSDKGetTaskResult( const char *task_id )
     memcpy( buf, serialized.data(), serialized.size() );
 
     return { serialized.size(), buf };
+}
+
+GeniusNodeReturnValue_t GeniusSDKRegisterChild( const char *main_address, GeniusRegistrationMetadata metadata )
+{
+    const std::lock_guard<std::recursive_mutex> lock( GeniusSDKMutex );
+
+    GeniusNodeReturnValue ret = GENIUS_NODE_ERROR_NOT_INITIALIZED;
+    do
+    {
+        if ( !GeniusNodeInstance )
+        {
+            break;
+        }
+        if ( main_address == nullptr || main_address[0] == '\0' )
+        {
+            ret = GENIUS_NODE_INVALID_ARGUMENT;
+            break;
+        }
+        auto proto_metadata = ToRegistrationMetadataProto( metadata );
+        auto result         = GeniusNodeInstance->RegisterChild( std::string( main_address ), proto_metadata );
+
+        if ( !result.has_value() )
+        {
+            ret = GENIUS_NODE_ERROR_REGISTRATION;
+            std::cerr << "Error registering child: " << result.error() << std::endl;
+            break;
+        }
+        ret = GENIUS_NODE_RET_OK;
+    } while ( 0 );
+
+    return ret;
+}
+
+GeniusNodeReturnValue_t GeniusSDKGetRegistrationsForMain( const char                        *main_address,
+                                                           GeniusRegistrationDiscoveryEntry **out_entries,
+                                                           uint64_t                          *out_count )
+{
+    const std::lock_guard<std::recursive_mutex> lock( GeniusSDKMutex );
+
+    if ( out_entries != nullptr )
+    {
+        *out_entries = nullptr;
+    }
+    if ( out_count != nullptr )
+    {
+        *out_count = 0;
+    }
+
+    GeniusNodeReturnValue ret = GENIUS_NODE_ERROR_NOT_INITIALIZED;
+    do
+    {
+        if ( !GeniusNodeInstance )
+        {
+            break;
+        }
+        if ( main_address == nullptr || main_address[0] == '\0' || out_entries == nullptr || out_count == nullptr )
+        {
+            ret = GENIUS_NODE_INVALID_ARGUMENT;
+            break;
+        }
+        auto result = GeniusNodeInstance->GetRegistrationsForMain( std::string( main_address ) );
+
+        if ( !result.has_value() )
+        {
+            ret = GENIUS_NODE_ERROR_REGISTRATION;
+            std::cerr << "Error getting registrations for main: " << result.error() << std::endl;
+            break;
+        }
+
+        const auto &entries = result.value();
+        *out_count           = entries.size();
+
+        if ( !entries.empty() )
+        {
+            auto *array = reinterpret_cast<GeniusRegistrationDiscoveryEntry *>(
+                malloc( entries.size() * sizeof( GeniusRegistrationDiscoveryEntry ) ) );
+
+            for ( size_t i = 0; i < entries.size(); ++i )
+            {
+                array[i].child_address = MakeGeniusAddress( entries[i].child_addr );
+                array[i].main_address  = MakeGeniusAddress( entries[i].main_addr );
+                array[i].sequence      = entries[i].sequence;
+                array[i].metadata      = FromRegistrationMetadataProto( entries[i].metadata );
+            }
+
+            *out_entries = array;
+        }
+
+        ret = GENIUS_NODE_RET_OK;
+    } while ( 0 );
+
+    return ret;
+}
+
+uint64_t GeniusSDKGetChildBalance( const char *child_address, GeniusTokenID token_id )
+{
+    const std::lock_guard<std::recursive_mutex> lock( GeniusSDKMutex );
+
+    if ( !GeniusNodeInstance || child_address == nullptr )
+    {
+        return 0;
+    }
+
+    return GeniusNodeInstance->GetChildBalance( std::string( child_address ),
+                                                sgns::TokenID::FromBytes( token_id.data, sizeof( token_id.data ) ) );
+}
+
+uint64_t GeniusSDKGetChildBalanceAll( const char *child_address )
+{
+    const std::lock_guard<std::recursive_mutex> lock( GeniusSDKMutex );
+
+    if ( !GeniusNodeInstance || child_address == nullptr )
+    {
+        return 0;
+    }
+
+    return GeniusNodeInstance->GetChildBalance( std::string( child_address ) );
+}
+
+GeniusNodeReturnValue_t GeniusSDKFundChild( uint64_t amount, const char *child_address, GeniusTokenID token_id )
+{
+    const std::lock_guard<std::recursive_mutex> lock( GeniusSDKMutex );
+
+    GeniusNodeReturnValue ret = GENIUS_NODE_ERROR_NOT_INITIALIZED;
+    do
+    {
+        if ( !GeniusNodeInstance )
+        {
+            break;
+        }
+        if ( child_address == nullptr || child_address[0] == '\0' )
+        {
+            ret = GENIUS_NODE_INVALID_ARGUMENT;
+            break;
+        }
+        auto result = GeniusNodeInstance->TransferFunds(
+            amount,
+            std::string( child_address ),
+            sgns::TokenID::FromBytes( token_id.data, sizeof( token_id.data ) ) );
+        if ( !result.has_value() )
+        {
+            ret = GENIUS_NODE_ERROR_TRANSFER;
+            break;
+        }
+        ret = GENIUS_NODE_RET_OK;
+    } while ( 0 );
+
+    return ret;
+}
+
+GeniusNodeReturnValue_t GeniusSDKFundChildGNUS( const GeniusTokenValue *amount, const char *child_address )
+{
+    const std::lock_guard<std::recursive_mutex> lock( GeniusSDKMutex );
+
+    GeniusNodeReturnValue ret = GENIUS_NODE_ERROR_NOT_INITIALIZED;
+    do
+    {
+        if ( !GeniusNodeInstance )
+        {
+            break;
+        }
+        if ( amount == nullptr )
+        {
+            ret = GENIUS_NODE_INVALID_ARGUMENT;
+            break;
+        }
+        if ( child_address == nullptr || child_address[0] == '\0' )
+        {
+            ret = GENIUS_NODE_INVALID_ARGUMENT;
+            break;
+        }
+        auto parseRes = GeniusNodeInstance->ParseTokens( std::string( amount->value ),
+                                                         sgns::TokenID::FromBytes( { 0x00 } ) );
+        if ( !parseRes.has_value() )
+        {
+            ret = GENIUS_NODE_INVALID_ARGUMENT;
+            break;
+        }
+        GeniusTokenID gnus_id;
+        memset( gnus_id.data, 0, sizeof( gnus_id.data ) );
+        ret = static_cast<GeniusNodeReturnValue>( GeniusSDKFundChild( parseRes.value(), child_address, gnus_id ) );
+    } while ( 0 );
+
+    return ret;
+}
+
+GeniusNodeReturnValue_t GeniusSDKRecoverFromChild( uint64_t amount, const char *child_address, GeniusTokenID token_id )
+{
+    const std::lock_guard<std::recursive_mutex> lock( GeniusSDKMutex );
+
+    GeniusNodeReturnValue ret = GENIUS_NODE_ERROR_NOT_INITIALIZED;
+    do
+    {
+        if ( !GeniusNodeInstance )
+        {
+            break;
+        }
+        if ( child_address == nullptr || child_address[0] == '\0' )
+        {
+            ret = GENIUS_NODE_INVALID_ARGUMENT;
+            break;
+        }
+        auto result = GeniusNodeInstance->RecoverFromChild( std::string( child_address ), amount,
+            sgns::TokenID::FromBytes( token_id.data, sizeof( token_id.data ) ) );
+        if ( !result.has_value() )
+        {
+            ret = GENIUS_NODE_ERROR_TRANSFER;
+            break;
+        }
+        ret = GENIUS_NODE_RET_OK;
+    } while ( 0 );
+
+    return ret;
+}
+
+GeniusNodeReturnValue_t GeniusSDKRecoverFromChildGNUS( const GeniusTokenValue *amount, const char *child_address )
+{
+    const std::lock_guard<std::recursive_mutex> lock( GeniusSDKMutex );
+
+    GeniusNodeReturnValue ret = GENIUS_NODE_ERROR_NOT_INITIALIZED;
+    do
+    {
+        if ( !GeniusNodeInstance )
+        {
+            break;
+        }
+        if ( amount == nullptr )
+        {
+            ret = GENIUS_NODE_INVALID_ARGUMENT;
+            break;
+        }
+        if ( child_address == nullptr || child_address[0] == '\0' )
+        {
+            ret = GENIUS_NODE_INVALID_ARGUMENT;
+            break;
+        }
+        auto parseRes = GeniusNodeInstance->ParseTokens( std::string( amount->value ),
+                                                         sgns::TokenID::FromBytes( { 0x00 } ) );
+        if ( !parseRes.has_value() )
+        {
+            ret = GENIUS_NODE_INVALID_ARGUMENT;
+            break;
+        }
+        GeniusTokenID gnus_id;
+        memset( gnus_id.data, 0, sizeof( gnus_id.data ) );
+        ret = static_cast<GeniusNodeReturnValue>(
+            GeniusSDKRecoverFromChild( parseRes.value(), child_address, gnus_id ) );
+    } while ( 0 );
+
+    return ret;
+}
+
+GeniusNodeReturnValue_t GeniusSDKDetachChild( GeniusRegistrationMetadata metadata )
+{
+    const std::lock_guard<std::recursive_mutex> lock( GeniusSDKMutex );
+
+    GeniusNodeReturnValue ret = GENIUS_NODE_ERROR_NOT_INITIALIZED;
+    do
+    {
+        if ( !GeniusNodeInstance )
+        {
+            break;
+        }
+        auto proto_metadata = ToRegistrationMetadataProto( metadata );
+        auto result         = GeniusNodeInstance->DetachChild( proto_metadata );
+
+        if ( !result.has_value() )
+        {
+            ret = GENIUS_NODE_ERROR_REGISTRATION;
+            std::cerr << "Error detaching child: " << result.error() << std::endl;
+            break;
+        }
+        ret = GENIUS_NODE_RET_OK;
+    } while ( 0 );
+
+    return ret;
+}
+
+GeniusNodeReturnValue_t GeniusSDKReplaceMain( const char *new_main_address, GeniusRegistrationMetadata metadata )
+{
+    const std::lock_guard<std::recursive_mutex> lock( GeniusSDKMutex );
+
+    GeniusNodeReturnValue ret = GENIUS_NODE_ERROR_NOT_INITIALIZED;
+    do
+    {
+        if ( !GeniusNodeInstance )
+        {
+            break;
+        }
+        if ( new_main_address == nullptr || new_main_address[0] == '\0' )
+        {
+            ret = GENIUS_NODE_INVALID_ARGUMENT;
+            break;
+        }
+        auto proto_metadata = ToRegistrationMetadataProto( metadata );
+        auto result         = GeniusNodeInstance->ReplaceMain( std::string( new_main_address ), proto_metadata );
+
+        if ( !result.has_value() )
+        {
+            ret = GENIUS_NODE_ERROR_REGISTRATION;
+            std::cerr << "Error replacing main: " << result.error() << std::endl;
+            break;
+        }
+        ret = GENIUS_NODE_RET_OK;
+    } while ( 0 );
+
+    return ret;
+}
+
+GeniusNodeReturnValue_t GeniusSDKRevokeChild( const char *child_address )
+{
+    const std::lock_guard<std::recursive_mutex> lock( GeniusSDKMutex );
+
+    GeniusNodeReturnValue ret = GENIUS_NODE_ERROR_NOT_INITIALIZED;
+    do
+    {
+        if ( !GeniusNodeInstance )
+        {
+            break;
+        }
+        if ( child_address == nullptr || child_address[0] == '\0' )
+        {
+            ret = GENIUS_NODE_INVALID_ARGUMENT;
+            break;
+        }
+        auto result = GeniusNodeInstance->RevokeChild( std::string( child_address ) );
+
+        if ( !result.has_value() )
+        {
+            ret = GENIUS_NODE_ERROR_REGISTRATION;
+            std::cerr << "Error revoking child: " << result.error() << std::endl;
+            break;
+        }
+        ret = GENIUS_NODE_RET_OK;
+    } while ( 0 );
+
+    return ret;
 }
