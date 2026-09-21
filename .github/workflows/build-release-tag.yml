@@ -601,7 +601,12 @@ jobs:
       - name: Compress build artifacts
         working-directory: ${{github.workspace}}/GeniusSDK/${{env.BUILD_DIRECTORY}}
         run: |
-          tar --exclude=.git -czvf ${FILE_NAME} --transform 's|^|${BUILD_DIRECTORY}/|' GeniusSDK/
+          # Use the ${{env.BUILD_DIRECTORY}} template expression (expanded by
+          # the runner before the shell parses the line), NOT the shell
+          # variable inside single quotes: 's|^|${BUILD_DIRECTORY}/|' would be
+          # passed to tar literally, producing a top-level directory named
+          # "${BUILD_DIRECTORY}" in the archive instead of the build path.
+          tar --exclude=.git -czvf ${FILE_NAME} --transform 's|^|${{env.BUILD_DIRECTORY}}/|' GeniusSDK/
         shell: bash
 
       - name: Release SDK
