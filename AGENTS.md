@@ -303,3 +303,18 @@ Before declaring C++ work complete:
 Never claim a check passed unless it was actually run.
 
 If a required check cannot be run, state exactly which check was not run and why.
+
+---
+
+## Build-System Pre-PR Checklist
+
+Run `/gsd-code-review` with this checklist before any PR that touches builds (CMakeLists, *.cmake, build scripts, codegen wiring). These are the cross-platform / cross-tree failure modes that pass on the dev machine and only surface in external review:
+
+- **Artifact routing:** a SHARED-library target needs BOTH `RUNTIME_OUTPUT_DIRECTORY` (Windows DLL) and `LIBRARY_OUTPUT_DIRECTORY` (macOS dylib / Linux .so), PLUS per-config `<PROP>_<CONFIG>` entries — multi-config generators (Xcode, Ninja Multi-Config, MSVC) append `$<CONFIG>` to the plain directories, landing artifacts in `plugins/Debug/`-style subdirs that loaders never scan.
+- **Interpreter discovery:** NEVER `find_program(<var> python3)` — native Windows exposes `python.exe` / `py.exe`, and the lookup fails there even when Python is installed. Use `find_package(Python3 COMPONENTS Interpreter REQUIRED)` and alias to `Python3_EXECUTABLE`.
+- **No POSIX shell in build commands:** `sh -c` breaks native Windows. Drive multi-command logic with `${CMAKE_COMMAND} -DPYTHON=... -P driver.cmake` script mode.
+- **Absent submodules:** a non-recursive clone must still configure. Gate every `REQUIRED` lookup and `add_subdirectory` on an existence check — nothing tool-`REQUIRED` may run before the submodule guard.
+- **Default-off opt-ins:** wiring behind an `option(... OFF)` must execute nothing in a default build — audit `ALL` custom targets chained on generation / dependency resolution.
+- **Standalone subdir configures:** any `add_subdirectory`-able directory may be configured alone. `if(TARGET ...)`-guard every cross-directory link dependency; unguarded bare names degrade to `-l` linker flags.
+- **Generated sources:** a target compiling generated files registers only when its producer wiring exists (flag or `TARGET` check); otherwise skip with a `message(STATUS ...)` — never fail configure on a file only another wiring produces.
+- **Spec-driven regeneration:** generated code must regenerate when its spec changes (`CMAKE_CONFIGURE_DEPENDS` on the spec + newer-than stamp), including fresh trees (configure-time pre-generation before the globs).
