@@ -153,3 +153,6 @@ modules.xml
 
 # Python bytecode (e2e harness)
 __pycache__/
+
+# Preserved e2e failure runs (D-17) — never commit run artifacts
+/e2e/artifacts/
