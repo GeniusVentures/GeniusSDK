@@ -5,11 +5,14 @@ harness.
 
 Phase A (build_topology): everything a run can know before the first process
 boots — N fresh throwaway keys as 0600 files, derived ceremony addresses A_i
-(pure Python, pinned-vector checked at import), per-node dev/sgns/network
+(pure Python, pinned-vector checked at import), per-node dev/network/log
 configs, actor DB dirs, the port plan, a reserved-band network id, and the
-topology manifest (D-08/D-09). Phase B (write_peer_configs): the one fact that
-needs node 1 alive — peers' and actors' bootstrap_addresses from the
-bootstrapper's live PubSub multiaddr.
+topology manifest (D-08/D-09). Phase A2 (write_trust_configs): per-node
+sgns_config.json, written once node 1's SDK account address B_1 is known (it
+is the authorized_full_node that un-defers blockchain start — see
+write_trust_configs). Phase B (write_peer_configs): the one fact that needs
+node 1 alive on the final boot — peers' and actors' bootstrap_addresses from
+the bootstrapper's live PubSub multiaddr.
 
 The topology manifest is the single source every later stage reads; peer_set is
 THE peer-set fact shared by sgns_config generation here and plan 02-03's
@@ -106,20 +109,8 @@ def build_topology(run_dir: str, nodes: int, runner_default_ports: bool = False)
             "TokenValue": "1.0",
             "TokenID": "0x" + "0" * 64,
         })
-        # Floor-parity anti-strand invariant: trusted_peers carries ALL N-1
-        # non-bootstrapper addresses — the exact set make-manifest receives as
-        # --peers (D-12b). The node rebuilds its expected genesis manifest from
-        # these fields and defaults quorum floors from trusted_peers.size()
-        # (GeniusNode.cpp L441-449), so a shorter list computes floors that can
-        # never match the manifest's and every node strands in
-        # WAITING_FOR_TRUST_GENESIS. subnet_id MUST equal the manifest
-        # network-id (Pitfall 10).
-        _write_json(os.path.join(base_dir, "sgns_config.json"), {
-            "node_type": "Full",
-            "subnet_id": network_id,
-            "bootstrapper_node": bootstrapper,
-            "trusted_peers": list(peer_set),
-        })
+        # sgns_config.json is written by write_trust_configs once node 1's
+        # account address B_1 is known (authorized_full_node wiring).
         # The node logger sinks to <base>/sgnslog2.log at err level in this
         # build (InitLoggers L1297); promote the one logger that owns the
         # PubSub multiaddr line (GeniusNode.cpp L1671) to info so the staged
@@ -179,6 +170,42 @@ def build_topology(run_dir: str, nodes: int, runner_default_ports: bool = False)
     return topology
 
 
+_HEX = set("0123456789abcdef")
+
+
+def write_trust_configs(topology: dict, authorized_full_node: str) -> None:
+    """sgns_config.json for every node (phase A2 — after B_1 discovery).
+
+    authorized_full_node is the bootstrapper's SDK ACCOUNT address B_1 (read
+    from node1/secure_storage_id after its identity boot; KDF-derived, NOT the
+    ceremony address A_1 — research Fact 5). Blockchain::Start defers until
+    the genesis validator registry exists, and only the node whose account
+    address equals authorized_full_node writes it
+    (Blockchain::EnsureValidatorRegistry); everyone else waits for its
+    broadcast — so without this key every node strands in
+    INITIALIZING_BLOCKCHAIN and never reaches WAITING_FOR_TRUST_GENESIS.
+    """
+    if not (len(authorized_full_node) == 128
+            and set(authorized_full_node) <= _HEX):
+        raise ValueError("authorized_full_node must be a 128-hex address")
+    for entry in topology["nodes"]:
+        # Floor-parity anti-strand invariant: trusted_peers carries ALL N-1
+        # non-bootstrapper addresses — the exact set make-manifest receives as
+        # --peers (D-12b). The node rebuilds its expected genesis manifest from
+        # these fields and defaults quorum floors from trusted_peers.size()
+        # (GeniusNode.cpp L441-449), so a shorter list computes floors that can
+        # never match the manifest's and every node strands in
+        # WAITING_FOR_TRUST_GENESIS. subnet_id MUST equal the manifest
+        # network-id (Pitfall 10).
+        _write_json(os.path.join(entry["base_dir"], "sgns_config.json"), {
+            "node_type": "Full",
+            "subnet_id": topology["network_id"],
+            "authorized_full_node": authorized_full_node,
+            "bootstrapper_node": topology["bootstrapper"],
+            "trusted_peers": list(topology["peer_set"]),
+        })
+
+
 def write_peer_configs(topology: dict, node1_multiaddr: str) -> None:
     """Phase B: configs that need the bootstrapper's live PubSub multiaddr.
 
@@ -236,24 +263,34 @@ def _selftest() -> None:
         low, high = NETWORK_ID_RESERVED_RANGE
         assert low <= topology["network_id"] <= high
 
-        # Phase A: node 1's configs parse; trust wiring parity holds.
+        # Phase A: node 1's configs parse; no trust configs exist yet (phase
+        # A2 writes them only after B_1 discovery).
         node1 = topology["nodes"][0]
-        for name in ("dev_config.json", "sgns_config.json", "network_config.json",
-                     "log_config.json"):
+        for name in ("dev_config.json", "network_config.json", "log_config.json"):
             _read_json(os.path.join(node1["base_dir"], name))
-        sgns = _read_json(os.path.join(node1["base_dir"], "sgns_config.json"))
-        assert sgns["node_type"] == "Full"
-        assert sgns["subnet_id"] == topology["network_id"]
-        assert sgns["bootstrapper_node"] == topology["bootstrapper"]
-        assert sgns["trusted_peers"] == topology["peer_set"]
+        assert not os.path.exists(os.path.join(node1["base_dir"], "sgns_config.json"))
         node_seeds = [node1["port_seed"]]
         for entry in topology["nodes"][1:]:
             assert not os.path.exists(entry["network_config"])  # phase B not yet
+            assert not os.path.exists(os.path.join(entry["base_dir"], "sgns_config.json"))
+            node_seeds.append(entry["port_seed"])
+
+        # Phase A2: trust configs with the authorized account address.
+        authorized = "ab" * 64
+        write_trust_configs(topology, authorized)
+        try:
+            write_trust_configs(topology, "not-hex")
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("non-128-hex authorized address must be rejected")
+        for entry in topology["nodes"]:
             sgns = _read_json(os.path.join(entry["base_dir"], "sgns_config.json"))
+            assert sgns["node_type"] == "Full"
             assert sgns["subnet_id"] == topology["network_id"]
+            assert sgns["authorized_full_node"] == authorized
             assert sgns["bootstrapper_node"] == topology["bootstrapper"]
             assert sgns["trusted_peers"] == topology["peer_set"]
-            node_seeds.append(entry["port_seed"])
 
         # Ports: node seeds pairwise distinct and spaced >300 (Pitfall 4);
         # actor ports pairwise distinct and in a disjoint band.
