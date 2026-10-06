@@ -11,7 +11,7 @@ User=geniussdk
 EnvironmentFile=-/etc/geniussdk/common.conf
 Environment="GENIUSSDK_BIN=/usr/bin/GeniusSDKService"
 Environment="GENIUSSDK_JOBPOSTER_PATH=/var/lib/geniussdk/jobposter/"
-ExecStart=/bin/sh -c 'exec $GENIUSSDK_BIN $GENIUSSDK_JOBPOSTER_PATH 1 1 40002 0'
+ExecStart=/bin/sh -c 'exec $GENIUSSDK_BIN $GENIUSSDK_JOBPOSTER_PATH'
 Restart=on-failure
 RestartSec=5s
 StandardOutput=journal
