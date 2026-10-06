@@ -21,6 +21,7 @@
 #include <condition_variable>
 #include <csignal>
 #include <cstdlib>
+#include <exception>
 #include <cstring>
 #include <fstream>
 #include <iomanip>
@@ -73,7 +74,7 @@ namespace
         std::string key_file; ///< Empty = boot with a random account.
     };
 
-    std::optional<Arguments> ParseArguments( int argc, char *argv[], std::ostream &errors )
+    std::optional<Arguments> ParseArguments( int argc, char **argv, std::ostream &errors )
     {
         if ( argc < 2 || std::string( argv[1] ).rfind( "--", 0 ) == 0 )
         {
@@ -110,7 +111,7 @@ namespace
     bool LoadDevConfig( const std::string &base_path, std::string &dev_config, std::ostream &errors )
     {
         // Direct concatenation on purpose - base_path must already end in '/'.
-        std::ifstream cfg_file( base_path + "dev_config.json" );
+        const std::ifstream cfg_file( base_path + "dev_config.json" );
         if ( !cfg_file.is_open() )
         {
             errors << "Error: dev_config.json not found at " << base_path << "\n";
@@ -167,11 +168,9 @@ namespace
         }
         // Edge validation only (GenesisCeremony's IsPrivateKeyHex is file-local): a usable
         // identity is exactly 64 hex characters. The key itself is never printed.
-        const std::string private_key        = std::move( key.value() );
-        const bool        is_private_key_hex = private_key.size() == 64 &&
-                                        std::all_of( private_key.begin(),
-                                                     private_key.end(),
-                                                     []( unsigned char c ) { return std::isxdigit( c ) != 0; } );
+        std::string private_key        = std::move( key.value() );
+        const bool  is_private_key_hex = private_key.size() == 64 &&
+                                        std::strspn( private_key.c_str(), "0123456789abcdefABCDEF" ) == 64;
         if ( !is_private_key_hex )
         {
             errors << "Error: key file must hold exactly 64 hex characters: " << key_file_path << "\n";
@@ -188,7 +187,7 @@ namespace
         std::string             state_name;
         if ( node_state >= 0 && static_cast<size_t>( node_state ) < NODE_STATE_NAMES.size() )
         {
-            state_name = NODE_STATE_NAMES[static_cast<size_t>( node_state )];
+            state_name = NODE_STATE_NAMES.at( static_cast<size_t>( node_state ) );
         }
         else
         {
@@ -196,99 +195,118 @@ namespace
         }
         const GeniusStatusInfo status = GeniusSDKGetInitializationStatus();
         std::cout << "STATUS node_state=" << state_name << " init=" << std::fixed << std::setprecision( 2 )
-                  << status.percentage << std::endl;
+                  << status.percentage << "\n"
+                  << std::flush;
         if ( status.message != nullptr )
         {
             GeniusSDKFree( status.message ); // Contract: free the status message when non-null.
         }
     }
+
+    int RunNode( int argc, char **argv )
+    {
+        // Block termination signals BEFORE any SDK call so every node thread inherits the
+        // mask; main then parks in sigwait (no busy-wait) and one signal cleanly stops the node.
+        sigset_t shutdown_signals{};
+        sigemptyset( &shutdown_signals );
+        sigaddset( &shutdown_signals, SIGTERM );
+        sigaddset( &shutdown_signals, SIGINT );
+        pthread_sigmask( SIG_BLOCK, &shutdown_signals, nullptr );
+
+        const auto arguments = ParseArguments( argc, argv, std::cerr );
+        if ( !arguments )
+        {
+            return 1;
+        }
+
+        std::string dev_config;
+        if ( !LoadDevConfig( arguments->base_path, dev_config, std::cerr ) )
+        {
+            return 1;
+        }
+
+        std::string identity_key;
+        if ( !arguments->key_file.empty() )
+        {
+            auto key = ReadIdentityKey( arguments->key_file, std::cerr );
+            if ( !key )
+            {
+                return 1;
+            }
+            identity_key = std::move( *key );
+        }
+
+        const char *init_result = nullptr;
+        if ( identity_key.empty() )
+        {
+            init_result = GeniusSDKInit( arguments->base_path.c_str(), dev_config.c_str() );
+        }
+        else
+        {
+            init_result = GeniusSDKInitWithKey( arguments->base_path.c_str(),
+                                                dev_config.c_str(),
+                                                identity_key.c_str() );
+            // The secret must never outlive its use - scrub the local copy (GenesisCeremony
+            // cleanse discipline) before parking in sigwait.
+            OPENSSL_cleanse( identity_key.data(), identity_key.size() );
+            identity_key.clear();
+        }
+        if ( init_result == nullptr || std::strncmp( init_result, "Initialized", std::strlen( "Initialized" ) ) != 0 )
+        {
+            std::cerr << "Error: GeniusSDK initialization failed: "
+                      << ( init_result != nullptr ? init_result : "No response" ) << "\n";
+            return 1;
+        }
+
+        // Staying resident is part of the contract: exiting destroys the process's
+        // pubsub/GraphSync transports. The sigwait below is this runner's equivalent of the
+        // genesis tool's ServeBeforeExit window.
+        std::atomic<bool>       stop_status_printer{ false };
+        std::mutex              wakeup_mutex;
+        std::condition_variable wakeup;
+        std::thread             status_printer(
+            [&stop_status_printer, &wakeup_mutex, &wakeup]
+            {
+                for ( ;; )
+                {
+                    PrintStatusLine();
+                    std::unique_lock<std::mutex> lock( wakeup_mutex );
+                    wakeup.wait_for( lock,
+                                     STATUS_INTERVAL,
+                                     [&stop_status_printer] { return stop_status_printer.load(); } );
+                    if ( stop_status_printer.load() )
+                    {
+                        return;
+                    }
+                }
+            } );
+
+        int received_signal = 0;
+        sigwait( &shutdown_signals, &received_signal );
+
+        {
+            const std::scoped_lock lock( wakeup_mutex );
+            stop_status_printer.store( true );
+        }
+        wakeup.notify_all();
+        status_printer.join();
+
+        std::cout << "received signal " << received_signal << ", shutting down\n" << std::flush;
+        GeniusSDKShutdown();
+        return 0;
+    }
+
 } // namespace
 
 int main( int argc, char *argv[] )
 {
-    // Block termination signals BEFORE any SDK call so every node thread inherits the
-    // mask; main then parks in sigwait (no busy-wait) and one signal cleanly stops the node.
-    sigset_t shutdown_signals;
-    sigemptyset( &shutdown_signals );
-    sigaddset( &shutdown_signals, SIGTERM );
-    sigaddset( &shutdown_signals, SIGINT );
-    pthread_sigmask( SIG_BLOCK, &shutdown_signals, nullptr );
-
-    const auto arguments = ParseArguments( argc, argv, std::cerr );
-    if ( !arguments )
+    try
     {
+        return RunNode( argc, argv );
+    }
+    catch ( const std::exception &error )
+    {
+        std::cerr << "Error: " << error.what() << "\n";
         return 1;
     }
-
-    std::string dev_config;
-    if ( !LoadDevConfig( arguments->base_path, dev_config, std::cerr ) )
-    {
-        return 1;
-    }
-
-    std::string identity_key;
-    if ( !arguments->key_file.empty() )
-    {
-        auto key = ReadIdentityKey( arguments->key_file, std::cerr );
-        if ( !key )
-        {
-            return 1;
-        }
-        identity_key = std::move( *key );
-    }
-
-    const char *init_result = nullptr;
-    if ( identity_key.empty() )
-    {
-        init_result = GeniusSDKInit( arguments->base_path.c_str(), dev_config.c_str() );
-    }
-    else
-    {
-        init_result = GeniusSDKInitWithKey( arguments->base_path.c_str(), dev_config.c_str(), identity_key.c_str() );
-        // The secret must never outlive its use - scrub the local copy (GenesisCeremony
-        // cleanse discipline) before parking in sigwait.
-        OPENSSL_cleanse( identity_key.data(), identity_key.size() );
-        identity_key.clear();
-    }
-    if ( !init_result || std::strncmp( init_result, "Initialized", std::strlen( "Initialized" ) ) != 0 )
-    {
-        std::cerr << "Error: GeniusSDK initialization failed: " << ( init_result ? init_result : "No response" )
-                  << "\n";
-        return 1;
-    }
-
-    // Staying resident is part of the contract: exiting destroys the process's
-    // pubsub/GraphSync transports. The sigwait below is this runner's equivalent of the
-    // genesis tool's ServeBeforeExit window.
-    std::atomic<bool>       stop_status_printer{ false };
-    std::mutex              wakeup_mutex;
-    std::condition_variable wakeup;
-    std::thread             status_printer(
-        [&stop_status_printer, &wakeup_mutex, &wakeup]
-        {
-            for ( ;; )
-            {
-                PrintStatusLine();
-                std::unique_lock<std::mutex> lock( wakeup_mutex );
-                wakeup.wait_for( lock, STATUS_INTERVAL, [&stop_status_printer] { return stop_status_printer.load(); } );
-                if ( stop_status_printer.load() )
-                {
-                    return;
-                }
-            }
-        } );
-
-    int received_signal = 0;
-    sigwait( &shutdown_signals, &received_signal );
-
-    {
-        const std::lock_guard<std::mutex> lock( wakeup_mutex );
-        stop_status_printer.store( true );
-    }
-    wakeup.notify_all();
-    status_printer.join();
-
-    std::cout << "received signal " << received_signal << ", shutting down" << std::endl;
-    GeniusSDKShutdown();
-    return 0;
 }
