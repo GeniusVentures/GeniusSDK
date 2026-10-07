@@ -16,6 +16,7 @@ All spawns use argv lists only — never through a shell (T-02-08).
 
 import os
 import re
+import signal
 import subprocess
 import time
 
@@ -149,6 +150,26 @@ def terminate(name, timeout=60):
         except subprocess.TimeoutExpired:
             proc.kill()
             proc.wait(timeout=30)
+    for handle in record["handles"]:
+        if not handle.closed:
+            handle.close()
+    return proc.returncode
+
+
+def kill(name, timeout=30):
+    """SIGKILL a supervised process — real-crash simulation (D-06), the
+    inverse of spawn. The pid is the supervisor's own Popen (never a shell,
+    never a pgrep pattern). ALWAYS reaps before returning (Pitfall 10:
+    respawn racing the dying process's DB handles) and pops the record, the
+    same discipline as terminate. Returns the exit code, or None if the name
+    was never spawned."""
+    record = _processes.pop(name, None)
+    if record is None:
+        return None
+    proc = record["proc"]
+    if proc.poll() is None:
+        os.kill(proc.pid, signal.SIGKILL)
+        proc.wait(timeout=timeout)
     for handle in record["handles"]:
         if not handle.closed:
             handle.close()

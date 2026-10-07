@@ -21,7 +21,20 @@ Exit-code contract:
      diagnostics (argparse usage errors also exit 2; the marker is what
      disambiguates a genuine detection from a usage/parse error)
   1  any other failure (gate timeouts, FATAL_TRUST_MISMATCH, key leakage,
-     crashed steps)
+     crashed steps — and SCENARIO failures; scenarios never invent new codes,
+     the stranded negative control alone stays exit 2)
+
+Scenario surface (Phase 3, D-09): --scenario restart-mid-ceremony |
+restart-mid-sync | quorum-loss | window-edge; default None is the Phase 2
+happy path, completely unchanged. Mapping note (D-09 locks the four-token
+surface): restart-mid-ceremony covers BOTH SCEN-03 kill point 1 (SIGKILL
+right after the 2nd of 4 peer approves returns — below the parsed burn
+floor, mid-ceremony) and kill point 2 (SIGKILL right after the FINAL
+approve returns — post-quorum, pre-start). Standing assertion: scenario
+builds NEVER define SGNS_USE_MEMORY_SECURE_STORAGE — durable secure
+storage is the whole point of the restart proof (identity and approvals
+must survive SIGKILL via durable state; the memory backend would make
+identity ephemeral per process and silently void every restart proof).
 
 Usage:
   python3 e2e/ceremony_e2e.py --nodes 5 --runner /abs/GeniusSDKService --sgns-trust /abs/sgns-trust
@@ -204,6 +217,25 @@ def _teardown_nodes(expect_clean):
         print("WARNING: unclean node exits on the stranded path: %s" % unclean)
 
 
+def _kill_and_respawn(runner, entry, run_dir):
+    """D-06 real-crash injection at an event anchor: SIGKILL the node, then
+    respawn it under a DISTINCT supervision name (Pattern 2: spawn opens
+    captures "wb" and the node truncates sgnslog2.log per process open, so a
+    same-name respawn would erase the pre-kill evidence — post-restart gates
+    anchor only on post-restart captures). entry["name"] becomes the latest
+    name, so every later gate (FATAL checks, the strict post-burn gate, the
+    head assertion, and teardown via the supervisor's own records) follows
+    the respawned process."""
+    old_name = entry["name"]
+    supervisor.kill(old_name)
+    new_name = old_name + "-restart"
+    _spawn_node(new_name, runner, entry, run_dir, {})
+    entry["name"] = new_name
+    print("SCENARIO: %s SIGKILLed at the approve anchor, respawned as %s "
+          "(same argv + base dir — durable-state recovery is the proof)"
+          % (old_name, new_name))
+
+
 def _boot_only_run(runner, run_dir, top, timeout):
     """SETUP -> boot stage -> OBSERVED -> clean teardown; raises on failure."""
     print("SETUP: run dir %s" % run_dir)
@@ -261,13 +293,18 @@ def _wait_post_burn(top, window):
 
 
 def _ceremony_run(sgns_trust, runner, run_dir, top, timeout, approve_count,
-                  allow_a6_fallback):
+                  allow_a6_fallback, scenario=None):
     """Boot -> CEREMONY -> ASSERT -> READBACK -> clean teardown (Variant B).
 
     Returns None on full success, or a diagnostics dict when stranded genesis
     is detected (the caller exits 2 — the marker block has been printed).
+    A scenario (D-09) injects SIGKILL/respawn at event-anchored points inside
+    the same pipeline; scenario failures are ordinary class-1 failures.
     """
     network_id = top["network_id"]
+    if scenario:
+        print("SCENARIO: %s — event-anchored SIGKILL points (D-06/D-07, zero "
+              "sleeps); failures exit 1" % scenario)
     print("SETUP: run dir %s" % run_dir)
     print("SETUP: network_id %d (reserved band %d-%d)"
           % (network_id, *topology.NETWORK_ID_RESERVED_RANGE))
@@ -297,6 +334,8 @@ def _ceremony_run(sgns_trust, runner, run_dir, top, timeout, approve_count,
     peer_actors = top["actors"][1:]
     peer_addresses = top["peer_set"]  # peer_actors[i] signs as peer_set[i]
     approved = []
+    killed_actor_name = None
+    killed_candidate_id = None
     for actor, address in zip(peer_actors[:approve_count], peer_addresses):
         candidates = ceremony.list_candidates(sgns_trust, actor,
                                               manifest["manifest"], run_dir)
@@ -313,6 +352,23 @@ def _ceremony_run(sgns_trust, runner, run_dir, top, timeout, approve_count,
         print("CEREMONY: %s (%s) approved %s (%d of %d peers; burn threshold %d)"
               % (actor["name"], address, candidate_id, len(approved),
                  len(peer_actors), manifest["burn_threshold"]))
+        if scenario == "restart-mid-ceremony":
+            # peer_actors[i]'s node is top["nodes"][i+1]: the just-approving
+            # actor's own node. Event-anchored (D-07): the approve driver
+            # RETURNING is the anchor — no sleeps anywhere.
+            if len(approved) == manifest["burn_threshold"] - 1:
+                # SCEN-03 kill point 1 (mid-ceremony): this approve returned
+                # with k below the parsed burn floor. SIGKILL the approver's
+                # node; the remaining serve windows (>= 3 min) are its rejoin
+                # cover.
+                killed_actor_name = actor["name"]
+                killed_candidate_id = candidate_id
+                _kill_and_respawn(runner, top["nodes"][len(approved)], run_dir)
+            elif len(approved) == len(peer_actors) and killed_actor_name:
+                # SCEN-03 kill point 2 (post-quorum pre-start): the FINAL
+                # approve returned; the network is starting. SIGKILL an
+                # untouched survivor (node2, the first peer).
+                _kill_and_respawn(runner, top["nodes"][1], run_dir)
         _check_fatal(top)
 
     print("ASSERT: approved %d of %d peers, burn threshold %d — bounded "
@@ -376,6 +432,21 @@ def _ceremony_run(sgns_trust, runner, run_dir, top, timeout, approve_count,
             raise ceremony.CeremonyError(
                 "%s readback shows no burn candidate after quorum: %s"
                 % (actor["name"], readback))
+        if actor["name"] == killed_actor_name:
+            # SCEN-03 no-re-approval divergence evidence: the killed peer's
+            # durable DB must still list the EXACT candidate it approved
+            # pre-kill. The strict gate passing is already the recovery proof
+            # (activation at k=3 needs this durable approval to have survived
+            # the kill — a lost record would have stranded the net); this
+            # readback pins the id itself.
+            if not any(cid == killed_candidate_id for _, cid in readback):
+                raise ceremony.CeremonyError(
+                    "%s readback diverged from its pre-kill approval: "
+                    "expected %s in %s"
+                    % (actor["name"], killed_candidate_id, readback))
+            print("SCENARIO: %s durable readback lists its pre-kill approval "
+                  "%s (no re-approval divergence)"
+                  % (actor["name"], killed_candidate_id))
         print("READBACK: %s %s" % (actor["name"],
               " ".join("%s %s" % pair for pair in readback)))
 
@@ -578,6 +649,14 @@ def main():
                         help="approve only the first K peers (default: all). "
                              "K below the parsed burn threshold is the "
                              "stranded-genesis negative control (exit 2)")
+    parser.add_argument("--scenario", default=None,
+                        choices=["restart-mid-ceremony", "restart-mid-sync",
+                                 "quorum-loss", "window-edge"],
+                        help="resilience scenario to run (D-09 token set, "
+                             "validated here at the edge; default: the Phase "
+                             "2 happy path, unchanged). Scenario failures are "
+                             "exit 1; the stranded negative control stays "
+                             "exit 2")
     parser.add_argument("--allow-a6-fallback", action="store_true",
                         help="downgrade the strict all-N post-burn gate ONLY "
                              "when at least one node advanced; prints the "
@@ -610,6 +689,21 @@ def main():
     elif not 0 <= approve_count <= peers_total:
         parser.error("--approve-peers must be 0..%d (peers = nodes - 1)"
                      % peers_total)
+    if args.scenario:
+        if args.boot_only:
+            parser.error("--scenario runs the full ceremony (incompatible "
+                         "with --boot-only)")
+        if args.approve_peers is not None:
+            parser.error("--scenario approves all peers (incompatible with "
+                         "--approve-peers)")
+        if args.scenario != "restart-mid-ceremony":
+            parser.error("--scenario %s is implemented by a later Phase 3 "
+                         "plan; this plan ships restart-mid-ceremony"
+                         % args.scenario)
+        if args.nodes < 5:
+            parser.error("restart-mid-ceremony needs the 5-node topology "
+                         "(bootstrapper + 4 peers; its kill points anchor on "
+                         "the parsed 3-of-4 burn floor)")
 
     # Harness-start self-checks: the EC pinned vector asserts at import of
     # topology/secp256k1_address; the scan self-test proves non-vacuity here.
@@ -643,7 +737,8 @@ def main():
         else:
             stranded = _ceremony_run(sgns_trust, runner, run_dir, top,
                                      args.timeout, approve_count,
-                                     args.allow_a6_fallback)
+                                     args.allow_a6_fallback,
+                                     scenario=args.scenario)
         success = stranded is None
     except BaseException as caught:  # broad by design: D-16/D-17 failure boundary
         failure = caught
