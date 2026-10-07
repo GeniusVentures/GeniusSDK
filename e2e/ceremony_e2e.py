@@ -35,7 +35,14 @@ point 3 (SIGKILL a real 6th-process joiner the instant its own
 Blockchain-logger sync anchor prints, then recover to READY at the network
 head); quorum-loss is SCEN-04 (2-of-5 SIGKILL post-READY: survivors must
 hold the frozen head with stable READY states and no FATAL, then all 5
-respawned nodes converge back to the SAME head). Standing assertion:
+respawned nodes converge back to the SAME head); window-edge is SCEN-02
+(a 45s serve window on every ceremony step: joiner1 joins while the
+window is open and its sync anchor must beat the expiry line — the
+WINDOW-EDGE-ORDERING assertion; joiner2 joins strictly after expiry and
+must sync via network state, the documented D-01/D-04 contract asserted
+against the ceremony owner's help text; the genesis + approvals run in
+worker threads so both joins happen while the actors still serve).
+Standing assertion:
 scenario builds NEVER define SGNS_USE_MEMORY_SECURE_STORAGE — durable
 secure storage is the whole point of the restart proof (identity and
 approvals must survive SIGKILL via durable state; the memory backend would
@@ -58,6 +65,7 @@ import shutil
 import signal
 import sys
 import tempfile
+import threading
 import time
 
 import ceremony
@@ -97,6 +105,18 @@ JOINER_GATE_SECONDS = 120
 # 12-14s boot plus registry re-fetch, with Pitfall 7 headroom).
 QUORUM_OBSERVATION_SECONDS = 60
 QUORUM_RECOVERY_SECONDS = 180
+# SCEN-02 window-edge (D-01..D-04): the explicit short serve window every
+# ceremony step passes (D-03 band 30-60s; 45 chosen for headroom on BOTH
+# boundary sides — the tool's 600s default is untouched). Pinned
+# observables: the tool buffers its stdout milestone lines (only the
+# interactive prompts flush — source-verified GenesisCeremony.cpp), so the
+# in-window spawn anchor is node1's WAITING_FOR_BURN_GENESIS STATUS
+# transition (node1 fetched the genesis DAG: the window is open and
+# actively serving) and the expiry line becomes visible exactly at actor1's
+# exit flush — the moment the window closed.
+WINDOW_EDGE_SERVE_SECONDS = 45
+GENESIS_WINDOW_EXPIRY_LINE = "Genesis serving window complete."
+NODE_BURN_WAIT_STATE = "WAITING_FOR_BURN_GENESIS"
 
 STRANDED_MARKER = "STRANDED-GENESIS-DETECTED"
 
@@ -159,6 +179,55 @@ def _wait_for_file(path, timeout):
         if time.monotonic() >= deadline:
             raise RuntimeError("timeout after %ss waiting for %s"
                                % (timeout, path))
+        time.sleep(supervisor.POLL_INTERVAL)
+
+
+def _start_thread(name, work):
+    """Run work() in a named worker thread; its return value lands in
+    box["result"] and its first exception in box["error"], for the main
+    thread to collect at join time (a worker failure must fail the scenario
+    exactly like an inline one). Non-daemon: an interrupted main flow still
+    waits behind the bounded actor drivers — a running sgns-trust process is
+    never silently orphaned."""
+    box = {"error": None, "result": None, "thread": None}
+
+    def guarded():
+        try:
+            box["result"] = work()
+        except BaseException as error:  # same boundary discipline as main
+            box["error"] = error
+
+    thread = threading.Thread(target=guarded, name=name)
+    thread.start()
+    box["thread"] = thread
+    return box
+
+
+def _join_box(box, what):
+    """Join a _start_thread worker; re-raise its captured failure and return
+    its captured result."""
+    box["thread"].join()
+    if box["error"] is not None:
+        raise RuntimeError("%s failed in its worker thread: %s"
+                           % (what, box["error"])) from box["error"]
+    return box["result"]
+
+
+def _wait_actor_line(out_path, line, timeout, source):
+    """Bounded gate on one sgns-trust actor's stdout capture file. Actors are
+    not supervisor processes (their drivers own the lifecycle); the sink is a
+    plain file the tool flushes only at process exit, so this gate suits
+    exit-time anchors like the serve-window expiry line."""
+    deadline = time.monotonic() + timeout
+    while True:
+        if os.path.exists(out_path):
+            with open(out_path, encoding="utf-8", errors="replace") as handle:
+                if line in handle.read():
+                    return
+        if time.monotonic() >= deadline:
+            raise RuntimeError("timeout after %ss waiting for %s's stdout "
+                               "capture to contain %r (%s)"
+                               % (timeout, source, line, out_path))
         time.sleep(supervisor.POLL_INTERVAL)
 
 
@@ -507,6 +576,142 @@ def _quorum_loss_stage(runner, run_dir, top, network_head):
                                                      len(top["nodes"])))
 
 
+def _window_edge_prelude(runner, run_dir, top, sgns_trust, actor1, manifest,
+                         approve_count, timeout):
+    """SCEN-02 in-window side, armed while actor1's serve window is OPEN.
+
+    Worker thread A runs actor1's genesis (serve WINDOW_EDGE_SERVE_SECONDS)
+    to completion; worker thread B runs the approve sequence starting
+    immediately — approvals are independent sgns-trust processes whose own
+    serve windows overlap actor1's, so the whole ceremony completes while
+    the joiners prove both boundary sides. The in-window spawn anchor is
+    node1's WAITING_FOR_BURN_GENESIS STATUS transition: node1 fetched the
+    genesis DAG, so the window is open and actively serving (actor1's own
+    serve lines are stdout-buffered until its exit — not observable
+    mid-flight; see the WINDOW_EDGE constants note). joiner1 spawns the
+    instant that anchor matches and its Blockchain-logger sync anchor
+    ('Request succeeded for Genesis') is gated by watcher thread C, which
+    makes the WINDOW-EDGE-ORDERING check AT MATCH TIME: actor1's expiry
+    line already visible in its captures then is the violation (both event
+    sources named). Observed live: the fresh joiner's blockchain dispatches
+    its genesis request well inside the window, before the approve sequence
+    even completes."""
+    serve_seconds = WINDOW_EDGE_SERVE_SECONDS
+    genesis_box = _start_thread(
+        "window-edge-genesis",
+        lambda: ceremony.genesis(sgns_trust, actor1, manifest["manifest"],
+                                 manifest["fingerprint"], run_dir,
+                                 serve_seconds=serve_seconds))
+    approve_box = _start_thread(
+        "window-edge-approves",
+        lambda: _approve_sequence(sgns_trust, runner, run_dir, top, manifest,
+                                  approve_count, "window-edge", serve_seconds))
+
+    node1 = top["nodes"][0]
+    deadline = time.monotonic() + timeout
+    while supervisor.state_of(node1["name"]) != NODE_BURN_WAIT_STATE:
+        _check_fatal(top)
+        if genesis_box["error"] is not None:
+            raise RuntimeError("actor1 genesis failed before %s fetched the "
+                               "genesis: %s" % (node1["name"],
+                                                genesis_box["error"]))
+        if approve_box["error"] is not None:
+            raise RuntimeError("an approve failed before %s fetched the "
+                               "genesis: %s" % (node1["name"],
+                                                approve_box["error"]))
+        if time.monotonic() >= deadline:
+            raise RuntimeError("timeout after %ss waiting for %s to reach %s "
+                               "(the genesis DAG never reached node1 — see %s)"
+                               % (timeout, node1["name"], NODE_BURN_WAIT_STATE,
+                                  node1["node_log"]))
+        time.sleep(supervisor.POLL_INTERVAL)
+    print("SCENARIO: window open — %s reached %s (the genesis DAG was served; "
+          "anchored on node1's STATUS because the tool buffers its own serve "
+          "lines until exit)" % (node1["name"], NODE_BURN_WAIT_STATE))
+
+    joiner1, joiner2 = topology.write_joiner_configs(
+        top, top["node1_multiaddr"], top["authorized_full_node"], count=2)
+    _spawn_joiner(joiner1["name"], runner, joiner1, run_dir, {})
+    print("SCENARIO: %s spawned in-window (no --key-file — Phase 5 joiner "
+          "shape; bootstrap %s)" % (joiner1["name"], top["node1_multiaddr"]))
+    actor1_out = os.path.join(run_dir, actor1["name"] + ".out")
+    matched = {"in_window": False}
+
+    def _watch_joiner1_sync():
+        supervisor.wait_for(joiner1["name"], JOINER_SYNC_ANCHOR,
+                            JOINER_GATE_SECONDS)
+        with open(actor1_out, encoding="utf-8", errors="replace") as handle:
+            if GENESIS_WINDOW_EXPIRY_LINE in handle.read():
+                raise RuntimeError(
+                    "WINDOW-EDGE-ORDERING: %s's sync anchor %r matched after "
+                    "%s had already printed %r — the in-window joiner missed "
+                    "the serve window (event sources: %s and %s; serve %ds)"
+                    % (joiner1["name"], JOINER_SYNC_ANCHOR, actor1["name"],
+                       GENESIS_WINDOW_EXPIRY_LINE, joiner1["node_log"],
+                       actor1_out, serve_seconds))
+        matched["in_window"] = True
+
+    watch_box = _start_thread("window-edge-joiner1-watch", _watch_joiner1_sync)
+    return {"genesis_box": genesis_box, "approve_box": approve_box,
+            "watch_box": watch_box, "matched": matched, "joiner1": joiner1,
+            "joiner2": joiner2, "actor1_out": actor1_out,
+            "actor1_name": actor1["name"]}
+
+
+def _window_edge_boundary(window, run_dir, runner, serve_seconds):
+    """SCEN-02 boundary crossing: join the ceremony workers, assert the
+    expiry anchor, print the in-window verdict, then arm the post-expiry
+    side — joiner2, spawned strictly after the expiry line with every
+    ceremony actor already exited (no serve transport remains; per the
+    documented contract the genesis DAG is now ordinary network state).
+    Returns the approve sequence's results for the shared pipeline."""
+    _join_box(window["genesis_box"], "actor1 window-edge genesis")
+    _wait_actor_line(window["actor1_out"], GENESIS_WINDOW_EXPIRY_LINE,
+                     JOINER_GATE_SECONDS, window["actor1_name"])
+    _join_box(window["watch_box"], "the joiner1 in-window ordering watch")
+    if not window["matched"]["in_window"]:
+        raise RuntimeError("joiner1 ordering watch finished without a verdict")
+    print("WINDOW-EDGE: in-window joiner synced before expiry")
+    approved, killed_actor_name, killed_candidate_id = _join_box(
+        window["approve_box"], "the window-edge approve sequence")
+    print("SCENARIO: actor1 serve window expired (%r after serve %ds; every "
+          "ceremony actor has exited — no serve transport remains)"
+          % (GENESIS_WINDOW_EXPIRY_LINE, serve_seconds))
+    joiner2 = window["joiner2"]
+    _spawn_joiner(joiner2["name"], runner, joiner2, run_dir, {})
+    print("SCENARIO: %s spawned strictly after the expiry anchor — per the "
+          "documented contract (sgns-trust --help), it must sync from any "
+          "holder via network state" % joiner2["name"])
+    return approved, killed_actor_name, killed_candidate_id
+
+
+def _window_edge_joiner_gates(top, window, network_head):
+    """SCEN-02 final assertions: joiner1 (in-window) and joiner2 (post-
+    expiry) both READY at the network head, then the 7-process convergence
+    line — 5 ceremony nodes + both joiners share the identical head."""
+    joiner1 = window["joiner1"]
+    joiner2 = window["joiner2"]
+    _gate_joiner_ready_at_head(joiner1["name"], network_head,
+                               "the in-window joiner diverged after sync")
+    _gate_joiner_ready_at_head(joiner2["name"], network_head,
+                               "the post-expiry joiner never synced via "
+                               "network state")
+    print("WINDOW-EDGE: post-expiry joiner synced via network state")
+    names = [entry["name"] for entry in top["nodes"]]
+    names += [joiner1["name"], joiner2["name"]]
+    heads = _sample_heads(names, HEAD_SAMPLE_SECONDS,
+                          "the 7-process window-edge convergence")
+    diverged = {name: head for name, head in heads.items()
+                if head != network_head}
+    if diverged:
+        raise RuntimeError("WINDOW-EDGE divergence from the network head %s: "
+                           "%s (all %d processes must converge)"
+                           % (network_head, diverged, len(names)))
+    print("HEAD %s identical across %d processes (%d ceremony nodes + %s + %s)"
+          % (network_head, len(names), len(top["nodes"]), joiner1["name"],
+             joiner2["name"]))
+
+
 def _boot_only_run(runner, run_dir, top, timeout):
     """SETUP -> boot stage -> OBSERVED -> clean teardown; raises on failure."""
     print("SETUP: run dir %s" % run_dir)
@@ -574,8 +779,8 @@ def _ceremony_run(sgns_trust, runner, run_dir, top, timeout, approve_count,
     """
     network_id = top["network_id"]
     if scenario:
-        print("SCENARIO: %s — event-anchored SIGKILL points (D-06/D-07, zero "
-              "sleeps); failures exit 1" % scenario)
+        print("SCENARIO: %s — event-anchored scenario points (D-06/D-07, "
+              "zero sleeps); failures exit 1" % scenario)
     print("SETUP: run dir %s" % run_dir)
     print("SETUP: network_id %d (reserved band %d-%d)"
           % (network_id, *topology.NETWORK_ID_RESERVED_RANGE))
@@ -596,24 +801,33 @@ def _ceremony_run(sgns_trust, runner, run_dir, top, timeout, approve_count,
           % (manifest["membership_threshold"], manifest["burn_threshold"]))
 
     actor1 = top["actors"][0]
-    ceremony.genesis(sgns_trust, actor1, manifest["manifest"],
-                     manifest["fingerprint"], run_dir,
-                     serve_seconds=ceremony.SERVE_SECONDS)
-    print("CEREMONY: actor1 Genesis durably confirmed. (key file unlinked by "
-          "the tool, serve window %ds)" % ceremony.SERVE_SECONDS)
-    _check_fatal(top)
-
     peer_actors = top["actors"][1:]
-    approved, killed_actor_name, killed_candidate_id = _approve_sequence(
-        sgns_trust, runner, run_dir, top, manifest, approve_count, scenario,
-        ceremony.SERVE_SECONDS)
     network_head = None  # set by the identical-head assertion below
+    serve_seconds = (WINDOW_EDGE_SERVE_SECONDS if scenario == "window-edge"
+                     else ceremony.SERVE_SECONDS)
+    window = None
+    if scenario == "window-edge":
+        window = _window_edge_prelude(runner, run_dir, top, sgns_trust, actor1,
+                                      manifest, approve_count, timeout)
+    else:
+        ceremony.genesis(sgns_trust, actor1, manifest["manifest"],
+                         manifest["fingerprint"], run_dir,
+                         serve_seconds=serve_seconds)
+        print("CEREMONY: actor1 Genesis durably confirmed. (key file unlinked "
+              "by the tool, serve window %ds)" % serve_seconds)
+        _check_fatal(top)
+        approved, killed_actor_name, killed_candidate_id = _approve_sequence(
+            sgns_trust, runner, run_dir, top, manifest, approve_count,
+            scenario, serve_seconds)
+    if scenario == "window-edge":
+        approved, killed_actor_name, killed_candidate_id = (
+            _window_edge_boundary(window, run_dir, runner, serve_seconds))
 
-    post_burn_window = _post_burn_window(ceremony.SERVE_SECONDS)
+    post_burn_window = _post_burn_window(serve_seconds)
     print("ASSERT: approved %d of %d peers, burn threshold %d — bounded "
           "post-burn window %ds (serve %ds + grace %ds)"
           % (len(approved), len(peer_actors), manifest["burn_threshold"],
-             post_burn_window, ceremony.SERVE_SECONDS,
+             post_burn_window, serve_seconds,
              POST_BURN_GRACE_SECONDS))
     all_advanced, ladder, last = _wait_post_burn(top, post_burn_window)
     for entry in top["nodes"]:
@@ -633,7 +847,7 @@ def _ceremony_run(sgns_trust, runner, run_dir, top, timeout, approve_count,
             print("A6-FALLBACK-ENGAGED: %s" % _format_ladder(ladder))
         else:
             _print_stranded(top, manifest, approved, peer_actors, ladder, last,
-                            ceremony.SERVE_SECONDS)
+                            serve_seconds)
             _teardown_nodes(expect_clean=False)
             return {"approved": list(approved),
                     "burn_threshold": manifest["burn_threshold"]}
@@ -659,6 +873,8 @@ def _ceremony_run(sgns_trust, runner, run_dir, top, timeout, approve_count,
         _restart_mid_sync_stage(runner, run_dir, top, network_head)
     elif scenario == "quorum-loss":
         _quorum_loss_stage(runner, run_dir, top, network_head)
+    elif scenario == "window-edge":
+        _window_edge_joiner_gates(top, window, network_head)
 
     used_actors = [actor1] + peer_actors[:approve_count]
     for actor in used_actors:
@@ -933,16 +1149,12 @@ def main():
         if args.approve_peers is not None:
             parser.error("--scenario approves all peers (incompatible with "
                          "--approve-peers)")
-        if args.scenario not in ("restart-mid-ceremony", "restart-mid-sync",
-                                 "quorum-loss"):
-            parser.error("--scenario %s is implemented by a later Phase 3 "
-                         "plan; this plan ships restart-mid-ceremony, "
-                         "restart-mid-sync, and quorum-loss" % args.scenario)
         if args.nodes < 5:
             parser.error("%s needs the 5-node topology (bootstrapper + 4 "
                          "peers; the kill points anchor on the parsed 3-of-4 "
-                         "burn floor, the joiner joins a 5-node net, and "
-                         "quorum-loss kills 2 of the 4 trusted peers)"
+                         "burn floor, the joiners join a 5-node net, "
+                         "quorum-loss kills 2 of the 4 trusted peers, and "
+                         "window-edge proves both boundary sides on it)"
                          % args.scenario)
 
     # Harness-start self-checks: the EC pinned vector asserts at import of
