@@ -1,0 +1,988 @@
+# Ceremony E2E CI (CI-01) — runs the ceremony e2e suite (happy path, the four
+# resilience scenarios, and the stranded-genesis negative control) against an
+# EPHEMERAL LOCAL NET only: reserved-band network ids asserted in-band by the
+# harness; no persistent fleet endpoint anywhere in this workflow; strict gate
+# only (D-14 — the A6 fallback flag is a local-debugging tool and is never
+# passed here; anything weaker is a red build).
+#
+# Binary acquisition mirrors GeniusSDK/.github/workflows/cmake.yml exactly
+# (D-11): resolve-runners probe, AlmaLinux 8 container, the three
+# gh release download steps, clang-pinned configure. Node processes need a
+# secret service (libsecret is the unconditional Linux backend), so every
+# harness invocation runs inside the dbus-run-session + gnome-keyring wrapper
+# proven by SuperGenius's ctest step.
+#
+# Triggers (D-13): push/PR run happy + ONE scenario rotated by run number +
+# the negative control on every happy run; the nightly schedule and the
+# 'nightly' dispatch mode run the full matrix as independent fail-fast:false
+# legs. Note: GitHub runs schedules only on the default branch, so the nightly
+# cron goes live once this workflow reaches develop/main; dispatch proves the
+# matrix from any branch.
+#
+# DELIBERATELY NO paths-ignore: the existing release workflow ignores
+# .github/** paths, which would suppress the very push that lands THIS file —
+# the first run must trigger.
+name: Ceremony E2E CI
+
+on:
+  push:
+    branches:
+      - develop
+      - main
+      - feat_staging_net
+  pull_request:
+    branches:
+      - develop
+      - main
+  schedule:
+    - cron: "30 3 * * *"
+  workflow_dispatch:
+    inputs:
+      scenario:
+        description: "Which ceremony e2e shape to run"
+        required: false
+        type: choice
+        default: "all"
+        options:
+          - all
+          - happy
+          - restart-mid-ceremony
+          - restart-mid-sync
+          - quorum-loss
+          - window-edge
+          - negative-control
+          - nightly
+
+# Less than the release workflow's contents: write — this workflow uploads
+# nothing to releases; GNUS_TOKEN_1 is only used for the mirrored
+# gh release download steps and the container pull.
+permissions:
+  contents: read
+  packages: read
+
+# One in-flight run per ref (D-13): queue, never cancel — a cancelled e2e run
+# leaves stragglers on the shared self-hosted box (the always() cleanup step
+# only runs when the job itself gets to execute).
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  resolve-runners:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GNUS_TOKEN_1 }}
+    outputs:
+      linux_x64: ${{ steps.pick.outputs.linux_x64 }}
+    steps:
+      - name: Check self-hosted runner availability
+        id: pick
+        env:
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          ORG="${REPO%%/*}"
+          repo_err="$(mktemp)"
+          org_err="$(mktemp)"
+
+          # Some org-scoped runners may not show up via the repo endpoint for this token.
+          # Query both scopes and merge the results.
+          if repo_data="$(gh api "/repos/$REPO/actions/runners" --paginate 2>"$repo_err")"; then
+            echo "Repository runner API query succeeded for $REPO"
+          else
+            echo "Repository runner API query failed for $REPO; continuing with empty repo runner set"
+            repo_data='{"runners":[]}'
+          fi
+
+          if org_data="$(gh api "/orgs/$ORG/actions/runners" --paginate 2>"$org_err")"; then
+            echo "Organization runner API query succeeded for $ORG"
+          else
+            echo "Organization runner API query failed for $ORG; continuing with empty org runner set"
+            org_data='{"runners":[]}'
+          fi
+
+          data="$(jq -n --argjson repo "$repo_data" --argjson org "$org_data" '{runners: (($repo.runners // []) + ($org.runners // []) | unique_by(.id))}')"
+
+          repo_count="$(echo "$repo_data" | jq -r '(.runners // []) | length')"
+          org_count="$(echo "$org_data" | jq -r '(.runners // []) | length')"
+          merged_count="$(echo "$data" | jq -r '(.runners // []) | length')"
+
+          echo "Runner counts: repo=$repo_count org=$org_count merged=$merged_count"
+          if [ "$org_count" -eq 0 ] && [ -s "$org_err" ]; then
+            echo "Org endpoint error output:"
+            cat "$org_err"
+          fi
+
+          echo "Discovered self-hosted runners for $REPO (repo+org merged):"
+          echo "$data" | jq -r '.runners[]? | "- \(.name) | status=\(.status) | busy=\(.busy) | labels=\([.labels[].name] | join(", "))"'
+
+          {
+            echo "## Runner availability"
+            echo
+            echo "Repository: $REPO"
+            echo "Organization: $ORG"
+            echo "Counts: repo=$repo_count org=$org_count merged=$merged_count"
+            echo
+            echo "Discovered runners (repo+org merged):"
+            echo "$data" | jq -r '.runners[]? | "- \(.name) | status=\(.status) | busy=\(.busy) | labels=\([.labels[].name] | join(", "))"'
+            echo
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          # Define JSON arrays using single quotes so real double-quotes are preserved.
+          SH_LINUX_X64='["self-hosted","sg-ubuntu-linux"]'
+          FB_LINUX='["ubuntu-latest"]'
+
+          # Returns the self-hosted label array if at least one matching runner
+          # is online and not busy, otherwise returns the GitHub-hosted fallback.
+          # Match either runner name or label/tag text, case-insensitively.
+          pick_runner() {
+            local label="$1" self_hosted="$2" fallback="$3"
+            if echo "$data" | jq -e --arg L "$label" \
+              '.runners[]
+               | select(.status=="online" and (.busy|not))
+               | select((.name | ascii_downcase) == ($L | ascii_downcase)
+                 or any(.labels[]; (.name | ascii_downcase) == ($L | ascii_downcase)))' \
+              >/dev/null 2>&1; then
+              echo "Selector '$label' matched an available self-hosted runner" >&2
+              echo "- $label: self-hosted" >> "$GITHUB_STEP_SUMMARY"
+              echo "$self_hosted"
+            else
+              echo "Selector '$label' did not match an available self-hosted runner" >&2
+              echo "- $label: fallback" >> "$GITHUB_STEP_SUMMARY"
+              echo "$fallback"
+            fi
+          }
+
+          echo "linux_x64=$(pick_runner 'sg-ubuntu-linux' "$SH_LINUX_X64" "$FB_LINUX")"   >> "$GITHUB_OUTPUT"
+
+  # Push/PR/dispatch shape: ONE job, ONE build, then (D-13) the happy path +
+  # the run-number-rotated scenario + the negative control, sequentially.
+  e2e:
+    needs: resolve-runners
+    if: ${{ github.event_name != 'schedule' && !(github.event_name == 'workflow_dispatch' && inputs.scenario == 'nightly') }}
+    runs-on: ${{ fromJson(needs.resolve-runners.outputs.linux_x64) }}
+    timeout-minutes: 120
+    env:
+      GRPC_BUILD_ENABLE_CCACHE: "ON"
+      GH_TOKEN: ${{ secrets.GNUS_TOKEN_1 }}
+    container:
+      image: ghcr.io/geniusventures/almalinux-8:latest
+      credentials:
+        username: ${{github.actor}}
+        password: ${{secrets.GNUS_TOKEN_1}}
+    steps:
+      - name: Clean workspace (self-hosted runners)
+        if: ${{ runner.environment == 'self-hosted' }}
+        shell: bash
+        run: |
+          # Use sudo on Linux to handle root-owned files left by container jobs
+          SUDO=""
+          if [ "$(uname)" = "Linux" ]; then
+            SUDO="sudo"
+          fi
+
+          echo "=== PRE-CLEANUP DEBUG ==="
+          echo "Current working directory: $(pwd)"
+          echo "Workspace: ${{github.workspace}}"
+
+          if [ -d "${{github.workspace}}" ]; then
+            cd "${{github.workspace}}"
+            echo "Changed to workspace directory: $(pwd)"
+            echo "Contents:"
+            ls -la
+
+            if [ -d ".git" ]; then
+              echo "Git repository detected, performing deep clean..."
+              # Remove stale lock files first
+              echo "Removing stale git lock files..."
+              find . -name "index.lock" -type f -delete 2>/dev/null || true
+              find . -name "*.lock" -path "*/.git/*" -type f -delete 2>/dev/null || true
+
+              git clean -xfd
+              git submodule foreach --recursive git clean -xfd
+              git reset --hard
+              git submodule foreach --recursive git reset --hard
+              echo "Git clean completed"
+            else
+              echo "Not a git repository, skipping git clean"
+            fi
+          else
+            echo "Workspace directory does not exist yet, skipping cleanup"
+          fi
+
+          echo "=== CLEANUP ARTIFACTS ==="
+          # Clean up artifacts from previous runs (self-hosted runners only)
+          for dir in thirdparty zkLLVM SuperGenius GeniusSDK; do
+            if [ -d "$dir" ]; then
+              echo "Removing $dir directory..."
+              $SUDO rm -rf "$dir"
+            fi
+          done
+
+          echo "=== POST-CLEANUP DEBUG ==="
+          if [ -d "${{github.workspace}}" ]; then
+            cd "${{github.workspace}}"
+            echo "Final workspace contents:"
+            ls -la
+          fi
+
+      - name: Checkout GeniusSDK
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          path: "GeniusSDK"
+          submodules: "recursive"
+
+      - name: Set build directory
+        shell: bash
+        run: |
+          # Linux x86_64 Release with the abi subfolder, exactly like the
+          # release matrix include: the thirdparty/zkLLVM tarballs extract to
+          # build/Linux/Release/x86_64, and GeniusSDK CMake's canonical
+          # dependency paths append ABI_SUBFOLDER_NAME the same way — the
+          # abi-less form would point THIRDPARTY_BUILD_DIR nowhere.
+          BUILD_DIRECTORY=build/Linux/Release/x86_64
+          echo "BUILD_DIRECTORY=$BUILD_DIRECTORY" >> $GITHUB_ENV
+
+      - name: Download thirdparty release
+        working-directory: ${{github.workspace}}
+        shell: bash
+        env:
+          GITHUB_EVENT_INPUTS_TAG: ${{ github.event.inputs.tag }}
+          GITHUB_EVENT_PULL_REQUEST_HEAD_REF: ${{ github.pull_request.head.ref }}
+        run: |
+          # Determine current branch or tag
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ] && [ "${GITHUB_EVENT_INPUTS_TAG}" ]; then
+            CURRENT_BRANCH="${GITHUB_EVENT_INPUTS_TAG}"
+            IS_TAG=true
+          elif ${{github.event_name == 'pull_request'}}; then
+            CURRENT_BRANCH=${GITHUB_EVENT_PULL_REQUEST_HEAD_REF}
+            IS_TAG=false
+          else
+            CURRENT_BRANCH=$GITHUB_REF_NAME
+            IS_TAG=false
+          fi
+
+          echo "Identified current branch/tag as ${CURRENT_BRANCH}"
+          echo "CURRENT_BRANCH=${CURRENT_BRANCH}" >>$GITHUB_ENV
+          echo "IS_TAG=${IS_TAG}" >>$GITHUB_ENV
+
+          # Determine thirdparty branch to use
+          if [ "$IS_TAG" == "true" ]; then
+            # For tags, use the exact tag name for thirdparty
+            thirdparty_branch="$CURRENT_BRANCH"
+          elif [ "$CURRENT_BRANCH" == "main" ]; then
+            thirdparty_branch="main"
+          else
+            thirdparty_branch="develop"
+          fi
+
+          echo "Using ${thirdparty_branch} for thirdparty"
+
+          # Fixed e2e target: Linux x86_64 Release (abi always present, as in
+          # the release matrix — every non-tag branch maps to develop).
+          FILE_NAME=Linux-x86_64-Release.tar.gz
+          echo "FILE_NAME=${FILE_NAME}" >> $GITHUB_ENV
+
+          mkdir thirdparty
+          cd thirdparty
+
+          if [ "$IS_TAG" == "true" ]; then
+            # For tags, use just the tag name
+            tag_name="${thirdparty_branch}"
+          else
+            # For branches, use the platform-branch-buildtype format
+            tag_name="Linux-x86_64-${thirdparty_branch}-Release"
+          fi
+
+          gh release download ${tag_name} --repo GeniusVentures/thirdparty -p "${FILE_NAME}"
+          tar -zxf "${FILE_NAME}"
+
+          # Set THIRDPARTY_BUILD_DIR to the actual location where files were extracted
+
+          echo "THIRDPARTY_BUILD_DIR=$(pwd)/${BUILD_DIRECTORY}" >> $GITHUB_ENV
+
+      - name: Download zkLLVM release
+        working-directory: ${{github.workspace}}
+        shell: bash
+        run: |
+          # Use same branch determination logic for zkLLVM
+          if [ "$IS_TAG" == "true" ]; then
+            # For tags, use the exact tag name for zkLLVM
+            zkLLVM_branch="$CURRENT_BRANCH"
+          elif [ "$CURRENT_BRANCH" == "main" ]; then
+            zkLLVM_branch="main"
+          else
+            zkLLVM_branch="develop"
+          fi
+
+          mkdir zkLLVM
+          cd zkLLVM
+
+          ZKLLVM_FILE_NAME=Linux-x86_64-Release.tar.gz
+          ZKLLVM_BUILD_DIR=${BUILD_DIRECTORY}
+          if [ "$IS_TAG" == "true" ]; then
+            tag_name="${zkLLVM_branch}"
+          else
+            tag_name="Linux-x86_64-${zkLLVM_branch}-Release"
+          fi
+
+          gh release download ${tag_name} --repo GeniusVentures/zkLLVM -p "${ZKLLVM_FILE_NAME}"
+
+          tar --exclude='*bin/assigner' --exclude='*bin/clang-zkllvm' --exclude='*bin/llvm-link-zkllvm' --exclude='*bin/transpiler' -zxf "${ZKLLVM_FILE_NAME}"
+
+          # Set ZKLLVM_BUILD_DIR to the actual location where files were extracted
+
+          echo "ZKLLVM_BUILD_DIR=$(pwd)/${ZKLLVM_BUILD_DIR}" >> $GITHUB_ENV
+
+      - name: Download SuperGenius
+        working-directory: ${{github.workspace}}
+        shell: bash
+        run: |
+          # Use same branch determination logic for SuperGenius. KEEP THE
+          # MAPPING EXACT (D-11): every non-main branch — including
+          # feat_staging_net — maps to the develop tarball (SuperGenius
+          # publishes releases only from develop/main); there is no
+          # feat_staging_net tarball path. The e2e build compiles against
+          # this tarball and service.cpp calls the GetGenesisCID accessor
+          # (plan 03-01), so the develop release must contain it.
+          if [ "$IS_TAG" == "true" ]; then
+            # For tags, use the exact tag name for SuperGenius
+            sgns_branch="$CURRENT_BRANCH"
+          elif [ "$CURRENT_BRANCH" == "main" ]; then
+            sgns_branch="main"
+          else
+            sgns_branch="develop"
+          fi
+
+          echo "Using ${sgns_branch} branch/tag from SuperGenius"
+
+          mkdir SuperGenius
+          cd SuperGenius
+
+          if [ "$IS_TAG" == "true" ]; then
+            # For tags, use just the tag name
+            tag_name="${sgns_branch}"
+          else
+            # For branches, use the platform-branch-buildtype format
+            tag_name="Linux-x86_64-${sgns_branch}-Release"
+          fi
+
+          gh release download ${tag_name} --repo GeniusVentures/SuperGenius -p "${FILE_NAME}"
+
+          tar -xzf "${FILE_NAME}"
+
+          echo "SUPERGENIUS_DIR=$(pwd)" >> $GITHUB_ENV
+
+      - name: Configure Linux host
+        if: ${{ runner.os == 'Linux'}}
+        run: |
+          sudo update-alternatives --install /usr/bin/cc cc $(which clang) 100
+          sudo update-alternatives --install /usr/bin/c++ c++ $(which clang++) 100
+          sudo update-alternatives --set cc $(which clang)
+          sudo update-alternatives --set c++ $(which clang++)
+
+          # Native Linux builds run in the AlmaLinux 8 CI image (glibc 2.28
+          # floor, replacing the EOL Debian Bullseye container). The image
+          # ships clang, cmake, ninja, Vulkan headers, and libsecret, so the
+          # dnf branch is a guarded safety net that avoids repo traffic when
+          # the image already provides everything; Ubuntu runners (the
+          # resolve-runners fallback, which runs this same container, or a
+          # no-container future) still need apt.
+          if command -v dnf >/dev/null 2>&1; then
+            if ! rpm -q ccache ninja-build vulkan-loader-devel libsecret-devel libzstd-devel >/dev/null 2>&1; then
+              sudo dnf install -y ccache ninja-build vulkan-loader-devel libsecret-devel libzstd-devel
+            fi
+          else
+            sudo apt install ccache ninja-build libvulkan-dev libzstd-dev libsecret-1-dev -y
+          fi
+          echo "CMAKE_GENERATOR=Ninja" >> $GITHUB_ENV
+
+      - name: Provision python3.12
+        shell: bash
+        run: |
+          # EL8's default python3 is 3.6; the harness needs 3.10+ and is
+          # invoked as python3.12 explicitly everywhere. The container is
+          # ephemeral per job, so this check runs on every job (D-12,
+          # research Pitfall 4). dnf branch first (AlmaLinux 8 AppStream),
+          # apt for the hosted-fallback distro.
+          if command -v python3.12 >/dev/null 2>&1; then
+            echo "python3.12 already present"
+          elif command -v dnf >/dev/null 2>&1; then
+            # GHA container jobs run as root; sudo may be absent in the image.
+            SUDO=""
+            command -v sudo >/dev/null 2>&1 && SUDO="sudo"
+            $SUDO dnf install -y python3.12
+          else
+            sudo apt-get update
+            sudo apt-get install -y python3.12
+          fi
+          python3.12 --version
+
+      - name: Capacity probe (runner evidence, research A4)
+        shell: bash
+        run: |
+          # First-run evidence for the unmeasured runner box: if the numbers
+          # prove memory-tight for the 5-node net, surface them — the 3-node
+          # variant stays deferred unless measurements demand it.
+          {
+            echo "## Ceremony e2e runner capacity"
+            echo
+            echo "- nproc: $(nproc)"
+            echo "- python: $(python3.12 --version 2>&1)"
+            echo
+            echo '```'
+            free -h 2>/dev/null || echo "free not available"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Configure CMake for Linux
+        working-directory: ${{github.workspace}}/GeniusSDK
+        # Pin clang explicitly rather than relying on the /usr/bin/cc and
+        # /usr/bin/c++ update-alternatives symlinks: on AlmaLinux 8
+        # /usr/bin/c++ is a real file owned by gcc-c++ (not an alternatives
+        # symlink like Debian's), so the update-alternatives takeover fails
+        # silently and CMake falls back to g++ 8.5, which cannot compile the
+        # code built here (same failure observed in SuperGenius run
+        # 35377550250).
+        shell: bash
+        run: cmake -S build/Linux -B $BUILD_DIRECTORY -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=$(which clang) -DCMAKE_CXX_COMPILER=$(which clang++) -DTHIRDPARTY_BUILD_DIR=${{env.THIRDPARTY_BUILD_DIR}} -DZKLLVM_BUILD_DIR=${{env.ZKLLVM_BUILD_DIR}} -DSUPERGENIUS_DIR=${{env.SUPERGENIUS_DIR}} -DABI_SUBFOLDER_NAME='/x86_64'
+
+      - name: Build GeniusSDK
+        working-directory: ${{github.workspace}}/GeniusSDK/${{env.BUILD_DIRECTORY}}
+        shell: bash
+        run: cmake --build . --config Release -j
+
+      - name: Resolve harness binaries
+        shell: bash
+        run: |
+          # Fail fast at the boundary: both binaries must exist and be
+          # executable before the harness runs. The canonical sgns-trust
+          # path mirrors the local install-tree layout
+          # (build/<platform>/<type>/<abi>/SuperGenius/bin); the find
+          # fallback verifies the extracted tarball's actual layout on the
+          # first run.
+          RUNNER_BIN="$GITHUB_WORKSPACE/GeniusSDK/${BUILD_DIRECTORY}/services/GeniusSDKService"
+          if [ ! -x "$RUNNER_BIN" ]; then
+            RUNNER_BIN="$(find "$GITHUB_WORKSPACE/GeniusSDK/build" -type f -name GeniusSDKService -perm -u+x 2>/dev/null | head -n 1)"
+          fi
+          if [ -z "$RUNNER_BIN" ] || [ ! -x "$RUNNER_BIN" ]; then
+            echo "FATAL: GeniusSDKService not found under $GITHUB_WORKSPACE/GeniusSDK/build" >&2
+            exit 1
+          fi
+
+          SGNS_TRUST_BIN="$SUPERGENIUS_DIR/${BUILD_DIRECTORY}/SuperGenius/bin/sgns-trust"
+          if [ ! -x "$SGNS_TRUST_BIN" ]; then
+            SGNS_TRUST_BIN="$(find "$SUPERGENIUS_DIR" -type f -name sgns-trust -perm -u+x 2>/dev/null | head -n 1)"
+          fi
+          if [ -z "$SGNS_TRUST_BIN" ] || [ ! -x "$SGNS_TRUST_BIN" ]; then
+            echo "FATAL: sgns-trust not found in the extracted SuperGenius tree ($SUPERGENIUS_DIR)" >&2
+            exit 1
+          fi
+
+          echo "RUNNER_BIN=$RUNNER_BIN" >> "$GITHUB_ENV"
+          echo "SGNS_TRUST_BIN=$SGNS_TRUST_BIN" >> "$GITHUB_ENV"
+          echo "- runner: $RUNNER_BIN" >> "$GITHUB_STEP_SUMMARY"
+          echo "- sgns-trust: $SGNS_TRUST_BIN" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Select e2e mode (rotation on push/PR)
+        shell: bash
+        env:
+          DISPATCH_SCENARIO: ${{ inputs.scenario }}
+        run: |
+          set -euo pipefail
+          # The dispatch input arrives via env (choice-list constrained,
+          # never interpolated into shell) and is matched against fixed
+          # tokens only. 'all' (also the push/PR default): happy + ONE
+          # scenario rotated by run number (zero state, deterministic,
+          # D-13) + the negative control on every happy run (D-15).
+          MODE="${DISPATCH_SCENARIO:-all}"
+          RUN_HAPPY=false
+          RUN_SCENARIO=""
+          RUN_NEGATIVE=false
+          case "$MODE" in
+            all)
+              RUN_HAPPY=true
+              RUN_NEGATIVE=true
+              SCENARIOS=(restart-mid-ceremony restart-mid-sync quorum-loss window-edge)
+              RUN_SCENARIO="${SCENARIOS[$(( ${{ github.run_number }} % 4 ))]}"
+              ;;
+            happy)
+              RUN_HAPPY=true
+              ;;
+            negative-control)
+              RUN_NEGATIVE=true
+              ;;
+            restart-mid-ceremony|restart-mid-sync|quorum-loss|window-edge)
+              RUN_SCENARIO="$MODE"
+              ;;
+            *)
+              echo "FATAL: unknown scenario mode: $MODE" >&2
+              exit 1
+              ;;
+          esac
+          echo "RUN_HAPPY=$RUN_HAPPY" >> "$GITHUB_ENV"
+          echo "RUN_SCENARIO=$RUN_SCENARIO" >> "$GITHUB_ENV"
+          echo "RUN_NEGATIVE=$RUN_NEGATIVE" >> "$GITHUB_ENV"
+          {
+            echo "## Ceremony e2e invocation plan"
+            echo
+            echo "- mode: $MODE"
+            echo "- happy path: $RUN_HAPPY"
+            echo "- scenario: ${RUN_SCENARIO:-none}"
+            echo "- negative control: $RUN_NEGATIVE"
+            echo
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Run ceremony e2e (happy + rotated scenario + negative control)
+        shell: bash
+        run: |
+          # Node processes use libsecret (unconditional on Linux); without a
+          # secret service they never leave INITIALIZING_DATABASE — the
+          # wrapper below is copied verbatim from SuperGenius's ctest step
+          # and proven in this exact image. Env (RUN_*, RUNNER_BIN,
+          # SGNS_TRUST_BIN, GITHUB_WORKSPACE, RUNNER_TEMP) propagates
+          # untouched through dbus-run-session / bash -c: pass values
+          # through the ENVIRONMENT, never through eval'd string
+          # re-parsing, and NO single quotes inside the single-quoted
+          # bash -c body (they would close the wrapper string).
+          dbus-run-session -- bash -c '\
+            mkdir -p ~/.cache ~/.local/share/keyrings && \
+            echo -n "login" > ~/.local/share/keyrings/default && \
+            echo "[keyring]
+            display-name=login
+            lock-on-idle=false
+            lock-after=false" > ~/.local/share/keyrings/login.keyring && \
+            eval $(printf "\n" | gnome-keyring-daemon --unlock --components=secrets) && \
+            run_case() {
+              label="$1"
+              expected="$2"
+              shift 2
+              log="${RUNNER_TEMP:-/tmp}/ceremony-e2e-$label.log"
+              python3.12 "$GITHUB_WORKSPACE/GeniusSDK/e2e/ceremony_e2e.py" --nodes 5 \
+                --runner "$RUNNER_BIN" --sgns-trust "$SGNS_TRUST_BIN" "$@" 2>&1 | tee "$log"
+              rc="${PIPESTATUS[0]}"
+              echo "CASE $label: exit=$rc (expected $expected)"
+              if [ "$rc" -ne "$expected" ]; then
+                echo "FAIL: ceremony case $label exited $rc, expected $expected"
+                return 1
+              fi
+              if [ "$expected" -eq 2 ] && ! grep -q "STRANDED-GENESIS-DETECTED" "$log"; then
+                echo "FAIL: negative control exited 2 but the STRANDED-GENESIS-DETECTED marker is missing"
+                return 1
+              fi
+              return 0
+            }
+            status=0
+            if [ "$RUN_HAPPY" = "true" ]; then
+              run_case happy 0 || status=1
+            fi
+            if [ -n "$RUN_SCENARIO" ]; then
+              run_case "$RUN_SCENARIO" 0 || status=1
+            fi
+            if [ "$RUN_NEGATIVE" = "true" ]; then
+              run_case negative-control 2 --approve-peers 2 || status=1
+            fi
+            exit "$status"'
+
+      - name: Upload ceremony e2e failure artifacts
+        # ONLY the harness's scrubbed artifacts directory: the D-07
+        # scrub-before-preserve plus the non-vacuous key-absence scan gate
+        # that directory before anything is kept — raw run dirs or workspace
+        # paths are never uploaded (key material must not leak, T-03-13).
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ceremony-e2e-artifacts-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ github.workspace }}/GeniusSDK/e2e/artifacts/
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Cleanup stragglers
+        if: always()
+        shell: bash
+        run: |
+          # Guarded: pkill exits 1 when nothing matched — cleanup never fails
+          # the job. A single runner executes one job at a time, so these
+          # can only be strays from THIS run (timeout/interrupt paths).
+          pkill -x GeniusSDKService 2>/dev/null || true
+          pkill -x sgns-trust 2>/dev/null || true
+
+  # Nightly shape (schedule + dispatch 'nightly'): the full matrix as
+  # independent fail-fast:false legs — one leg's failure or hang never
+  # cancels the others (Pitfall 9), and the nightly catch of SuperGenius
+  # develop drift (D-10) needs every scenario observable on its own.
+  e2e-nightly:
+    needs: resolve-runners
+    if: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.scenario == 'nightly') }}
+    runs-on: ${{ fromJson(needs.resolve-runners.outputs.linux_x64) }}
+    timeout-minutes: 120
+    env:
+      GRPC_BUILD_ENABLE_CCACHE: "ON"
+      GH_TOKEN: ${{ secrets.GNUS_TOKEN_1 }}
+    container:
+      image: ghcr.io/geniusventures/almalinux-8:latest
+      credentials:
+        username: ${{github.actor}}
+        password: ${{secrets.GNUS_TOKEN_1}}
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [happy, restart-mid-ceremony, restart-mid-sync, quorum-loss, window-edge, negative-control]
+    steps:
+      - name: Clean workspace (self-hosted runners)
+        if: ${{ runner.environment == 'self-hosted' }}
+        shell: bash
+        run: |
+          # Use sudo on Linux to handle root-owned files left by container jobs
+          SUDO=""
+          if [ "$(uname)" = "Linux" ]; then
+            SUDO="sudo"
+          fi
+
+          echo "=== PRE-CLEANUP DEBUG ==="
+          echo "Current working directory: $(pwd)"
+          echo "Workspace: ${{github.workspace}}"
+
+          if [ -d "${{github.workspace}}" ]; then
+            cd "${{github.workspace}}"
+            echo "Changed to workspace directory: $(pwd)"
+            echo "Contents:"
+            ls -la
+
+            if [ -d ".git" ]; then
+              echo "Git repository detected, performing deep clean..."
+              # Remove stale lock files first
+              echo "Removing stale git lock files..."
+              find . -name "index.lock" -type f -delete 2>/dev/null || true
+              find . -name "*.lock" -path "*/.git/*" -type f -delete 2>/dev/null || true
+
+              git clean -xfd
+              git submodule foreach --recursive git clean -xfd
+              git reset --hard
+              git submodule foreach --recursive git reset --hard
+              echo "Git clean completed"
+            else
+              echo "Not a git repository, skipping git clean"
+            fi
+          else
+            echo "Workspace directory does not exist yet, skipping cleanup"
+          fi
+
+          echo "=== CLEANUP ARTIFACTS ==="
+          # Clean up artifacts from previous runs (self-hosted runners only)
+          for dir in thirdparty zkLLVM SuperGenius GeniusSDK; do
+            if [ -d "$dir" ]; then
+              echo "Removing $dir directory..."
+              $SUDO rm -rf "$dir"
+            fi
+          done
+
+          echo "=== POST-CLEANUP DEBUG ==="
+          if [ -d "${{github.workspace}}" ]; then
+            cd "${{github.workspace}}"
+            echo "Final workspace contents:"
+            ls -la
+          fi
+
+      - name: Checkout GeniusSDK
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          path: "GeniusSDK"
+          submodules: "recursive"
+
+      - name: Set build directory
+        shell: bash
+        run: |
+          # Same abi-suffixed layout as the e2e job — see the comment there.
+          BUILD_DIRECTORY=build/Linux/Release/x86_64
+          echo "BUILD_DIRECTORY=$BUILD_DIRECTORY" >> $GITHUB_ENV
+
+      - name: Download thirdparty release
+        working-directory: ${{github.workspace}}
+        shell: bash
+        env:
+          GITHUB_EVENT_INPUTS_TAG: ${{ github.event.inputs.tag }}
+          GITHUB_EVENT_PULL_REQUEST_HEAD_REF: ${{ github.pull_request.head.ref }}
+        run: |
+          # Determine current branch or tag
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ] && [ "${GITHUB_EVENT_INPUTS_TAG}" ]; then
+            CURRENT_BRANCH="${GITHUB_EVENT_INPUTS_TAG}"
+            IS_TAG=true
+          elif ${{github.event_name == 'pull_request'}}; then
+            CURRENT_BRANCH=${GITHUB_EVENT_PULL_REQUEST_HEAD_REF}
+            IS_TAG=false
+          else
+            CURRENT_BRANCH=$GITHUB_REF_NAME
+            IS_TAG=false
+          fi
+
+          echo "Identified current branch/tag as ${CURRENT_BRANCH}"
+          echo "CURRENT_BRANCH=${CURRENT_BRANCH}" >>$GITHUB_ENV
+          echo "IS_TAG=${IS_TAG}" >>$GITHUB_ENV
+
+          # Determine thirdparty branch to use
+          if [ "$IS_TAG" == "true" ]; then
+            thirdparty_branch="$CURRENT_BRANCH"
+          elif [ "$CURRENT_BRANCH" == "main" ]; then
+            thirdparty_branch="main"
+          else
+            thirdparty_branch="develop"
+          fi
+
+          echo "Using ${thirdparty_branch} for thirdparty"
+
+          FILE_NAME=Linux-x86_64-Release.tar.gz
+          echo "FILE_NAME=${FILE_NAME}" >> $GITHUB_ENV
+
+          mkdir thirdparty
+          cd thirdparty
+
+          if [ "$IS_TAG" == "true" ]; then
+            tag_name="${thirdparty_branch}"
+          else
+            tag_name="Linux-x86_64-${thirdparty_branch}-Release"
+          fi
+
+          gh release download ${tag_name} --repo GeniusVentures/thirdparty -p "${FILE_NAME}"
+          tar -zxf "${FILE_NAME}"
+
+          echo "THIRDPARTY_BUILD_DIR=$(pwd)/${BUILD_DIRECTORY}" >> $GITHUB_ENV
+
+      - name: Download zkLLVM release
+        working-directory: ${{github.workspace}}
+        shell: bash
+        run: |
+          # Use same branch determination logic for zkLLVM
+          if [ "$IS_TAG" == "true" ]; then
+            zkLLVM_branch="$CURRENT_BRANCH"
+          elif [ "$CURRENT_BRANCH" == "main" ]; then
+            zkLLVM_branch="main"
+          else
+            zkLLVM_branch="develop"
+          fi
+
+          mkdir zkLLVM
+          cd zkLLVM
+
+          ZKLLVM_FILE_NAME=Linux-x86_64-Release.tar.gz
+          ZKLLVM_BUILD_DIR=${BUILD_DIRECTORY}
+          if [ "$IS_TAG" == "true" ]; then
+            tag_name="${zkLLVM_branch}"
+          else
+            tag_name="Linux-x86_64-${zkLLVM_branch}-Release"
+          fi
+
+          gh release download ${tag_name} --repo GeniusVentures/zkLLVM -p "${ZKLLVM_FILE_NAME}"
+
+          tar --exclude='*bin/assigner' --exclude='*bin/clang-zkllvm' --exclude='*bin/llvm-link-zkllvm' --exclude='*bin/transpiler' -zxf "${ZKLLVM_FILE_NAME}"
+
+          echo "ZKLLVM_BUILD_DIR=$(pwd)/${ZKLLVM_BUILD_DIR}" >> $GITHUB_ENV
+
+      - name: Download SuperGenius
+        working-directory: ${{github.workspace}}
+        shell: bash
+        run: |
+          # Same branch/tag determination as the e2e job — every non-main
+          # branch maps to the SuperGenius develop tarball (the nightly
+          # drift catch, D-10: this is the leg that notices SuperGenius
+          # develop breaking the ceremony).
+          if [ "$IS_TAG" == "true" ]; then
+            sgns_branch="$CURRENT_BRANCH"
+          elif [ "$CURRENT_BRANCH" == "main" ]; then
+            sgns_branch="main"
+          else
+            sgns_branch="develop"
+          fi
+
+          echo "Using ${sgns_branch} branch/tag from SuperGenius"
+
+          mkdir SuperGenius
+          cd SuperGenius
+
+          if [ "$IS_TAG" == "true" ]; then
+            tag_name="${sgns_branch}"
+          else
+            tag_name="Linux-x86_64-${sgns_branch}-Release"
+          fi
+
+          gh release download ${tag_name} --repo GeniusVentures/SuperGenius -p "${FILE_NAME}"
+
+          tar -xzf "${FILE_NAME}"
+
+          echo "SUPERGENIUS_DIR=$(pwd)" >> $GITHUB_ENV
+
+      - name: Configure Linux host
+        if: ${{ runner.os == 'Linux'}}
+        run: |
+          sudo update-alternatives --install /usr/bin/cc cc $(which clang) 100
+          sudo update-alternatives --install /usr/bin/c++ c++ $(which clang++) 100
+          sudo update-alternatives --set cc $(which clang)
+          sudo update-alternatives --set c++ $(which clang++)
+
+          # Same AlmaLinux 8 container as the release pipeline; the dnf
+          # branch is a guarded safety net (image ships the packages).
+          if command -v dnf >/dev/null 2>&1; then
+            if ! rpm -q ccache ninja-build vulkan-loader-devel libsecret-devel libzstd-devel >/dev/null 2>&1; then
+              sudo dnf install -y ccache ninja-build vulkan-loader-devel libsecret-devel libzstd-devel
+            fi
+          else
+            sudo apt install ccache ninja-build libvulkan-dev libzstd-dev libsecret-1-dev -y
+          fi
+          echo "CMAKE_GENERATOR=Ninja" >> $GITHUB_ENV
+
+      - name: Provision python3.12
+        shell: bash
+        run: |
+          # EL8 default python3 is 3.6; invoke python3.12 explicitly
+          # everywhere (D-12, research Pitfall 4). Ephemeral per job.
+          if command -v python3.12 >/dev/null 2>&1; then
+            echo "python3.12 already present"
+          elif command -v dnf >/dev/null 2>&1; then
+            SUDO=""
+            command -v sudo >/dev/null 2>&1 && SUDO="sudo"
+            $SUDO dnf install -y python3.12
+          else
+            sudo apt-get update
+            sudo apt-get install -y python3.12
+          fi
+          python3.12 --version
+
+      - name: Capacity probe (runner evidence, research A4)
+        shell: bash
+        run: |
+          {
+            echo "## Ceremony e2e nightly runner capacity"
+            echo
+            echo "- nproc: $(nproc)"
+            echo "- python: $(python3.12 --version 2>&1)"
+            echo
+            echo '```'
+            free -h 2>/dev/null || echo "free not available"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Configure CMake for Linux
+        working-directory: ${{github.workspace}}/GeniusSDK
+        # Pin clang explicitly — see the e2e job's step for the AlmaLinux 8
+        # /usr/bin/c++ (g++ 8.5) trap this avoids (Pitfall 5).
+        shell: bash
+        run: cmake -S build/Linux -B $BUILD_DIRECTORY -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=$(which clang) -DCMAKE_CXX_COMPILER=$(which clang++) -DTHIRDPARTY_BUILD_DIR=${{env.THIRDPARTY_BUILD_DIR}} -DZKLLVM_BUILD_DIR=${{env.ZKLLVM_BUILD_DIR}} -DSUPERGENIUS_DIR=${{env.SUPERGENIUS_DIR}} -DABI_SUBFOLDER_NAME='/x86_64'
+
+      - name: Build GeniusSDK
+        working-directory: ${{github.workspace}}/GeniusSDK/${{env.BUILD_DIRECTORY}}
+        shell: bash
+        run: cmake --build . --config Release -j
+
+      - name: Resolve harness binaries
+        shell: bash
+        run: |
+          RUNNER_BIN="$GITHUB_WORKSPACE/GeniusSDK/${BUILD_DIRECTORY}/services/GeniusSDKService"
+          if [ ! -x "$RUNNER_BIN" ]; then
+            RUNNER_BIN="$(find "$GITHUB_WORKSPACE/GeniusSDK/build" -type f -name GeniusSDKService -perm -u+x 2>/dev/null | head -n 1)"
+          fi
+          if [ -z "$RUNNER_BIN" ] || [ ! -x "$RUNNER_BIN" ]; then
+            echo "FATAL: GeniusSDKService not found under $GITHUB_WORKSPACE/GeniusSDK/build" >&2
+            exit 1
+          fi
+
+          SGNS_TRUST_BIN="$SUPERGENIUS_DIR/${BUILD_DIRECTORY}/SuperGenius/bin/sgns-trust"
+          if [ ! -x "$SGNS_TRUST_BIN" ]; then
+            SGNS_TRUST_BIN="$(find "$SUPERGENIUS_DIR" -type f -name sgns-trust -perm -u+x 2>/dev/null | head -n 1)"
+          fi
+          if [ -z "$SGNS_TRUST_BIN" ] || [ ! -x "$SGNS_TRUST_BIN" ]; then
+            echo "FATAL: sgns-trust not found in the extracted SuperGenius tree ($SUPERGENIUS_DIR)" >&2
+            exit 1
+          fi
+
+          echo "RUNNER_BIN=$RUNNER_BIN" >> "$GITHUB_ENV"
+          echo "SGNS_TRUST_BIN=$SGNS_TRUST_BIN" >> "$GITHUB_ENV"
+
+      - name: Map matrix mode to invocation
+        shell: bash
+        env:
+          MATRIX_MODE: ${{ matrix.mode }}
+        run: |
+          set -euo pipefail
+          # ONE home for the mode -> args -> expected-rc mapping (not six
+          # copied invocation steps). Harness exit contract: 0 success,
+          # 2 stranded negative control with the STRANDED-GENESIS-DETECTED
+          # marker, 1 everything else.
+          case "$MATRIX_MODE" in
+            happy)
+              EXTRA_ARGS=""
+              EXPECTED_RC=0
+              ;;
+            restart-mid-ceremony|restart-mid-sync|quorum-loss|window-edge)
+              EXTRA_ARGS="--scenario $MATRIX_MODE"
+              EXPECTED_RC=0
+              ;;
+            negative-control)
+              EXTRA_ARGS="--approve-peers 2"
+              EXPECTED_RC=2
+              ;;
+            *)
+              echo "FATAL: unknown nightly matrix mode: $MATRIX_MODE" >&2
+              exit 1
+              ;;
+          esac
+          echo "EXTRA_ARGS=$EXTRA_ARGS" >> "$GITHUB_ENV"
+          echo "EXPECTED_RC=$EXPECTED_RC" >> "$GITHUB_ENV"
+          {
+            echo "## Ceremony e2e nightly leg"
+            echo
+            echo "- mode: $MATRIX_MODE"
+            echo "- extra args: ${EXTRA_ARGS:-<none>}"
+            echo "- expected exit: $EXPECTED_RC"
+            echo
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Run ceremony e2e (matrix leg)
+        shell: bash
+        env:
+          MATRIX_MODE: ${{ matrix.mode }}
+        run: |
+          # Same dbus-run-session + gnome-keyring wrapper as the e2e job
+          # (libsecret needs a secret service; verbatim from SuperGenius's
+          # proven ctest step). Values ride the ENVIRONMENT through the
+          # wrapper; NO single quotes inside the bash -c body. $EXTRA_ARGS
+          # is intentionally unquoted word-splitting of a workflow-generated
+          # (never user-supplied) 0-or-2-word string.
+          dbus-run-session -- bash -c '\
+            mkdir -p ~/.cache ~/.local/share/keyrings && \
+            echo -n "login" > ~/.local/share/keyrings/default && \
+            echo "[keyring]
+            display-name=login
+            lock-on-idle=false
+            lock-after=false" > ~/.local/share/keyrings/login.keyring && \
+            eval $(printf "\n" | gnome-keyring-daemon --unlock --components=secrets) && \
+            log="${RUNNER_TEMP:-/tmp}/ceremony-e2e-$MATRIX_MODE.log" && \
+            python3.12 "$GITHUB_WORKSPACE/GeniusSDK/e2e/ceremony_e2e.py" --nodes 5 \
+              --runner "$RUNNER_BIN" --sgns-trust "$SGNS_TRUST_BIN" $EXTRA_ARGS 2>&1 | tee "$log"
+            rc="${PIPESTATUS[0]}"
+            echo "CASE $MATRIX_MODE: exit=$rc (expected $EXPECTED_RC)"
+            if [ "$rc" -ne "$EXPECTED_RC" ]; then
+              echo "FAIL: matrix leg $MATRIX_MODE exited $rc, expected $EXPECTED_RC"
+              exit 1
+            fi
+            if [ "$EXPECTED_RC" -eq 2 ] && ! grep -q "STRANDED-GENESIS-DETECTED" "$log"; then
+              echo "FAIL: negative control exited 2 but the STRANDED-GENESIS-DETECTED marker is missing"
+              exit 1
+            fi'
+
+      - name: Upload ceremony e2e failure artifacts
+        # Scrubbed-by-contract artifacts directory only (see the e2e job).
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ceremony-e2e-artifacts-${{ matrix.mode }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ github.workspace }}/GeniusSDK/e2e/artifacts/
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Cleanup stragglers
+        if: always()
+        shell: bash
+        run: |
+          # Guarded pkill — never fail the job from cleanup.
+          pkill -x GeniusSDKService 2>/dev/null || true
+          pkill -x sgns-trust 2>/dev/null || true
