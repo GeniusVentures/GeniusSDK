@@ -9,6 +9,7 @@
  */
 
 #include "GeniusSDK.h"
+#include "GeniusSDK.hpp"
 
 #include <pthread.h>
 #include <openssl/crypto.h>
@@ -98,7 +99,7 @@ namespace
                 errors << "Error: duplicate option: " << option << "\n";
                 return std::nullopt;
             }
-            if ( i + 1 >= argc || std::string( argv[i + 1] ).rfind( "--", 0 ) == 0 )
+            if ( i + 1 >= argc || argv[i + 1][0] == '\0' || std::string( argv[i + 1] ).rfind( "--", 0 ) == 0 )
             {
                 errors << "Error: missing value for option: " << option << "\n";
                 return std::nullopt;
@@ -181,6 +182,11 @@ namespace
 
     // One parseable progress line on stdout, force-flushed - the harness reads this
     // through a pipe. Node state and init progress come via the public C API only.
+    // The trailing head= field is additive (D-08): printed ONLY when the node is
+    // READY and the genesis-CID accessor succeeds, omitted otherwise. READY-gated
+    // on purpose - the accessor logs an error line when the CID is absent, and
+    // probing it on the 10 s cadence pre-genesis would spam the node log; every
+    // consumer samples head after the strict READY gate, so the gate loses nothing.
     void PrintStatusLine()
     {
         const GeniusNodeState_t node_state = GeniusSDKGetNodeState();
@@ -195,8 +201,20 @@ namespace
         }
         const GeniusStatusInfo status = GeniusSDKGetInitializationStatus();
         std::cout << "STATUS node_state=" << state_name << " init=" << std::fixed << std::setprecision( 2 )
-                  << status.percentage << "\n"
-                  << std::flush;
+                  << status.percentage;
+        if ( state_name == "READY" )
+        {
+            const auto node = GeniusSDKGetNode();
+            if ( node )
+            {
+                const auto genesis_cid = node->GetGenesisCID();
+                if ( genesis_cid.has_value() )
+                {
+                    std::cout << " head=" << genesis_cid.value();
+                }
+            }
+        }
+        std::cout << "\n" << std::flush;
         if ( status.message != nullptr )
         {
             GeniusSDKFree( status.message ); // Contract: free the status message when non-null.

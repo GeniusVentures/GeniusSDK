@@ -24,6 +24,10 @@ POLL_INTERVAL = 0.25  # seconds between gate polls; gates never sleep longer
 _processes = {}  # name -> {"proc", "out", "err", "extra", "handles"}
 
 _STATUS_RE = re.compile(r"STATUS node_state=(\S+)")
+# The D-08 additive field: runner STATUS lines carry head=<genesis CID> only
+# once the node is READY and the accessor succeeded. One home per format fact:
+# supervisor owns STATUS parsing (state and head beside each other).
+_HEAD_RE = re.compile(r"STATUS node_state=\S+ init=\S+ head=(\S+)")
 
 
 class GateError(RuntimeError):
@@ -121,6 +125,12 @@ def state_of(name):
     """Latest runner STATUS state across the combined capture, or None."""
     states = _STATUS_RE.findall(_combined(name))
     return states[-1] if states else None
+
+
+def head_of(name):
+    """Latest STATUS head= (genesis CID) across the combined capture, or None."""
+    heads = _HEAD_RE.findall(_combined(name))
+    return heads[-1] if heads else None
 
 
 def terminate(name, timeout=60):

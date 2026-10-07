@@ -61,6 +61,11 @@ POST_BURN_STATES = ("INITIALIZING_TRANSACTIONS", "INITIALIZING_PROCESSING", "REA
 # boot-to-WAITING at 12-14s per node on a 10s STATUS cadence — generous headroom).
 POST_BURN_GRACE_SECONDS = 120
 POST_BURN_WINDOW = ceremony.SERVE_SECONDS + POST_BURN_GRACE_SECONDS
+# Bounded head-sampling window after the strict gate: head= rides the SAME
+# STATUS line as READY, but a node still in INITIALIZING_TRANSACTIONS when the
+# gate passes needs its READY line first — 60s covers the 10s cadence plus one
+# transition (Pitfall 7 headroom discipline).
+HEAD_SAMPLE_SECONDS = 60
 
 STRANDED_MARKER = "STRANDED-GENESIS-DETECTED"
 
@@ -336,6 +341,32 @@ def _ceremony_run(sgns_trust, runner, run_dir, top, timeout, approve_count,
             _teardown_nodes(expect_clean=False)
             return {"approved": list(approved),
                     "burn_threshold": manifest["burn_threshold"]}
+
+    if all_advanced:
+        # D-08 head assertion (ratifies A1 at runtime): on a quiescent young
+        # net head == the genesis CID and is network-wide identical. Sampled
+        # AFTER the strict gate — every node must have printed a READY line
+        # carrying head= within the bounded window; any divergence is a loud
+        # failure, never a warning.
+        deadline = time.monotonic() + HEAD_SAMPLE_SECONDS
+        heads = {}
+        while True:
+            heads = {entry["name"]: supervisor.head_of(entry["name"])
+                     for entry in top["nodes"]}
+            if all(heads.values()) or time.monotonic() >= deadline:
+                break
+            time.sleep(1.0)
+        missing = sorted(name for name, head in heads.items() if not head)
+        if missing:
+            raise RuntimeError("no STATUS head= observed within %ds after the "
+                               "post-burn gate (accessor failing?): %s"
+                               % (HEAD_SAMPLE_SECONDS, missing))
+        distinct = set(heads.values())
+        if len(distinct) != 1:
+            raise RuntimeError("diverged heads across nodes (expected one "
+                               "identical genesis CID): %s" % heads)
+        print("HEAD %s identical across %d nodes"
+              % (next(iter(distinct)), len(heads)))
 
     used_actors = [actor1] + peer_actors[:approve_count]
     for actor in used_actors:
