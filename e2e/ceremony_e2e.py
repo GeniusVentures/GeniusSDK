@@ -91,6 +91,12 @@ HEAD_SAMPLE_SECONDS = 60
 # plus registry fetch and sync, with Pitfall 7 headroom.
 JOINER_SYNC_ANCHOR = "Request succeeded for Genesis"
 JOINER_GATE_SECONDS = 120
+# SCEN-04 quorum-loss windows: the bounded outage observation (sample every
+# supervisor POLL_INTERVAL across 60s — polling, never sleeping) and the
+# recovery gate (respawned nodes re-READY from durable state; 180s = the
+# 12-14s boot plus registry re-fetch, with Pitfall 7 headroom).
+QUORUM_OBSERVATION_SECONDS = 60
+QUORUM_RECOVERY_SECONDS = 180
 
 STRANDED_MARKER = "STRANDED-GENESIS-DETECTED"
 
@@ -326,6 +332,115 @@ def _restart_mid_sync_stage(runner, run_dir, top, network_head):
           "joiner crash)" % len(top["nodes"]))
 
 
+def _quorum_loss_stage(runner, run_dir, top, network_head):
+    """SCEN-04: 2-of-5 quorum loss post-READY — halt with no divergence among
+    survivors, then recovery converging every node back to the SAME head.
+
+    Ratified assertion strength (03-RESEARCH Open Question 3, adopted): on a
+    quiescent net halt is evidenced as frozen head + stable READY states + no
+    FATAL across survivors — the limitation line is printed in the OUTPUT, not
+    buried in comments. The kills are event-anchored on the identical-head
+    assertion RETURNING (D-07); the observation window polls the supervisor's
+    cadence; any violation fails loudly naming node, sample, and value."""
+    if network_head is None:
+        raise RuntimeError("quorum-loss requires the strict pass (no "
+                           "identical network head was asserted)")
+    baseline = network_head
+    # Kill node3 + node5 — two of the four trusted peers; survivors are node1
+    # (the bootstrapper), node2, node4. 3 live of 5 < every quorum floor.
+    killed_indexes = (2, 4)  # 0-based positions of node3, node5
+    for index in killed_indexes:
+        entry = top["nodes"][index]
+        supervisor.kill(entry["name"])
+        print("SCENARIO: %s SIGKILLed post-READY at the head-assertion anchor "
+              "(2-of-5 quorum loss)" % entry["name"])
+    survivors = [entry for index, entry in enumerate(top["nodes"])
+                 if index not in killed_indexes]
+    survivor_names = [entry["name"] for entry in survivors]
+
+    samples = 0
+    deadline = time.monotonic() + QUORUM_OBSERVATION_SECONDS
+    while True:
+        samples += 1
+        for entry in survivors:
+            name = entry["name"]
+            state = supervisor.state_of(name)
+            head = supervisor.head_of(name)
+            if state is not None and "FATAL" in state:
+                raise RuntimeError("outage sample %d: %s reached %s — no FATAL "
+                                   "is allowed across survivors (see %s)"
+                                   % (samples, name, state, entry["node_log"]))
+            if state != "READY":
+                raise RuntimeError("outage sample %d: %s state=%s — halt means "
+                                   "STABLE states, expected READY (see %s)"
+                                   % (samples, name, state, entry["node_log"]))
+            if head != baseline:
+                raise RuntimeError("outage sample %d: %s head=%s != frozen "
+                                   "baseline %s — divergence during the outage"
+                                   % (samples, name, head, baseline))
+        if time.monotonic() >= deadline:
+            break
+        time.sleep(supervisor.POLL_INTERVAL)
+    if samples < 3:
+        raise RuntimeError("observation window produced only %d samples "
+                           "(needs >= 3 spread across the window)" % samples)
+    print("SCENARIO: outage window %ds observed — %d samples across %d "
+          "survivors (%s): head frozen, states stable, no FATAL"
+          % (QUORUM_OBSERVATION_SECONDS, samples, len(survivors),
+             ", ".join(survivor_names)))
+    print("halt assertion: quiescent net — head == genesis CID; halt evidenced "
+          "as frozen head + stable READY + no FATAL across survivors; "
+          "transaction-driven fork detection is out of scope this phase "
+          "(phase decisions)")
+    print("HEAD-FROZEN %s across survivors" % baseline)
+
+    # Recovery: respawn both killed nodes under DISTINCT names (Pattern 2),
+    # same argv/base dir — durable-state recovery is the proof.
+    for index in killed_indexes:
+        entry = top["nodes"][index]
+        new_name = entry["name"] + "-restart"
+        _spawn_node(new_name, runner, entry, run_dir, {})
+        print("SCENARIO: %s respawned as %s (same argv + base dir — durable-"
+              "state recovery)" % (entry["name"], new_name))
+        entry["name"] = new_name
+
+    deadline = time.monotonic() + QUORUM_RECOVERY_SECONDS
+    while True:
+        states = {entry["name"]: supervisor.state_of(entry["name"])
+                  for entry in top["nodes"]}
+        if all(state == "READY" for state in states.values()):
+            break
+        fatal = sorted(name for name, state in states.items()
+                       if state is not None and "FATAL" in state)
+        if fatal:
+            raise RuntimeError("recovery gate: %s reached FATAL (see the "
+                               "respawned captures)" % ", ".join(fatal))
+        if time.monotonic() >= deadline:
+            raise RuntimeError("recovery gate: not all %d nodes READY within "
+                              "%ds: %s" % (len(top["nodes"]),
+                                           QUORUM_RECOVERY_SECONDS, states))
+        time.sleep(1.0)
+
+    deadline = time.monotonic() + HEAD_SAMPLE_SECONDS
+    while True:
+        heads = {entry["name"]: supervisor.head_of(entry["name"])
+                 for entry in top["nodes"]}
+        if all(heads.values()) or time.monotonic() >= deadline:
+            break
+        time.sleep(1.0)
+    missing = sorted(name for name, head in heads.items() if not head)
+    if missing:
+        raise RuntimeError("recovery gate: no STATUS head= within %ds for %s"
+                           % (HEAD_SAMPLE_SECONDS, missing))
+    diverged = {name: head for name, head in heads.items() if head != baseline}
+    if diverged:
+        raise RuntimeError("recovery diverged from the pre-kill head %s: %s "
+                           "(durable state must converge to the SAME head — "
+                           "no fork across the restart)" % (baseline, diverged))
+    print("HEAD-CONVERGED %s across all %d nodes" % (baseline,
+                                                     len(top["nodes"])))
+
+
 def _boot_only_run(runner, run_dir, top, timeout):
     """SETUP -> boot stage -> OBSERVED -> clean teardown; raises on failure."""
     print("SETUP: run dir %s" % run_dir)
@@ -518,6 +633,8 @@ def _ceremony_run(sgns_trust, runner, run_dir, top, timeout, approve_count,
 
     if scenario == "restart-mid-sync":
         _restart_mid_sync_stage(runner, run_dir, top, network_head)
+    elif scenario == "quorum-loss":
+        _quorum_loss_stage(runner, run_dir, top, network_head)
 
     used_actors = [actor1] + peer_actors[:approve_count]
     for actor in used_actors:
@@ -791,14 +908,16 @@ def main():
         if args.approve_peers is not None:
             parser.error("--scenario approves all peers (incompatible with "
                          "--approve-peers)")
-        if args.scenario not in ("restart-mid-ceremony", "restart-mid-sync"):
+        if args.scenario not in ("restart-mid-ceremony", "restart-mid-sync",
+                                 "quorum-loss"):
             parser.error("--scenario %s is implemented by a later Phase 3 "
-                         "plan; this plan ships restart-mid-ceremony and "
-                         "restart-mid-sync" % args.scenario)
+                         "plan; this plan ships restart-mid-ceremony, "
+                         "restart-mid-sync, and quorum-loss" % args.scenario)
         if args.nodes < 5:
             parser.error("%s needs the 5-node topology (bootstrapper + 4 "
                          "peers; the kill points anchor on the parsed 3-of-4 "
-                         "burn floor and the joiner joins a 5-node net)"
+                         "burn floor, the joiner joins a 5-node net, and "
+                         "quorum-loss kills 2 of the 4 trusted peers)"
                          % args.scenario)
 
     # Harness-start self-checks: the EC pinned vector asserts at import of
