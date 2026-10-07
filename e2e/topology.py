@@ -12,7 +12,10 @@ sgns_config.json, written once node 1's SDK account address B_1 is known (it
 is the authorized_full_node that un-defers blockchain start — see
 write_trust_configs). Phase B (write_peer_configs): the one fact that needs
 node 1 alive on the final boot — peers' and actors' bootstrap_addresses from
-the bootstrapper's live PubSub multiaddr.
+the bootstrapper's live PubSub multiaddr. Phase C (write_joiner_configs):
+late-joiner configs — a non-ceremony node booting WITHOUT --key-file (the
+Phase 5 joiner shape), so no joiner key ever exists and the D-07 scan scope
+stays the topology node keys.
 
 The topology manifest is the single source every later stage reads; peer_set is
 THE peer-set fact shared by sgns_config generation here and plan 02-03's
@@ -42,6 +45,18 @@ NODE_PORT_STRIDE = 500     # resolution adds hash%301, so >300 spacing kills col
 ACTOR_PORT_BASE = 45501    # actor pubsub_port strings: disjoint band, base + (i-1)
 
 NODE_LOGGER_NAME = "SuperGeniusNode"  # InitLoggers tag owning the PubSub line
+BLOCKCHAIN_LOGGER_NAME = "Blockchain"  # InitLoggers tag owning the joiner sync lines
+
+# Every log_config this module writes promotes the SAME logger set (one home,
+# one shape — nodes and joiners get an identical set): the node logger owns
+# the PubSub multiaddr line, the Blockchain logger owns the joiner sync
+# anchors ("Request succeeded for Genesis", Blockchain.cpp L703 — Pitfall 2:
+# it is NOT SuperGeniusNode; without this promotion those info lines never
+# reach sgnslog2.log).
+INFO_LOGGERS = {
+    NODE_LOGGER_NAME: "info",
+    BLOCKCHAIN_LOGGER_NAME: "info",
+}
 
 
 def draw_network_id() -> int:
@@ -74,6 +89,23 @@ def _node_dir(run_dir: str, index: int) -> str:
     return os.path.join(run_dir, "node%d" % index) + "/"
 
 
+def _write_dev_config(base_dir: str) -> None:
+    # One home for the dev-config shape: every node AND every joiner writes
+    # exactly these four keys (the SuperGenius parser reads them as strings).
+    _write_json(os.path.join(base_dir, "dev_config.json"), {
+        "Address": "0xcafe",
+        "Cut": "0.65",
+        "TokenValue": "1.0",
+        "TokenID": "0x" + "0" * 64,
+    })
+
+
+def _write_log_config(base_dir: str) -> None:
+    # One home for the promoted-logger set (INFO_LOGGERS above).
+    _write_json(os.path.join(base_dir, "log_config.json"),
+                {"loggers": dict(INFO_LOGGERS)})
+
+
 def build_topology(run_dir: str, nodes: int, runner_default_ports: bool = False) -> dict:
     """Generate identities + every pre-boot config and the topology manifest.
 
@@ -103,21 +135,14 @@ def build_topology(run_dir: str, nodes: int, runner_default_ports: bool = False)
     for i, (key_path, address) in enumerate(identities, start=1):
         base_dir = _node_dir(run_dir, i)
         os.makedirs(base_dir, exist_ok=True)
-        _write_json(os.path.join(base_dir, "dev_config.json"), {
-            "Address": "0xcafe",
-            "Cut": "0.65",
-            "TokenValue": "1.0",
-            "TokenID": "0x" + "0" * 64,
-        })
+        _write_dev_config(base_dir)
         # sgns_config.json is written by write_trust_configs once node 1's
         # account address B_1 is known (authorized_full_node wiring).
         # The node logger sinks to <base>/sgnslog2.log at err level in this
-        # build (InitLoggers L1297); promote the one logger that owns the
-        # PubSub multiaddr line (GeniusNode.cpp L1671) to info so the staged
-        # bootstrap gate can observe it (RESEARCH Q3 observability knob).
-        _write_json(os.path.join(base_dir, "log_config.json"), {
-            "loggers": {NODE_LOGGER_NAME: "info"},
-        })
+        # build (InitLoggers L1297); the promoted logger set (INFO_LOGGERS)
+        # makes the PubSub multiaddr line (GeniusNode.cpp L1671) and the
+        # Blockchain sync lines observable there (RESEARCH Q3 / Pitfall 2).
+        _write_log_config(base_dir)
         port_seed = NODE_PORT_BASE + (i - 1) * NODE_PORT_STRIDE
         network_config_path = os.path.join(base_dir, "network_config.json")
         if i == 1:
@@ -173,6 +198,40 @@ def build_topology(run_dir: str, nodes: int, runner_default_ports: bool = False)
 _HEX = set("0123456789abcdef")
 
 
+def _expect_128_hex(address: str, what: str) -> None:
+    # One home for the address-shape check (write_trust_configs and the
+    # joiner writer consume the same fact: SDK account addresses are 128 hex).
+    if not (len(address) == 128 and set(address) <= _HEX):
+        raise ValueError("%s must be a 128-hex address (got %r)"
+                         % (what, address[:16] + "..."))
+
+
+def _sgns_trust_payload(topology: dict, authorized_full_node: str) -> dict:
+    """The ONE sgns_config trust shape — every ceremony node AND every joiner
+    writes exactly this payload (observed live, 03-02: without these keys a
+    node either rejects the net's genesis — authorized_full_node — or fails
+    closed with 'no trusted peers configured and no persisted trust state' —
+    trusted_peers/bootstrapper_node; a joiner differs from a ceremony node
+    only by booting WITHOUT --key-file).
+
+    Floor-parity anti-strand invariant: trusted_peers carries ALL N-1
+    non-bootstrapper addresses — the exact set make-manifest receives as
+    --peers (D-12b). The node rebuilds its expected genesis manifest from
+    these fields and defaults quorum floors from trusted_peers.size()
+    (GeniusNode.cpp L441-449), so a shorter list computes floors that can
+    never match the manifest's and every node strands in
+    WAITING_FOR_TRUST_GENESIS. subnet_id MUST equal the manifest
+    network-id (Pitfall 10).
+    """
+    return {
+        "node_type": "Full",
+        "subnet_id": topology["network_id"],
+        "authorized_full_node": authorized_full_node,
+        "bootstrapper_node": topology["bootstrapper"],
+        "trusted_peers": list(topology["peer_set"]),
+    }
+
+
 def write_trust_configs(topology: dict, authorized_full_node: str) -> None:
     """sgns_config.json for every node (phase A2 — after B_1 discovery).
 
@@ -185,25 +244,10 @@ def write_trust_configs(topology: dict, authorized_full_node: str) -> None:
     broadcast — so without this key every node strands in
     INITIALIZING_BLOCKCHAIN and never reaches WAITING_FOR_TRUST_GENESIS.
     """
-    if not (len(authorized_full_node) == 128
-            and set(authorized_full_node) <= _HEX):
-        raise ValueError("authorized_full_node must be a 128-hex address")
+    _expect_128_hex(authorized_full_node, "authorized_full_node")
     for entry in topology["nodes"]:
-        # Floor-parity anti-strand invariant: trusted_peers carries ALL N-1
-        # non-bootstrapper addresses — the exact set make-manifest receives as
-        # --peers (D-12b). The node rebuilds its expected genesis manifest from
-        # these fields and defaults quorum floors from trusted_peers.size()
-        # (GeniusNode.cpp L441-449), so a shorter list computes floors that can
-        # never match the manifest's and every node strands in
-        # WAITING_FOR_TRUST_GENESIS. subnet_id MUST equal the manifest
-        # network-id (Pitfall 10).
-        _write_json(os.path.join(entry["base_dir"], "sgns_config.json"), {
-            "node_type": "Full",
-            "subnet_id": topology["network_id"],
-            "authorized_full_node": authorized_full_node,
-            "bootstrapper_node": topology["bootstrapper"],
-            "trusted_peers": list(topology["peer_set"]),
-        })
+        _write_json(os.path.join(entry["base_dir"], "sgns_config.json"),
+                    _sgns_trust_payload(topology, authorized_full_node))
 
 
 def write_peer_configs(topology: dict, node1_multiaddr: str) -> None:
@@ -225,6 +269,71 @@ def write_peer_configs(topology: dict, node1_multiaddr: str) -> None:
             "pubsub_bind_address": "0.0.0.0",
             "bootstrap_addresses": [node1_multiaddr],
         })
+
+
+def write_joiner_configs(topology: dict, node1_multiaddr: str,
+                         authorized_full_node: str, count: int = 1) -> list:
+    """Phase C: configs for late joiners (non-ceremony nodes), plus the
+    joiners[] manifest entries.
+
+    A joiner boots WITHOUT --key-file — a fresh account, exactly the Phase 5
+    joiner shape — so no joiner key ever exists and the D-07 scan scope stays
+    the topology node keys. node1_multiaddr mirrors write_peer_configs: it is
+    the live multiaddr THIS run's boot gate captured, so bootstrap_addresses
+    only ever point at node1 of this topology (T-03-05: no cross-net
+    contamination; subnet_id is asserted in the reserved band at write time).
+
+    authorized_full_node (B_1, same fact write_trust_configs consumes): a
+    joiner may not CREATE genesis, but Blockchain::VerifyGenesisBlock rejects
+    any genesis whose creator != the authorized address — without the key the
+    joiner falls back to the compile-time default, refuses the net's genesis
+    ("unauthorized key"), and strands in INITIALIZING_BLOCKCHAIN forever
+    (observed live, 03-02). And the FULL trust wiring (bootstrapper_node +
+    trusted_peers) is equally mandatory: TrustStartupController fail-closes
+    ("No trusted peers configured and no persisted trust state; refusing
+    unrestricted boot" — observed live, 03-02) because a fresh joiner has no
+    persisted trust state and must rebuild the expected manifest from config
+    (GeniusNode.cpp L301-427 parses every key optional). The joiner therefore
+    writes the SAME sgns_config payload as every node (_sgns_trust_payload —
+    one home); it differs from a ceremony node ONLY by booting without
+    --key-file. Port seed continues the node band after the last node
+    (41001 + (N + i - 1) * 500): >300 spaced like every node and clear of the
+    actor band.
+    """
+    if count < 1:
+        raise ValueError("count must be >= 1")
+    _expect_128_hex(authorized_full_node, "authorized_full_node")
+    low, high = NETWORK_ID_RESERVED_RANGE
+    if not low <= topology["network_id"] <= high:
+        raise ValueError("network_id %d outside the reserved band %d-%d "
+                         "(T-03-05)" % (topology["network_id"], low, high))
+    joiners = []
+    node_count = len(topology["nodes"])
+    for i in range(1, count + 1):
+        base_dir = os.path.join(topology["run_dir"], "joiner%d" % i) + "/"
+        os.makedirs(base_dir, exist_ok=True)
+        _write_dev_config(base_dir)
+        _write_log_config(base_dir)
+        port_seed = NODE_PORT_BASE + (node_count + i - 1) * NODE_PORT_STRIDE
+        network_config = {"auto_dht": True, "bootstrap_addresses": [node1_multiaddr]}
+        if not topology["runner_default_ports"]:
+            network_config["port_seed"] = port_seed
+        network_config_path = os.path.join(base_dir, "network_config.json")
+        _write_json(network_config_path, network_config)
+        _write_json(os.path.join(base_dir, "sgns_config.json"),
+                    _sgns_trust_payload(topology, authorized_full_node))
+        joiners.append({
+            "name": "joiner%d" % i,
+            "base_dir": base_dir,
+            "network_config": network_config_path,
+            "node_log": os.path.join(base_dir, "sgnslog2.log"),
+            "port_seed": port_seed,
+        })
+    topology["joiners"] = joiners
+    # The manifest is the single source every later stage reads; re-emit it
+    # with the joiners[] entries (paths only, like every other entry).
+    _write_json(os.path.join(topology["run_dir"], "topology.json"), topology)
+    return joiners
 
 
 def _read_json(path: str):
@@ -269,6 +378,12 @@ def _selftest() -> None:
         for name in ("dev_config.json", "network_config.json", "log_config.json"):
             _read_json(os.path.join(node1["base_dir"], name))
         assert not os.path.exists(os.path.join(node1["base_dir"], "sgns_config.json"))
+        # Pitfall 2: every node log_config promotes the SAME logger set — the
+        # Blockchain logger owns the joiner sync anchors, so it must be there.
+        for entry in topology["nodes"]:
+            log_cfg = _read_json(os.path.join(entry["base_dir"], "log_config.json"))
+            assert log_cfg["loggers"] == dict(INFO_LOGGERS)
+            assert BLOCKCHAIN_LOGGER_NAME in log_cfg["loggers"]
         node_seeds = [node1["port_seed"]]
         for entry in topology["nodes"][1:]:
             assert not os.path.exists(entry["network_config"])  # phase B not yet
@@ -318,6 +433,54 @@ def _selftest() -> None:
             assert cfg["pubsub_port"] == actor["pubsub_port"]
             assert isinstance(cfg["pubsub_port"], str)
             assert cfg["bootstrap_addresses"] == [multiaddr]
+
+        # Phase C: joiner configs (2 joiners prove the band continues past the
+        # last node). Minimal sgns_config (subnet_id == network_id, asserted
+        # in-band at write time, plus authorized_full_node — the joiner must
+        # know the authorized creator to ACCEPT the net's genesis), node1-only
+        # bootstrap, same logger set, and joiner ports distinct from every
+        # node/actor port.
+        joiners = write_joiner_configs(topology, multiaddr, authorized, count=2)
+        assert len(joiners) == 2
+        try:
+            write_joiner_configs({**topology, "network_id": 369}, multiaddr,
+                                 authorized)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("out-of-band network_id must be rejected")
+        try:
+            write_joiner_configs(topology, multiaddr, "not-hex")
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("non-128-hex authorized address must be "
+                                 "rejected")
+        joiner_seeds = []
+        for index, joiner in enumerate(joiners, start=1):
+            sgns = _read_json(os.path.join(joiner["base_dir"], "sgns_config.json"))
+            # Same trust payload as every node (one home): a joiner differs
+            # ONLY by booting without --key-file.
+            assert sgns == _read_json(os.path.join(
+                topology["nodes"][0]["base_dir"], "sgns_config.json"))
+            net = _read_json(joiner["network_config"])
+            assert net["port_seed"] == joiner["port_seed"]
+            assert net["bootstrap_addresses"] == [multiaddr]
+            log_cfg = _read_json(os.path.join(joiner["base_dir"], "log_config.json"))
+            assert log_cfg["loggers"] == dict(INFO_LOGGERS)
+            _read_json(os.path.join(joiner["base_dir"], "dev_config.json"))
+            assert joiner["port_seed"] == (
+                NODE_PORT_BASE
+                + (len(topology["nodes"]) + index - 1) * NODE_PORT_STRIDE)
+            joiner_seeds.append(joiner["port_seed"])
+        all_seeds = sorted(node_seeds + joiner_seeds)
+        assert all(b - a > 300 for a, b in zip(all_seeds, all_seeds[1:]))
+        assert max(all_seeds) + 300 < min(actor_ports)  # clear of the actor band
+        assert len(set(all_seeds + actor_ports)) == len(all_seeds + actor_ports)
+        manifest = _read_json(os.path.join(run_dir, "topology.json"))
+        assert [j["name"] for j in manifest["joiners"]] == \
+            [joiner["name"] for joiner in joiners]
+        assert manifest["joiners"][0]["node_log"] == joiners[0]["node_log"]
     finally:
         shutil.rmtree(run_dir)
 

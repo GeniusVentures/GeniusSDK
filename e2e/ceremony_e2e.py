@@ -30,11 +30,17 @@ happy path, completely unchanged. Mapping note (D-09 locks the four-token
 surface): restart-mid-ceremony covers BOTH SCEN-03 kill point 1 (SIGKILL
 right after the 2nd of 4 peer approves returns — below the parsed burn
 floor, mid-ceremony) and kill point 2 (SIGKILL right after the FINAL
-approve returns — post-quorum, pre-start). Standing assertion: scenario
-builds NEVER define SGNS_USE_MEMORY_SECURE_STORAGE — durable secure
-storage is the whole point of the restart proof (identity and approvals
-must survive SIGKILL via durable state; the memory backend would make
-identity ephemeral per process and silently void every restart proof).
+approve returns — post-quorum, pre-start); restart-mid-sync is SCEN-03 kill
+point 3 (SIGKILL a real 6th-process joiner the instant its own
+Blockchain-logger sync anchor prints, then recover to READY at the network
+head); quorum-loss is SCEN-04 (2-of-5 SIGKILL post-READY: survivors must
+hold the frozen head with stable READY states and no FATAL, then all 5
+respawned nodes converge back to the SAME head). Standing assertion:
+scenario builds NEVER define SGNS_USE_MEMORY_SECURE_STORAGE — durable
+secure storage is the whole point of the restart proof (identity and
+approvals must survive SIGKILL via durable state; the memory backend would
+make identity ephemeral per process and silently void every restart
+proof).
 
 Usage:
   python3 e2e/ceremony_e2e.py --nodes 5 --runner /abs/GeniusSDKService --sgns-trust /abs/sgns-trust
@@ -79,6 +85,12 @@ POST_BURN_WINDOW = ceremony.SERVE_SECONDS + POST_BURN_GRACE_SECONDS
 # gate passes needs its READY line first — 60s covers the 10s cadence plus one
 # transition (Pitfall 7 headroom discipline).
 HEAD_SAMPLE_SECONDS = 60
+# SCEN-03 kill point 3 anchor: the joiner's own Blockchain-logger line
+# (Blockchain.cpp L703, info — observable only because topology's log_config
+# promotes the Blockchain logger; Pitfall 2). 120s gate = the 12-14s boot
+# plus registry fetch and sync, with Pitfall 7 headroom.
+JOINER_SYNC_ANCHOR = "Request succeeded for Genesis"
+JOINER_GATE_SECONDS = 120
 
 STRANDED_MARKER = "STRANDED-GENESIS-DETECTED"
 
@@ -104,6 +116,19 @@ def _spawn_node(name, runner, entry, run_dir, spawn_times):
     supervisor.spawn(
         name,
         [runner, entry["base_dir"], "--key-file", entry["key_file"]],
+        run_dir,
+        extra_logs=[entry["node_log"]],
+    )
+    spawn_times[name] = time.monotonic()
+
+
+def _spawn_joiner(name, runner, entry, run_dir, spawn_times):
+    """Joiner argv shape: base dir only — NO --key-file. A late joiner boots
+    a fresh account (exactly the Phase 5 shape); no joiner key exists to
+    scrub, so the D-07 scan scope stays the topology node keys."""
+    supervisor.spawn(
+        name,
+        [runner, entry["base_dir"]],
         run_dir,
         extra_logs=[entry["node_log"]],
     )
@@ -182,6 +207,11 @@ def _boot_stage(runner, run_dir, top, timeout):
     print("GATE: %s PubSub at %s (%.1fs)"
           % (node1["name"], multiaddr, time.monotonic() - spawn_times[node1["name"]]))
     # Only now is the multiaddr knowable: peers' and actors' configs get it.
+    # Stashed on the manifest (the single source every later stage reads) so
+    # joiner configs can consume the same facts (write_joiner_configs):
+    # B_1 too — a joiner needs the authorized creator to accept the genesis.
+    top["node1_multiaddr"] = multiaddr
+    top["authorized_full_node"] = account_address
     topology.write_peer_configs(top, multiaddr)
     for entry in top["nodes"][1:]:
         _spawn_node(entry["name"], runner, entry, run_dir, spawn_times)
@@ -234,6 +264,66 @@ def _kill_and_respawn(runner, entry, run_dir):
     print("SCENARIO: %s SIGKILLed at the approve anchor, respawned as %s "
           "(same argv + base dir — durable-state recovery is the proof)"
           % (old_name, new_name))
+
+
+def _restart_mid_sync_stage(runner, run_dir, top, network_head):
+    """SCEN-03 kill point 3: SIGKILL a real syncing joiner mid-sync, then
+    prove it recovers to the network head.
+
+    The joiner is a genuine 6th process (never exercised in Phase 2 — A3):
+    configs from topology's one config-writer home, spawned WITHOUT
+    --key-file, gated on its OWN Blockchain-logger sync anchor (the log_config
+    promotion is what makes the line observable — Pitfall 2). The kill fires
+    the instant the anchor matches (event-anchored, D-07); the respawn gets a
+    distinct name (Pattern 2 — fresh captures, post-restart gates anchor only
+    on post-restart content). The ceremony net must be unaffected: all N
+    nodes still READY at the final gate."""
+    if network_head is None:
+        raise RuntimeError("restart-mid-sync requires the strict pass (no "
+                           "identical network head was asserted)")
+    joiner = topology.write_joiner_configs(
+        top, top["node1_multiaddr"], top["authorized_full_node"], count=1)[0]
+    print("SCENARIO: joiner configs written (base %s, subnet_id == network_id, "
+          "bootstrap node1 of THIS run — T-03-05)" % joiner["base_dir"])
+    _spawn_joiner("joiner", runner, joiner, run_dir, {})
+    print("SCENARIO: joiner spawned (no --key-file — Phase 5 joiner shape)")
+    supervisor.wait_for("joiner", JOINER_SYNC_ANCHOR, JOINER_GATE_SECONDS)
+    print("SCENARIO: joiner sync anchor observed ('%s' — the Blockchain-"
+          "logger line)" % JOINER_SYNC_ANCHOR)
+    supervisor.kill("joiner")
+    _spawn_joiner("joiner-restart", runner, joiner, run_dir, {})
+    joiner["name"] = "joiner-restart"
+    print("SCENARIO: joiner SIGKILLed at the sync anchor, respawned as "
+          "joiner-restart (durable-state recovery is the proof)")
+    supervisor.wait_for("joiner-restart", r"STATUS node_state=READY\b",
+                        JOINER_GATE_SECONDS)
+    deadline = time.monotonic() + HEAD_SAMPLE_SECONDS
+    joiner_head = None
+    while True:
+        joiner_head = supervisor.head_of("joiner-restart")
+        if joiner_head or time.monotonic() >= deadline:
+            break
+        time.sleep(1.0)
+    if not joiner_head:
+        raise RuntimeError("joiner-restart READY but no STATUS head= observed "
+                           "within %ds" % HEAD_SAMPLE_SECONDS)
+    if supervisor.state_of("joiner-restart") != "READY":
+        raise RuntimeError("joiner-restart latest state %s (expected READY)"
+                           % supervisor.state_of("joiner-restart"))
+    if joiner_head != network_head:
+        raise RuntimeError("joiner-restart head %s != network head %s (the "
+                           "respawned joiner diverged)" % (joiner_head,
+                                                           network_head))
+    print("SCENARIO: joiner-restart READY with head %s (== network head — "
+          "mid-sync SIGKILL recovered)" % joiner_head)
+    for entry in top["nodes"]:
+        state = supervisor.state_of(entry["name"])
+        if state != "READY":
+            raise RuntimeError("%s state %s after the joiner crash (the "
+                               "ceremony net must be unaffected — see %s)"
+                               % (entry["name"], state, entry["node_log"]))
+    print("SCENARIO: all %d ceremony nodes still READY (net unaffected by the "
+          "joiner crash)" % len(top["nodes"]))
 
 
 def _boot_only_run(runner, run_dir, top, timeout):
@@ -336,6 +426,7 @@ def _ceremony_run(sgns_trust, runner, run_dir, top, timeout, approve_count,
     approved = []
     killed_actor_name = None
     killed_candidate_id = None
+    network_head = None  # set by the identical-head assertion below
     for actor, address in zip(peer_actors[:approve_count], peer_addresses):
         candidates = ceremony.list_candidates(sgns_trust, actor,
                                               manifest["manifest"], run_dir)
@@ -421,8 +512,12 @@ def _ceremony_run(sgns_trust, runner, run_dir, top, timeout, approve_count,
         if len(distinct) != 1:
             raise RuntimeError("diverged heads across nodes (expected one "
                                "identical genesis CID): %s" % heads)
+        network_head = next(iter(distinct))
         print("HEAD %s identical across %d nodes"
-              % (next(iter(distinct)), len(heads)))
+              % (network_head, len(heads)))
+
+    if scenario == "restart-mid-sync":
+        _restart_mid_sync_stage(runner, run_dir, top, network_head)
 
     used_actors = [actor1] + peer_actors[:approve_count]
     for actor in used_actors:
@@ -696,14 +791,15 @@ def main():
         if args.approve_peers is not None:
             parser.error("--scenario approves all peers (incompatible with "
                          "--approve-peers)")
-        if args.scenario != "restart-mid-ceremony":
+        if args.scenario not in ("restart-mid-ceremony", "restart-mid-sync"):
             parser.error("--scenario %s is implemented by a later Phase 3 "
-                         "plan; this plan ships restart-mid-ceremony"
-                         % args.scenario)
+                         "plan; this plan ships restart-mid-ceremony and "
+                         "restart-mid-sync" % args.scenario)
         if args.nodes < 5:
-            parser.error("restart-mid-ceremony needs the 5-node topology "
-                         "(bootstrapper + 4 peers; its kill points anchor on "
-                         "the parsed 3-of-4 burn floor)")
+            parser.error("%s needs the 5-node topology (bootstrapper + 4 "
+                         "peers; the kill points anchor on the parsed 3-of-4 "
+                         "burn floor and the joiner joins a 5-node net)"
+                         % args.scenario)
 
     # Harness-start self-checks: the EC pinned vector asserts at import of
     # topology/secp256k1_address; the scan self-test proves non-vacuity here.
