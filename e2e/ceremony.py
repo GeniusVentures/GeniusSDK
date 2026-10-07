@@ -80,13 +80,20 @@ def _run_actor(name, argv, run_dir, stdin_text=None):
         try:
             proc.communicate(input=(stdin_text or "").encode("ascii"),
                              timeout=ACTOR_HARD_TIMEOUT)
-        except subprocess.TimeoutExpired:
+        except BaseException as error:
+            # WR-02: the actor runs start_new_session — an interrupted harness
+            # (its own SIGTERM handler, Ctrl-C, a timeout) must kill and reap
+            # the child here or it stays alive holding its RocksDB lock past
+            # teardown. The typed CeremonyError is raised only for the timeout
+            # case; every other interruption re-raises unchanged.
             proc.kill()
             proc.communicate()
-            raise CeremonyError("%s exceeded the harness budget of %ss (serve "
-                                "%ss + timeout %ss + margin): %s"
-                                % (name, ACTOR_HARD_TIMEOUT, SERVE_SECONDS,
-                                   TIMEOUT_SECONDS, argv))
+            if isinstance(error, subprocess.TimeoutExpired):
+                raise CeremonyError("%s exceeded the harness budget of %ss "
+                                    "(serve %ss + timeout %ss + margin): %s"
+                                    % (name, ACTOR_HARD_TIMEOUT, SERVE_SECONDS,
+                                       TIMEOUT_SECONDS, argv)) from error
+            raise
     return proc.returncode, _read_text(out_path), _read_text(err_path)
 
 

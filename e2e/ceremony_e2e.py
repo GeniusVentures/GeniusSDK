@@ -320,6 +320,7 @@ def _ceremony_run(sgns_trust, runner, run_dir, top, timeout, approve_count,
         print("ASSERT: %s node_state=%s" % (entry["name"], last.get(entry["name"]) or "NONE"))
     print("ASSERT: observed post-burn ladder: %s" % _format_ladder(ladder))
 
+    a6_engaged = False
     if not all_advanced:
         partial = any(state in POST_BURN_STATES
                       for states in ladder.values() for state in states)
@@ -328,6 +329,7 @@ def _ceremony_run(sgns_trust, runner, run_dir, top, timeout, approve_count,
             # distinct label + the observed ladder stand on stdout — a weakened
             # assertion may never stand silently, and exit 0 with this label
             # requires orchestrator sign-off on the SUMMARY (A6).
+            a6_engaged = True
             print("A6-FALLBACK-ENGAGED: %s" % _format_ladder(ladder))
         else:
             _print_stranded(top, manifest, approved, peer_actors, ladder, last)
@@ -347,10 +349,20 @@ def _ceremony_run(sgns_trust, runner, run_dir, top, timeout, approve_count,
               " ".join("%s %s" % pair for pair in readback)))
 
     _teardown_nodes(expect_clean=True)
-    print("CEREMONY PASS: network_id=%d — %d nodes beyond "
-          "WAITING_FOR_BURN_GENESIS, %d of %d peers approved (threshold %d)"
-          % (network_id, len(top["nodes"]), len(approved), len(peer_actors),
-             manifest["burn_threshold"]))
+    if a6_engaged:
+        # WR-01: a fallback pass reports the OBSERVED advanced count — never
+        # len(top["nodes"]), which would overstate a partial advance.
+        advanced_count = sum(1 for state in last.values()
+                             if state in POST_BURN_STATES)
+        print("CEREMONY PASS (A6 fallback, %d of %d nodes advanced): "
+              "network_id=%d — %d of %d peers approved (threshold %d)"
+              % (advanced_count, len(top["nodes"]), network_id, len(approved),
+                 len(peer_actors), manifest["burn_threshold"]))
+    else:
+        print("CEREMONY PASS: network_id=%d — %d nodes beyond "
+              "WAITING_FOR_BURN_GENESIS, %d of %d peers approved (threshold %d)"
+              % (network_id, len(top["nodes"]), len(approved), len(peer_actors),
+                 manifest["burn_threshold"]))
     return None
 
 
@@ -447,6 +459,25 @@ def _read_key_hexes(top):
     return hexes
 
 
+def _read_existing_key_hexes(run_dir):
+    """WR-03: whatever key material actually exists on disk after a partial
+    failure. build_topology writes one key file per node in turn, so a failure
+    partway through leaves fewer files than nodes (and a file caught mid-write
+    may be partial). Called BEFORE the scrub, which unlinks them. Returns []
+    when no key material exists."""
+    hexes = []
+    keys_dir = os.path.join(run_dir, "keys")
+    if os.path.isdir(keys_dir):
+        for name in sorted(os.listdir(keys_dir)):
+            if not name.endswith(".key"):
+                continue
+            path = os.path.join(keys_dir, name)
+            if os.path.isfile(path):
+                with open(path) as handle:
+                    hexes.append(handle.read().strip())
+    return hexes
+
+
 def _scan_selftest():
     """Non-vacuity guard (Phase 1 GTEST-04 discipline): a scan that finds
     nothing it was pointed at is itself a failure. Plants one known key and
@@ -481,6 +512,12 @@ def _preserve_and_scan(run_dir, key_hexes):
     shutil.copytree(run_dir, artifacts)
     shutil.rmtree(run_dir, ignore_errors=True)
     print("PRESERVE: run dir copied (key files scrubbed) to %s" % artifacts)
+    if not key_hexes:
+        # WR-03: no key material ever existed (partial-topology failure) — a
+        # scan over zero key forms would be vacuously CLEAN. The scan must
+        # never run with an empty key set.
+        print("key-absence scan: SKIPPED (no keys)")
+        return []
     scanned, hits = scan_keys([artifacts], key_hexes)
     _report_scan(scanned, hits)
     for path, _index in hits:
@@ -581,6 +618,11 @@ def main():
         failure = caught
     finally:
         supervisor.teardown(timeout=60)  # no-op when the run tore down already
+        if not key_hexes:
+            # WR-03: a partial-topology failure never reached _read_key_hexes;
+            # recover whatever key material exists so the failure scan is
+            # never vacuous. Must run BEFORE the scrub (it unlinks the files).
+            key_hexes = _read_existing_key_hexes(run_dir)
         _scrub_run_keys(run_dir)  # D-17: scrub BEFORE preserve/scan/delete
         harness_out.flush()
         if success and not args.keep_dir:
