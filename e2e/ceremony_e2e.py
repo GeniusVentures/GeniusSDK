@@ -76,10 +76,10 @@ ACCOUNT_ADDRESS_RE = r"^([0-9a-f]{128})$"
 # Post-burn economic-readiness states (02-RESEARCH open question 4 resolution:
 # the phase stops at economic readiness, full READY is not required).
 POST_BURN_STATES = ("INITIALIZING_TRANSACTIONS", "INITIALIZING_PROCESSING", "READY")
-# Bounded post-quorum wait: the actors' serve window + grace (02-02 observed
-# boot-to-WAITING at 12-14s per node on a 10s STATUS cadence — generous headroom).
+# Bounded post-quorum wait grace (02-02 observed boot-to-WAITING at 12-14s per
+# node on a 10s STATUS cadence — generous headroom). Added to the serve value
+# in use by _post_burn_window — the one home for that arithmetic.
 POST_BURN_GRACE_SECONDS = 120
-POST_BURN_WINDOW = ceremony.SERVE_SECONDS + POST_BURN_GRACE_SECONDS
 # Bounded head-sampling window after the strict gate: head= rides the SAME
 # STATUS line as READY, but a node still in INITIALIZING_TRANSACTIONS when the
 # gate passes needs its READY line first — 60s covers the 10s cadence plus one
@@ -160,6 +160,47 @@ def _wait_for_file(path, timeout):
             raise RuntimeError("timeout after %ss waiting for %s"
                                % (timeout, path))
         time.sleep(supervisor.POLL_INTERVAL)
+
+
+def _post_burn_window(serve_seconds):
+    """The strict post-burn gate deadline: the actors' serve window plus
+    catch-up grace. One home for the arithmetic — every caller derives its
+    window from the serve value actually passed to the ceremony drivers, so a
+    short-window scenario (window-edge) never carries a second constant."""
+    return serve_seconds + POST_BURN_GRACE_SECONDS
+
+
+def _sample_heads(names, window_seconds, what):
+    """Bounded head sampling (Pitfall 7 headroom discipline): poll head_of per
+    name until every name has shown a STATUS head=, or the window elapses.
+    Returns {name: head}; raises naming the missing names otherwise."""
+    deadline = time.monotonic() + window_seconds
+    while True:
+        heads = {name: supervisor.head_of(name) for name in names}
+        if all(heads.values()) or time.monotonic() >= deadline:
+            break
+        time.sleep(1.0)
+    missing = sorted(name for name, head in heads.items() if not head)
+    if missing:
+        raise RuntimeError("no STATUS head= observed within %ds for %s (%s)"
+                           % (window_seconds, missing, what))
+    return heads
+
+
+def _gate_joiner_ready_at_head(name, network_head, context):
+    """Gate one joiner: READY within JOINER_GATE_SECONDS, then a STATUS head=
+    sampled within HEAD_SAMPLE_SECONDS that must equal the network head — a
+    joiner diverging from the net head is always a loud failure. Returns the
+    joiner's head."""
+    supervisor.wait_for(name, r"STATUS node_state=READY\b", JOINER_GATE_SECONDS)
+    head = _sample_heads([name], HEAD_SAMPLE_SECONDS, context)[name]
+    if supervisor.state_of(name) != "READY":
+        raise RuntimeError("%s latest state %s (expected READY) (%s)"
+                           % (name, supervisor.state_of(name), context))
+    if head != network_head:
+        raise RuntimeError("%s head %s != network head %s (%s)"
+                           % (name, head, network_head, context))
+    return head
 
 
 def _identity_boot(runner, node1, run_dir, timeout):
@@ -272,6 +313,57 @@ def _kill_and_respawn(runner, entry, run_dir):
           % (old_name, new_name))
 
 
+def _approve_sequence(sgns_trust, runner, run_dir, top, manifest,
+                      approve_count, scenario, serve_seconds):
+    """The Variant B approval loop: per-peer list -> first burn candidate ->
+    approve, with the restart-mid-ceremony kill points riding the same loop
+    (event-anchored on each approve driver RETURNING — zero sleeps). Returns
+    (approved addresses, killed_actor_name, killed_candidate_id). Runs inline
+    on the blocking-genesis path; window-edge runs it in a worker thread
+    concurrent with actor1's serve window (the burn must land inside the
+    window for the in-window joiner to sync before expiry)."""
+    peer_actors = top["actors"][1:]
+    peer_addresses = top["peer_set"]  # peer_actors[i] signs as peer_set[i]
+    approved = []
+    killed_actor_name = None
+    killed_candidate_id = None
+    for actor, address in zip(peer_actors[:approve_count], peer_addresses):
+        candidates = ceremony.list_candidates(sgns_trust, actor,
+                                              manifest["manifest"], run_dir)
+        burn_ids = [cid for kind, cid in candidates if kind == "burn"]
+        if not burn_ids:
+            raise ceremony.CeremonyError(
+                "%s listed %d candidate(s) but no burn candidate (content-"
+                "gated): %s" % (actor["name"], len(candidates), candidates))
+        candidate_id = burn_ids[0]
+        print("CEREMONY: %s listed burn candidate %s" % (actor["name"], candidate_id))
+        ceremony.approve(sgns_trust, actor, manifest["manifest"], candidate_id,
+                         run_dir, serve_seconds=serve_seconds)
+        approved.append(address)
+        print("CEREMONY: %s (%s) approved %s (%d of %d peers; burn threshold %d)"
+              % (actor["name"], address, candidate_id, len(approved),
+                 len(peer_actors), manifest["burn_threshold"]))
+        if scenario == "restart-mid-ceremony":
+            # peer_actors[i]'s node is top["nodes"][i+1]: the just-approving
+            # actor's own node. Event-anchored (D-07): the approve driver
+            # RETURNING is the anchor — no sleeps anywhere.
+            if len(approved) == manifest["burn_threshold"] - 1:
+                # SCEN-03 kill point 1 (mid-ceremony): this approve returned
+                # with k below the parsed burn floor. SIGKILL the approver's
+                # node; the remaining serve windows (>= 3 min) are its rejoin
+                # cover.
+                killed_actor_name = actor["name"]
+                killed_candidate_id = candidate_id
+                _kill_and_respawn(runner, top["nodes"][len(approved)], run_dir)
+            elif len(approved) == len(peer_actors) and killed_actor_name:
+                # SCEN-03 kill point 2 (post-quorum pre-start): the FINAL
+                # approve returned; the network is starting. SIGKILL an
+                # untouched survivor (node2, the first peer).
+                _kill_and_respawn(runner, top["nodes"][1], run_dir)
+        _check_fatal(top)
+    return approved, killed_actor_name, killed_candidate_id
+
+
 def _restart_mid_sync_stage(runner, run_dir, top, network_head):
     """SCEN-03 kill point 3: SIGKILL a real syncing joiner mid-sync, then
     prove it recovers to the network head.
@@ -301,25 +393,8 @@ def _restart_mid_sync_stage(runner, run_dir, top, network_head):
     joiner["name"] = "joiner-restart"
     print("SCENARIO: joiner SIGKILLed at the sync anchor, respawned as "
           "joiner-restart (durable-state recovery is the proof)")
-    supervisor.wait_for("joiner-restart", r"STATUS node_state=READY\b",
-                        JOINER_GATE_SECONDS)
-    deadline = time.monotonic() + HEAD_SAMPLE_SECONDS
-    joiner_head = None
-    while True:
-        joiner_head = supervisor.head_of("joiner-restart")
-        if joiner_head or time.monotonic() >= deadline:
-            break
-        time.sleep(1.0)
-    if not joiner_head:
-        raise RuntimeError("joiner-restart READY but no STATUS head= observed "
-                           "within %ds" % HEAD_SAMPLE_SECONDS)
-    if supervisor.state_of("joiner-restart") != "READY":
-        raise RuntimeError("joiner-restart latest state %s (expected READY)"
-                           % supervisor.state_of("joiner-restart"))
-    if joiner_head != network_head:
-        raise RuntimeError("joiner-restart head %s != network head %s (the "
-                           "respawned joiner diverged)" % (joiner_head,
-                                                           network_head))
+    joiner_head = _gate_joiner_ready_at_head(
+        "joiner-restart", network_head, "the respawned joiner diverged")
     print("SCENARIO: joiner-restart READY with head %s (== network head — "
           "mid-sync SIGKILL recovered)" % joiner_head)
     for entry in top["nodes"]:
@@ -421,17 +496,8 @@ def _quorum_loss_stage(runner, run_dir, top, network_head):
                                            QUORUM_RECOVERY_SECONDS, states))
         time.sleep(1.0)
 
-    deadline = time.monotonic() + HEAD_SAMPLE_SECONDS
-    while True:
-        heads = {entry["name"]: supervisor.head_of(entry["name"])
-                 for entry in top["nodes"]}
-        if all(heads.values()) or time.monotonic() >= deadline:
-            break
-        time.sleep(1.0)
-    missing = sorted(name for name, head in heads.items() if not head)
-    if missing:
-        raise RuntimeError("recovery gate: no STATUS head= within %ds for %s"
-                           % (HEAD_SAMPLE_SECONDS, missing))
+    heads = _sample_heads([entry["name"] for entry in top["nodes"]],
+                          HEAD_SAMPLE_SECONDS, "the recovery gate")
     diverged = {name: head for name, head in heads.items() if head != baseline}
     if diverged:
         raise RuntimeError("recovery diverged from the pre-kill head %s: %s "
@@ -531,58 +597,25 @@ def _ceremony_run(sgns_trust, runner, run_dir, top, timeout, approve_count,
 
     actor1 = top["actors"][0]
     ceremony.genesis(sgns_trust, actor1, manifest["manifest"],
-                     manifest["fingerprint"], run_dir)
+                     manifest["fingerprint"], run_dir,
+                     serve_seconds=ceremony.SERVE_SECONDS)
     print("CEREMONY: actor1 Genesis durably confirmed. (key file unlinked by "
           "the tool, serve window %ds)" % ceremony.SERVE_SECONDS)
     _check_fatal(top)
 
     peer_actors = top["actors"][1:]
-    peer_addresses = top["peer_set"]  # peer_actors[i] signs as peer_set[i]
-    approved = []
-    killed_actor_name = None
-    killed_candidate_id = None
+    approved, killed_actor_name, killed_candidate_id = _approve_sequence(
+        sgns_trust, runner, run_dir, top, manifest, approve_count, scenario,
+        ceremony.SERVE_SECONDS)
     network_head = None  # set by the identical-head assertion below
-    for actor, address in zip(peer_actors[:approve_count], peer_addresses):
-        candidates = ceremony.list_candidates(sgns_trust, actor,
-                                              manifest["manifest"], run_dir)
-        burn_ids = [cid for kind, cid in candidates if kind == "burn"]
-        if not burn_ids:
-            raise ceremony.CeremonyError(
-                "%s listed %d candidate(s) but no burn candidate (content-"
-                "gated): %s" % (actor["name"], len(candidates), candidates))
-        candidate_id = burn_ids[0]
-        print("CEREMONY: %s listed burn candidate %s" % (actor["name"], candidate_id))
-        ceremony.approve(sgns_trust, actor, manifest["manifest"], candidate_id,
-                         run_dir)
-        approved.append(address)
-        print("CEREMONY: %s (%s) approved %s (%d of %d peers; burn threshold %d)"
-              % (actor["name"], address, candidate_id, len(approved),
-                 len(peer_actors), manifest["burn_threshold"]))
-        if scenario == "restart-mid-ceremony":
-            # peer_actors[i]'s node is top["nodes"][i+1]: the just-approving
-            # actor's own node. Event-anchored (D-07): the approve driver
-            # RETURNING is the anchor — no sleeps anywhere.
-            if len(approved) == manifest["burn_threshold"] - 1:
-                # SCEN-03 kill point 1 (mid-ceremony): this approve returned
-                # with k below the parsed burn floor. SIGKILL the approver's
-                # node; the remaining serve windows (>= 3 min) are its rejoin
-                # cover.
-                killed_actor_name = actor["name"]
-                killed_candidate_id = candidate_id
-                _kill_and_respawn(runner, top["nodes"][len(approved)], run_dir)
-            elif len(approved) == len(peer_actors) and killed_actor_name:
-                # SCEN-03 kill point 2 (post-quorum pre-start): the FINAL
-                # approve returned; the network is starting. SIGKILL an
-                # untouched survivor (node2, the first peer).
-                _kill_and_respawn(runner, top["nodes"][1], run_dir)
-        _check_fatal(top)
 
+    post_burn_window = _post_burn_window(ceremony.SERVE_SECONDS)
     print("ASSERT: approved %d of %d peers, burn threshold %d — bounded "
           "post-burn window %ds (serve %ds + grace %ds)"
           % (len(approved), len(peer_actors), manifest["burn_threshold"],
-             POST_BURN_WINDOW, ceremony.SERVE_SECONDS,
+             post_burn_window, ceremony.SERVE_SECONDS,
              POST_BURN_GRACE_SECONDS))
-    all_advanced, ladder, last = _wait_post_burn(top, POST_BURN_WINDOW)
+    all_advanced, ladder, last = _wait_post_burn(top, post_burn_window)
     for entry in top["nodes"]:
         print("ASSERT: %s node_state=%s" % (entry["name"], last.get(entry["name"]) or "NONE"))
     print("ASSERT: observed post-burn ladder: %s" % _format_ladder(ladder))
@@ -599,7 +632,8 @@ def _ceremony_run(sgns_trust, runner, run_dir, top, timeout, approve_count,
             a6_engaged = True
             print("A6-FALLBACK-ENGAGED: %s" % _format_ladder(ladder))
         else:
-            _print_stranded(top, manifest, approved, peer_actors, ladder, last)
+            _print_stranded(top, manifest, approved, peer_actors, ladder, last,
+                            ceremony.SERVE_SECONDS)
             _teardown_nodes(expect_clean=False)
             return {"approved": list(approved),
                     "burn_threshold": manifest["burn_threshold"]}
@@ -610,19 +644,9 @@ def _ceremony_run(sgns_trust, runner, run_dir, top, timeout, approve_count,
         # AFTER the strict gate — every node must have printed a READY line
         # carrying head= within the bounded window; any divergence is a loud
         # failure, never a warning.
-        deadline = time.monotonic() + HEAD_SAMPLE_SECONDS
-        heads = {}
-        while True:
-            heads = {entry["name"]: supervisor.head_of(entry["name"])
-                     for entry in top["nodes"]}
-            if all(heads.values()) or time.monotonic() >= deadline:
-                break
-            time.sleep(1.0)
-        missing = sorted(name for name, head in heads.items() if not head)
-        if missing:
-            raise RuntimeError("no STATUS head= observed within %ds after the "
-                               "post-burn gate (accessor failing?): %s"
-                               % (HEAD_SAMPLE_SECONDS, missing))
+        heads = _sample_heads([entry["name"] for entry in top["nodes"]],
+                              HEAD_SAMPLE_SECONDS,
+                              "the post-burn head assertion")
         distinct = set(heads.values())
         if len(distinct) != 1:
             raise RuntimeError("diverged heads across nodes (expected one "
@@ -680,7 +704,8 @@ def _ceremony_run(sgns_trust, runner, run_dir, top, timeout, approve_count,
     return None
 
 
-def _print_stranded(top, manifest, approved, peer_actors, ladder, last):
+def _print_stranded(top, manifest, approved, peer_actors, ladder, last,
+                    serve_seconds):
     """The stranded-genesis verdict. The marker is the FIRST line — it
     disambiguates this exit-2 from argparse's usage exit-2."""
     pending = top["peer_set"][len(approved):]
@@ -692,7 +717,7 @@ def _print_stranded(top, manifest, approved, peer_actors, ladder, last):
     print("approved peers: %s" % (", ".join(approved) or "(none)"))
     print("peers that never approved: %s" % (", ".join(pending) or "(none)"))
     print("post-burn window elapsed: %ds (serve %ds + grace %ds) — deadline "
-          "passed" % (POST_BURN_WINDOW, ceremony.SERVE_SECONDS,
+          "passed" % (_post_burn_window(serve_seconds), serve_seconds,
                       POST_BURN_GRACE_SECONDS))
     print("stuck nodes (last observed state):")
     for entry in top["nodes"]:
