@@ -1048,6 +1048,31 @@ def _scan_selftest():
     print("SELFTEST: key-absence scan finds a planted key (non-vacuous)")
 
 
+def _preserve_selftest():
+    """Collision guard (observed in CI run 37803667091): two preserves inside
+    one second — back-to-back fast-fail cases under CI — must both land as
+    distinct artifact dirs instead of crashing on the shared one-second
+    stamp. Cleans up what it creates."""
+    root = os.path.join(os.path.dirname(os.path.abspath(__file__)), "artifacts")
+    with tempfile.TemporaryDirectory(prefix="preserve-selftest-") as scratch:
+        def _stub_run_dir():
+            os.makedirs(run_dir)
+            with open(os.path.join(run_dir, "node1.out"), "w") as handle:
+                handle.write("stub\n")
+        run_dir = os.path.join(scratch, "run")
+        before = set(os.listdir(root)) if os.path.isdir(root) else set()
+        _stub_run_dir()
+        _preserve_and_scan(run_dir, [])
+        _stub_run_dir()
+        _preserve_and_scan(run_dir, [])
+        new = set(os.listdir(root)) - before
+        for name in new:
+            shutil.rmtree(os.path.join(root, name), ignore_errors=True)
+        assert len(new) == 2, \
+            "same-second preserves did not land as two dirs: %s" % sorted(new)
+    print("SELFTEST: same-second preserves get distinct artifact dirs")
+
+
 def _report_scan(scanned, hits):
     if hits:
         print("key-absence scan: LEAK — %d hit(s): %s"
@@ -1063,17 +1088,23 @@ def _preserve_and_scan(run_dir, key_hexes):
     here = os.path.dirname(os.path.abspath(__file__))
     stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
     artifacts = os.path.join(here, "artifacts", stamp + "-run")
+    dest, n = artifacts, 2
+    while os.path.exists(dest):
+        # CI fast-fail paths preserve twice inside one second (observed in
+        # run 37803667091): both copies must land, not crash on the stamp.
+        dest = "%s-%d" % (artifacts, n)
+        n += 1
     os.makedirs(os.path.dirname(artifacts), exist_ok=True)
-    shutil.copytree(run_dir, artifacts)
+    shutil.copytree(run_dir, dest)
     shutil.rmtree(run_dir, ignore_errors=True)
-    print("PRESERVE: run dir copied (key files scrubbed) to %s" % artifacts)
+    print("PRESERVE: run dir copied (key files scrubbed) to %s" % dest)
     if not key_hexes:
         # WR-03: no key material ever existed (partial-topology failure) — a
         # scan over zero key forms would be vacuously CLEAN. The scan must
         # never run with an empty key set.
         print("key-absence scan: SKIPPED (no keys)")
         return []
-    scanned, hits = scan_keys([artifacts], key_hexes)
+    scanned, hits = scan_keys([dest], key_hexes)
     _report_scan(scanned, hits)
     for path, _index in hits:
         _scrub_file_contents(path)
@@ -1158,8 +1189,10 @@ def main():
                          % args.scenario)
 
     # Harness-start self-checks: the EC pinned vector asserts at import of
-    # topology/secp256k1_address; the scan self-test proves non-vacuity here.
+    # topology/secp256k1_address; the scan self-test proves non-vacuity and
+    # the preserve self-test the same-second collision guard, here.
     _scan_selftest()
+    _preserve_selftest()
 
     # A SIGTERM to the harness itself must still run the teardown in finally.
     signal.signal(signal.SIGTERM,
