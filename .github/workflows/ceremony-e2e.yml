@@ -167,6 +167,13 @@ jobs:
       GH_TOKEN: ${{ secrets.GNUS_TOKEN_1 }}
     container:
       image: ghcr.io/geniusventures/almalinux-8:latest
+      # IPC_LOCK mirrors SuperGenius's build job (its cmake.yml container):
+      # EL8's gnome-keyring-daemon carries file capabilities, and exec of a
+      # file-caps binary in a container whose bounding set lacks the cap
+      # returns EPERM — observed in run 37803667091 as "bash:
+      # /usr/bin/gnome-keyring-daemon: Operation not permitted", leaving the
+      # nodes without a secret service. The dbus wrapper below needs this.
+      options: --cap-add=IPC_LOCK
       credentials:
         username: ${{github.actor}}
         password: ${{secrets.GNUS_TOKEN_1}}
@@ -423,7 +430,12 @@ jobs:
         run: |
           # First-run evidence for the unmeasured runner box: if the numbers
           # prove memory-tight for the 5-node net, surface them — the 3-node
-          # variant stays deferred unless measurements demand it.
+          # variant stays deferred unless measurements demand it. Values go
+          # to BOTH the step summary and the log (the summary is not
+          # retrievable via the API, the log is).
+          free_out="$(free -h 2>/dev/null || echo "free not available")"
+          echo "capacity probe: nproc=$(nproc) python=$(python3.12 --version 2>&1)"
+          echo "$free_out"
           {
             echo "## Ceremony e2e runner capacity"
             echo
@@ -431,7 +443,7 @@ jobs:
             echo "- python: $(python3.12 --version 2>&1)"
             echo
             echo '```'
-            free -h 2>/dev/null || echo "free not available"
+            echo "$free_out"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -621,6 +633,13 @@ jobs:
       GH_TOKEN: ${{ secrets.GNUS_TOKEN_1 }}
     container:
       image: ghcr.io/geniusventures/almalinux-8:latest
+      # IPC_LOCK mirrors SuperGenius's build job (its cmake.yml container):
+      # EL8's gnome-keyring-daemon carries file capabilities, and exec of a
+      # file-caps binary in a container whose bounding set lacks the cap
+      # returns EPERM — observed in run 37803667091 as "bash:
+      # /usr/bin/gnome-keyring-daemon: Operation not permitted", leaving the
+      # nodes without a secret service. The dbus wrapper below needs this.
+      options: --cap-add=IPC_LOCK
       credentials:
         username: ${{github.actor}}
         password: ${{secrets.GNUS_TOKEN_1}}
@@ -850,6 +869,10 @@ jobs:
       - name: Capacity probe (runner evidence, research A4)
         shell: bash
         run: |
+          # Same probe as the e2e job — log AND summary (API-retrievable).
+          free_out="$(free -h 2>/dev/null || echo "free not available")"
+          echo "capacity probe: nproc=$(nproc) python=$(python3.12 --version 2>&1)"
+          echo "$free_out"
           {
             echo "## Ceremony e2e nightly runner capacity"
             echo
@@ -857,7 +880,7 @@ jobs:
             echo "- python: $(python3.12 --version 2>&1)"
             echo
             echo '```'
-            free -h 2>/dev/null || echo "free not available"
+            echo "$free_out"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
