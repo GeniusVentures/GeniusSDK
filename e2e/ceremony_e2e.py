@@ -566,9 +566,11 @@ def _dht_health_coexistence_gate(top, foreign, timeout):
     conn_needle = re.compile(
         r"Connected to: \S+ at /ip4/\d+(?:\.\d+){3}/tcp/%d\b" % foreign["port"])
     for node_entry in top["nodes"]:
-        with open(node_entry["node_log"], encoding="utf-8",
-                  errors="replace") as handle:
-            log_text = handle.read()
+        # The supervisor's combined captures, NOT a direct node_log open:
+        # the per-node log file exists only on the macOS build — on Linux/CI
+        # the node logger writes to stdout, which the tee'd .out already
+        # carries (observed live in nightly run 37978198333).
+        log_text = supervisor.combined(node_entry["name"])
         if dht_needle in log_text or conn_needle.search(log_text):
             contamination.append(node_entry["name"])
     if contamination:

@@ -128,6 +128,17 @@ def state_of(name):
     return states[-1] if states else None
 
 
+def combined(name):
+    """The full captured text for a supervised name — every sink (the tee'd
+    .out/.err plus any registered extra_logs), the SAME evidence set
+    wait_for/state_of/head_of scan. Public since 04-01: the dht-health
+    coexistence scan must cover exactly this set — a direct read of one
+    extra_logs path is platform-broken (the node's own log file exists on
+    the macOS build but not the Linux/CI build, where the node logger
+    writes to stdout instead)."""
+    return _combined(name)
+
+
 def head_of(name):
     """Latest STATUS head= (genesis CID) across the combined capture, or None."""
     heads = _HEAD_RE.findall(_combined(name))
