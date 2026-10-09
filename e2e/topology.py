@@ -21,8 +21,18 @@ The topology manifest is the single source every later stage reads; peer_set is
 THE peer-set fact shared by sgns_config generation here and plan 02-03's
 make-manifest --peers call (one home per rule, D-12b).
 
+Phase E (04-02, D-09/D-14): the STATIC FLEET generator trio — gen_fleet_keys
+(5 persistent identities to an offline dir + the fleet.json manifest, key file
+PATHS only), write_fleet_configs (per-node config bundle directories for the
+real boxes), write_fleet_trust_configs (the post-B_1 full-payload push 04-03
+drives) — and write_artifact_joiners (join mode: consume the published
+staging-net.json artifact set, write joiner configs, boot WITHOUT --key-file).
+
 Usage:
   python3 topology.py --selftest
+  python3 topology.py --gen-fleet-keys --keys-dir <offline-dir> --out-fleet <fleet.json>
+  python3 topology.py --static-fleet <fleet.json> --out-dir <bundle-dir>
+  python3 topology.py --join <artifact-dir> --out-dir <dir> [--count N]
 """
 
 import argparse
@@ -702,6 +712,180 @@ def _selftest() -> None:
         before = _read_json(identity_cfg5)  # Phase A2 payload, already written
         write_identity_config(topology)
         assert _read_json(identity_cfg5) == before  # reserved band: untouched
+
+        # Phase E (04-02): static-fleet keygen + bundle + trust push + join.
+        # Keygen: 5 persistent identities 0600 in the offline dir, distinct
+        # 128-hex addresses, fleet.json carrying key file PATHS only — zero
+        # key hex in the manifest text (T-04-02-01).
+        keys_dir = os.path.join(run_dir, "offline-keys")
+        fleet_path = os.path.join(run_dir, "fleet.json")
+        fleet = gen_fleet_keys(keys_dir, fleet_path)
+        with open(fleet_path) as handle:
+            fleet_text = handle.read()
+        assert len(os.listdir(keys_dir)) == 5
+        fleet_addresses = [node["ceremony_address"] for node in fleet["nodes"]]
+        assert len(set(fleet_addresses)) == 5
+        for node in fleet["nodes"]:
+            assert (os.stat(node["key_file"]).st_mode & 0o777) == 0o600
+            with open(node["key_file"]) as handle:
+                assert handle.read().strip() not in fleet_text
+            assert len(node["ceremony_address"]) == 128
+            assert set(node["ceremony_address"]) <= _HEX
+        assert fleet["network_id"] == STAGING_NET_ID
+        assert fleet["bootstrapper"] == fleet_addresses[0]
+        assert fleet["peer_set"] == fleet_addresses[1:]
+
+        # The operator fills the genesis published multiaddr once the genesis
+        # identity boot has captured its peer id (D-04: the DNS-named entry);
+        # the bundle writer consumes exactly that fact.
+        fleet["nodes"][0]["published_multiaddr"] = make_dns4_multiaddr(
+            "staging.example.invalid", 41001, "QmGenesisPeer")
+
+        # Bundle writer: one directory per node; genesis carries the minimal
+        # identity-boot sgns_config (the write_identity_config shape — one
+        # home), peers bootstrap to the genesis /dns4/ multiaddr; every port
+        # seed unique, spaced >300, and >300 clear of the co-located AWS
+        # node's port.
+        bundle_dir = os.path.join(run_dir, "fleet-bundles")
+        fleet = write_fleet_configs(fleet, bundle_dir)
+        fleet_seeds = []
+        for node in fleet["nodes"]:
+            node_dir = node["bundle_dir"]
+            assert os.path.isdir(node_dir)
+            _read_json(os.path.join(node_dir, "dev_config.json"))
+            log_cfg = _read_json(os.path.join(node_dir, "log_config.json"))
+            assert log_cfg["loggers"] == dict(INFO_LOGGERS)
+            net = _read_json(os.path.join(node_dir, "network_config.json"))
+            assert net["auto_dht"] is True
+            assert net["port_seed"] == node["port_seed"]
+            fleet_seeds.append(node["port_seed"])
+            if node["role"] == "genesis":
+                assert net["bootstrap_addresses"] == []
+                assert _read_json(os.path.join(
+                    node_dir, "sgns_config.json")) == {
+                    "node_type": "Full", "net_id": STAGING_NET_ID}
+            else:
+                assert net["bootstrap_addresses"] == \
+                    [fleet["nodes"][0]["published_multiaddr"]]
+                assert not os.path.exists(os.path.join(node_dir,
+                                                      "sgns_config.json"))
+        sorted_seeds = sorted(fleet_seeds)
+        assert all(b - a > 300 for a, b in zip(sorted_seeds, sorted_seeds[1:]))
+        assert all(abs(seed - fleet["existing_node_port"]) > 300
+                   for seed in fleet_seeds)
+
+        # Post-B_1 trust push: the SAME _sgns_trust_payload (net_id pinned
+        # beside subnet_id) into every node's bundle dir — 04-03's extension
+        # point; without a bundle it fails loudly.
+        fresh_keygen = gen_fleet_keys(os.path.join(run_dir, "offline-keys2"),
+                                      os.path.join(run_dir, "fleet2.json"))
+        try:
+            write_fleet_trust_configs(fresh_keygen, authorized)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("trust push before write_fleet_configs must "
+                                 "be rejected")
+        write_fleet_trust_configs(fleet, authorized)
+        for node in fleet["nodes"]:
+            sgns = _read_json(os.path.join(node["bundle_dir"],
+                                           "sgns_config.json"))
+            assert sgns["node_type"] == "Full"
+            assert sgns["net_id"] == STAGING_NET_ID
+            assert sgns["subnet_id"] == STAGING_NET_ID
+            assert sgns["authorized_full_node"] == authorized
+            assert sgns["bootstrapper_node"] == fleet["bootstrapper"]
+            assert sgns["trusted_peers"] == fleet["peer_set"]
+
+        # Bundle-writer reject paths (each its own ValueError): seeds within
+        # 300 of each other, a seed within 300 of the co-located AWS node, a
+        # non-dns4 genesis multiaddr, an unfilled PLACEHOLDER multiaddr, and a
+        # fleet that is not the staging net.
+        def _clone_fleet():
+            return json.loads(json.dumps(fleet))
+
+        reject_dir = os.path.join(run_dir, "reject")
+        bad_cases = []
+        bad = _clone_fleet()
+        bad["nodes"][1]["port_seed"] = bad["nodes"][0]["port_seed"] + 100
+        bad_cases.append((bad, "seeds within 300 of each other"))
+        bad = _clone_fleet()
+        bad["nodes"][0]["port_seed"] = fleet["existing_node_port"] + 100
+        bad_cases.append((bad, "seed within 300 of existing_node_port"))
+        bad = _clone_fleet()
+        bad["nodes"][0]["published_multiaddr"] = \
+            "/ip4/127.0.0.1/tcp/41001/ipfs/QmX"
+        bad_cases.append((bad, "non-dns4 published_multiaddr"))
+        bad = _clone_fleet()
+        bad["nodes"][0]["published_multiaddr"] = make_dns4_multiaddr(
+            "host.invalid", 41001, "PLACEHOLDER-PEER-ID")
+        bad_cases.append((bad, "unfilled PLACEHOLDER multiaddr"))
+        bad = _clone_fleet()
+        bad["network_id"] = 62000
+        bad_cases.append((bad, "fleet net_id != STAGING_NET_ID"))
+        for mutate, why in bad_cases:
+            try:
+                write_fleet_configs(mutate, reject_dir)
+            except ValueError:
+                pass
+            else:
+                raise AssertionError("%s must be rejected" % why)
+
+        # Join mode: a fixture artifact set; joiner sgns_config is the FULL
+        # trust payload from the artifact (net_id 333 — 03-02 A3), no key file
+        # anywhere, bootstrap == the artifact's genesis_multiaddr; an artifact
+        # whose net_id is anything but the staging id is rejected loudly.
+        artifact_dir = os.path.join(run_dir, "staging-artifact")
+        os.makedirs(artifact_dir)
+        artifact = {
+            "net_id": STAGING_NET_ID,
+            "genesis_multiaddr": make_dns4_multiaddr(
+                "staging.example.invalid", 41001, "QmGenesisPeer"),
+            "authorized_full_node": "aa" * 64,
+            "bootstrapper_node": "bb" * 64,
+            "trusted_peers": ["cc" * 64, "dd" * 64],
+        }
+        artifact_path = os.path.join(artifact_dir, "staging-net.json")
+        _write_json(artifact_path, artifact)
+        joiner_out = os.path.join(run_dir, "joiner-configs")
+        joiners = write_artifact_joiners(artifact_dir, joiner_out, count=2)
+        assert len(joiners) == 2
+        for index, joiner in enumerate(joiners, start=1):
+            sgns = _read_json(os.path.join(joiner["base_dir"],
+                                           "sgns_config.json"))
+            assert sgns["net_id"] == STAGING_NET_ID
+            assert sgns["subnet_id"] == STAGING_NET_ID
+            assert sgns["authorized_full_node"] == artifact["authorized_full_node"]
+            assert sgns["bootstrapper_node"] == artifact["bootstrapper_node"]
+            assert sgns["trusted_peers"] == artifact["trusted_peers"]
+            assert "key_file" not in sgns
+            net = _read_json(joiner["network_config"])
+            assert net["bootstrap_addresses"] == [artifact["genesis_multiaddr"]]
+            assert net["port_seed"] == joiner["port_seed"]
+            assert joiner["port_seed"] == (
+                NODE_PORT_BASE + (STAGING_FLEET_NODES + index - 1)
+                * NODE_PORT_STRIDE)
+            assert not any(name.endswith(".key")
+                           for name in os.listdir(joiner["base_dir"]))
+            assert _read_json(os.path.join(joiner["base_dir"],
+                                           "log_config.json"))["loggers"] == \
+                dict(INFO_LOGGERS)
+        _write_json(artifact_path, dict(artifact, net_id=62000))
+        try:
+            write_artifact_joiners(artifact_dir, joiner_out)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("artifact net_id != STAGING_NET_ID must be "
+                                 "rejected")
+        _write_json(artifact_path, dict(artifact, authorized_full_node="zz"))
+        try:
+            write_artifact_joiners(artifact_dir, joiner_out)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("non-128-hex artifact address must be "
+                                 "rejected")
     finally:
         shutil.rmtree(run_dir)
 
