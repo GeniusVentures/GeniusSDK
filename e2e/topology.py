@@ -284,6 +284,27 @@ def _sgns_trust_payload(topology: dict, authorized_full_node: str) -> dict:
     return payload
 
 
+def write_identity_config(topology: dict) -> None:
+    """Minimal sgns_config for node1's identity boot — ONLY when the run
+    pins net_id (staging). The C++ net id scopes the node's globaldb path,
+    where the libp2p keypair persists: an identity boot on the default net
+    (no config) writes the keypair under the 144 path, the staging final
+    boot then looks under the 333 path, finds nothing, generates a FRESH
+    peer id — and every peer dials the identity boot's captured address,
+    which nobody answers as (observed live, 04-01: node1's listener id !=
+    its advertised id; the whole mesh starved). The minimal shape is the
+    same one write_foreign_net_configs emits (node_type + net_id, no trust
+    keys — B_1 is the thing this boot exists to discover; write_trust_configs
+    overwrites it with the full payload afterwards). Reserved-band runs pin
+    no net id, so this is a no-op for them: both boots share the silent
+    default exactly as in Phase 2-3."""
+    if topology["network_id"] != STAGING_NET_ID:
+        return
+    _write_json(os.path.join(topology["nodes"][0]["base_dir"],
+                             "sgns_config.json"),
+                {"node_type": "Full", "net_id": STAGING_NET_ID})
+
+
 def write_trust_configs(topology: dict, authorized_full_node: str) -> None:
     """sgns_config.json for every node (phase A2 — after B_1 discovery).
 
@@ -649,6 +670,23 @@ def _selftest() -> None:
         assert flog["loggers"] == dict(INFO_LOGGERS)
         assert "GossipPubSub" in flog["loggers"]
         _read_json(os.path.join(foreign["base_dir"], "dev_config.json"))
+
+        # The identity-boot net pin: ONLY a staging topology writes the
+        # minimal sgns_config before node1's identity boot (the run's libp2p
+        # keypair persists under the NET-SCOPED globaldb path — an identity
+        # boot on the default net would hand the final boot a different path
+        # and a fresh peer id, stranding every captured bootstrap address).
+        # Reserved-band runs pin nothing (Phase 2-3 behavior, unchanged).
+        identity_cfg = os.path.join(staging["nodes"][0]["base_dir"],
+                                    "sgns_config.json")
+        os.unlink(identity_cfg)  # write_trust_configs wrote the full payload
+        write_identity_config(staging)
+        assert _read_json(identity_cfg) == {"node_type": "Full",
+                                            "net_id": STAGING_NET_ID}
+        identity_cfg5 = os.path.join(node1["base_dir"], "sgns_config.json")
+        before = _read_json(identity_cfg5)  # Phase A2 payload, already written
+        write_identity_config(topology)
+        assert _read_json(identity_cfg5) == before  # reserved band: untouched
     finally:
         shutil.rmtree(run_dir)
 

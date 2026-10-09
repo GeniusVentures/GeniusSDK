@@ -365,6 +365,11 @@ def _boot_node1(runner, run_dir, top, timeout):
     returns (spawn_times, node1 multiaddr) with the manifest stashes
     (node1_multiaddr, authorized_full_node) already set."""
     node1 = top["nodes"][0]
+    # Staging runs pin the identity boot to the SAME net-scoped path the
+    # final boot will use (the libp2p keypair persists there — without the
+    # pin the final boot answers as a different peer id than the one this
+    # boot's captured multiaddr advertises; no-op for reserved-band runs).
+    topology.write_identity_config(top)
     account_address = _identity_boot(runner, node1, run_dir, timeout)
     topology.write_trust_configs(top, account_address)
     print("IDENTITY: trust configs written (authorized_full_node = node1 "
