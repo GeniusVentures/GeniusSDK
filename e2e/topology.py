@@ -38,6 +38,18 @@ import secp256k1_address
 # no persistent (staging/dev) net will ever use.
 NETWORK_ID_RESERVED_RANGE = (61440, 65535)  # 0xF000-0xFFFF
 
+# D-06: the staging net id, mirroring sgns_version.hpp's registry sibling —
+# the ONE sanctioned non-reserved value the harness may pin (the dht-health
+# pre-provision proof; every default draw stays in the reserved band).
+STAGING_NET_ID = 333
+
+# sgns::version::SetNetworkId's accept-list, mirrored as the one Python-side
+# fact for any config that pins net_id (sgns_config "net_id"): a value
+# outside this tuple kills the node at init with "Invalid network ID"
+# (Pitfall 1 — the RED half of 04-01's RED->GREEN pair proves it live).
+# Order mirrors sgns_version.hpp: MAIN, TEST, DEV, STAGING.
+REGISTRY_NET_IDS = (369, 963, 144, STAGING_NET_ID)
+
 TOPIC = "SuperGNUSNode.TestNet.FullNode"  # GNUS_FULL_NODES_TOPIC constant (Pitfall 6)
 
 NODE_PORT_BASE = 41001     # per-node port_seeds: base + (i-1)*500 (Pitfall 4:
@@ -56,6 +68,7 @@ BLOCKCHAIN_LOGGER_NAME = "Blockchain"  # InitLoggers tag owning the joiner sync 
 INFO_LOGGERS = {
     NODE_LOGGER_NAME: "info",
     BLOCKCHAIN_LOGGER_NAME: "info",
+    "GossipPubSub": "info",  # owns the DHT observables ("DHT: New Peer: <pid>")
 }
 
 
@@ -66,6 +79,26 @@ def draw_network_id() -> int:
     # serialize the draw then.
     low, high = NETWORK_ID_RESERVED_RANGE
     return low + secrets.randbelow(high - low + 1)
+
+
+def validate_network_id(network_id: int) -> None:
+    """One home for the NET-05 id policy (T-04-01-02): accept EXACTLY the
+    reserved ephemeral band or the sanctioned STAGING_NET_ID — no open range.
+    The staging escape (Pitfall 6) is what lets the dht-health gate, static
+    fleet mode, and join mode consume the pinned 333; everything else keeps
+    raising the original band ValueError."""
+    low, high = NETWORK_ID_RESERVED_RANGE
+    if not (low <= network_id <= high or network_id == STAGING_NET_ID):
+        raise ValueError("network_id %d outside the reserved band %d-%d "
+                         "(T-03-05)" % (network_id, low, high))
+
+
+def make_dns4_multiaddr(hostname: str, port, peer_id: str) -> str:
+    """/dns4/<hostname>/tcp/<port>/ipfs/<peer_id> — the DNS-named entry form
+    (D-04). The /ipfs/ peer-id suffix is required by the bootstrap parser
+    (ParsePeerInfoFromString rejects a bare address — Pitfall 5); dial-time
+    resolution lives in the vendored TCP transport."""
+    return "/dns4/%s/tcp/%d/ipfs/%s" % (hostname, int(port), peer_id)
 
 
 def write_key_file(path: str, key_hex: str) -> None:
@@ -106,15 +139,23 @@ def _write_log_config(base_dir: str) -> None:
                 {"loggers": dict(INFO_LOGGERS)})
 
 
-def build_topology(run_dir: str, nodes: int, runner_default_ports: bool = False) -> dict:
+def build_topology(run_dir: str, nodes: int, runner_default_ports: bool = False,
+                   network_id: int = None) -> dict:
     """Generate identities + every pre-boot config and the topology manifest.
 
     runner_default_ports=True omits port_seed from network_config.json files
     (the runner's 40001 default applies) — single-node compatibility only.
+    network_id=None draws from the reserved band exactly as before; an
+    explicit value flows through validate_network_id (the staging pin 333 is
+    the one sanctioned non-reserved value — the dht-health pre-provision
+    proof; existing callers are unchanged).
     """
     if nodes < 1:
         raise ValueError("nodes must be >= 1")
-    network_id = draw_network_id()
+    if network_id is None:
+        network_id = draw_network_id()
+    else:
+        validate_network_id(network_id)
 
     keys_dir = os.path.join(run_dir, "keys")
     os.makedirs(keys_dir, exist_ok=True)
@@ -222,14 +263,25 @@ def _sgns_trust_payload(topology: dict, authorized_full_node: str) -> dict:
     never match the manifest's and every node strands in
     WAITING_FOR_TRUST_GENESIS. subnet_id MUST equal the manifest
     network-id (Pitfall 10).
+
+    Staging pin (04-01): when the topology's network_id is exactly
+    STAGING_NET_ID, the payload additionally pins net_id (the C++ net
+    registry id that scopes the DHT keyspace and globaldb path) — without
+    it a staging node silently lands on the DEV default 144 and shares the
+    dev-net DHT CID. Reserved-band runs add no net_id key: the registry
+    rejects the whole band (Pitfall 1), so their isolation rides subnet_id
+    + ports exactly as in Phase 2-3.
     """
-    return {
+    payload = {
         "node_type": "Full",
         "subnet_id": topology["network_id"],
         "authorized_full_node": authorized_full_node,
         "bootstrapper_node": topology["bootstrapper"],
         "trusted_peers": list(topology["peer_set"]),
     }
+    if topology["network_id"] == STAGING_NET_ID:
+        payload["net_id"] = STAGING_NET_ID
+    return payload
 
 
 def write_trust_configs(topology: dict, authorized_full_node: str) -> None:
@@ -250,14 +302,26 @@ def write_trust_configs(topology: dict, authorized_full_node: str) -> None:
                     _sgns_trust_payload(topology, authorized_full_node))
 
 
-def write_peer_configs(topology: dict, node1_multiaddr: str) -> None:
+def write_peer_configs(topology: dict, node1_multiaddr: str,
+                       node_multiaddr_map: dict = None) -> None:
     """Phase B: configs that need the bootstrapper's live PubSub multiaddr.
 
     node1_multiaddr must be the full multiaddr WITH /p2p/<peer-id>
     (ParsePeerInfoFromString requires it — Pitfall 5).
+
+    node_multiaddr_map (dht-health split bootstrap): optional {node name:
+    multiaddr} — each named peer's bootstrap_addresses take that entry
+    instead of node1's; names absent from the map (and the None default)
+    keep node1 exactly as in Phase 2. The two-wave dht-health boot calls
+    this twice: first with only node2's /dns4/ entry, then with the final
+    map once node2's own multiaddr is observed (rewrites are boot-time
+    reads only — nodes 3-5 have not spawned yet, node2 re-reads nothing).
     """
     for entry in topology["nodes"][1:]:
-        network_config = {"auto_dht": True, "bootstrap_addresses": [node1_multiaddr]}
+        bootstrap = node1_multiaddr
+        if node_multiaddr_map is not None:
+            bootstrap = node_multiaddr_map.get(entry["name"], node1_multiaddr)
+        network_config = {"auto_dht": True, "bootstrap_addresses": [bootstrap]}
         if not topology["runner_default_ports"]:
             network_config["port_seed"] = entry["port_seed"]
         _write_json(entry["network_config"], network_config)
@@ -303,10 +367,10 @@ def write_joiner_configs(topology: dict, node1_multiaddr: str,
     if count < 1:
         raise ValueError("count must be >= 1")
     _expect_128_hex(authorized_full_node, "authorized_full_node")
-    low, high = NETWORK_ID_RESERVED_RANGE
-    if not low <= topology["network_id"] <= high:
-        raise ValueError("network_id %d outside the reserved band %d-%d "
-                         "(T-03-05)" % (topology["network_id"], low, high))
+    # One home for the band policy since 04-01: the reserved band OR exactly
+    # the sanctioned staging id (the Pitfall 6 escape — join mode consumes
+    # the artifact's pinned 333 through here).
+    validate_network_id(topology["network_id"])
     joiners = []
     node_count = len(topology["nodes"])
     for i in range(1, count + 1):
@@ -334,6 +398,45 @@ def write_joiner_configs(topology: dict, node1_multiaddr: str,
     # with the joiners[] entries (paths only, like every other entry).
     _write_json(os.path.join(topology["run_dir"], "topology.json"), topology)
     return joiners
+
+
+def write_foreign_net_configs(run_dir: str, net_id: int) -> dict:
+    """The co-located foreign-net node (dht-health coexistence gate, D-01
+    amended): a 6th process on the SAME machine under a DIFFERENT net
+    registry id — the AWS-box co-location pattern proven at zero spend.
+
+    Its sgns_config is deliberately minimal ({"node_type": "Full", "net_id":
+    <id>} — no trust wiring: an unwired node strands in an init state and
+    STAYS ALIVE, which is exactly what the gate observes; it must never take
+    part in anything). net_id must be inside REGISTRY_NET_IDS and differ
+    from the staging net, or the node dies at init (Pitfall 1). Empty
+    bootstrap list: it is never told about the staging mesh — any contact
+    would be contamination, and the gate asserts none happens. The port seed
+    takes the band slot after the 5 staging nodes (41001 + 5*500); the
+    logger set rides the same _write_log_config home, so the GossipPubSub
+    promotion makes its "CID Test::" line observable too.
+    """
+    if net_id not in REGISTRY_NET_IDS:
+        raise ValueError("foreign net_id %r outside the C++ registry %s — "
+                         "the node would die at init (Pitfall 1)"
+                         % (net_id, REGISTRY_NET_IDS))
+    base_dir = os.path.join(run_dir, "foreign-net") + "/"
+    os.makedirs(base_dir, exist_ok=True)
+    _write_dev_config(base_dir)
+    _write_log_config(base_dir)
+    port_seed = NODE_PORT_BASE + 5 * NODE_PORT_STRIDE
+    _write_json(os.path.join(base_dir, "network_config.json"),
+                {"auto_dht": True, "bootstrap_addresses": [],
+                 "port_seed": port_seed})
+    _write_json(os.path.join(base_dir, "sgns_config.json"),
+                {"node_type": "Full", "net_id": net_id})
+    return {
+        "name": "foreign-net",
+        "base_dir": base_dir,
+        "net_id": net_id,
+        "port_seed": port_seed,
+        "node_log": os.path.join(base_dir, "sgnslog2.log"),
+    }
 
 
 def _read_json(path: str):

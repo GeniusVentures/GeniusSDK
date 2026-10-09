@@ -24,24 +24,41 @@ Exit-code contract:
      crashed steps — and SCENARIO failures; scenarios never invent new codes,
      the stranded negative control alone stays exit 2)
 
-Scenario surface (Phase 3, D-09): --scenario restart-mid-ceremony |
-restart-mid-sync | quorum-loss | window-edge; default None is the Phase 2
-happy path, completely unchanged. Mapping note (D-09 locks the four-token
-surface): restart-mid-ceremony covers BOTH SCEN-03 kill point 1 (SIGKILL
-right after the 2nd of 4 peer approves returns — below the parsed burn
-floor, mid-ceremony) and kill point 2 (SIGKILL right after the FINAL
-approve returns — post-quorum, pre-start); restart-mid-sync is SCEN-03 kill
-point 3 (SIGKILL a real 6th-process joiner the instant its own
-Blockchain-logger sync anchor prints, then recover to READY at the network
-head); quorum-loss is SCEN-04 (2-of-5 SIGKILL post-READY: survivors must
-hold the frozen head with stable READY states and no FATAL, then all 5
-respawned nodes converge back to the SAME head); window-edge is SCEN-02
-(a 45s serve window on every ceremony step: joiner1 joins while the
-window is open and its sync anchor must beat the expiry line — the
-WINDOW-EDGE-ORDERING assertion; joiner2 joins strictly after expiry and
-must sync via network state, the documented D-01/D-04 contract asserted
-against the ceremony owner's help text; the genesis + approvals run in
-worker threads so both joins happen while the actors still serve).
+Scenario surface (Phase 3, D-09 + Phase 4 dht-health): --scenario
+restart-mid-ceremony | restart-mid-sync | quorum-loss | window-edge |
+dht-health; default None is the Phase 2 happy path, completely unchanged.
+Mapping note (D-09 locks the four-token surface): restart-mid-ceremony
+covers BOTH SCEN-03 kill point 1 (SIGKILL right after the 2nd of 4 peer
+approves returns — below the parsed burn floor, mid-ceremony) and kill
+point 2 (SIGKILL right after the FINAL approve returns — post-quorum,
+pre-start); restart-mid-sync is SCEN-03 kill point 3 (SIGKILL a real
+6th-process joiner the instant its own Blockchain-logger sync anchor
+prints, then recover to READY at the network head); quorum-loss is SCEN-04
+(2-of-5 SIGKILL post-READY: survivors must hold the frozen head with
+stable READY states and no FATAL, then all 5 respawned nodes converge
+back to the SAME head); window-edge is SCEN-02 (a 45s serve window on
+every ceremony step: joiner1 joins while the window is open and its sync
+anchor must beat the expiry line — the WINDOW-EDGE-ORDERING assertion;
+joiner2 joins strictly after expiry and must sync via network state, the
+documented D-01/D-04 contract asserted against the ceremony owner's help
+text; the genesis + approvals run in worker threads so both joins happen
+while the actors still serve). dht-health (04-01, D-01 amended) proves
+the fleet-risky assumptions on ONE machine before any box is touched: a
+5-node Variant-B ceremony with a SPLIT bootstrap (nodes 2-3 -> node1,
+nodes 4-5 -> node2) where node2 dials node1 through a /dns4/ multiaddr
+derived from the live capture (the dns4 dial proof), node3 must learn
+node4-or-node5 via the per-net DHT CID (discovery beyond the configured
+bootstrap), every node must log the byte-identical "CID Test::" CID, and
+a co-located foreign-net node (own base dir, own registry net id, EMPTY
+bootstrap) must stay alive with a DIFFERENT CID and zero cross-
+contamination — the AWS-box co-location pattern at zero spend. Flags:
+--network-id (default: reserved-band draw) and --coexist-net-id (the
+foreign node's net registry id; default 144 beside an explicit 333 run,
+else 963 — the C++ registry rejects the whole reserved band for net_id,
+so a band draw cannot be the foreign net). NET-05 integrity: the ONLY
+sanctioned non-reserved run is the explicit "--scenario dht-health
+--network-id 333" pre-provision proof; every default draw stays in the
+reserved band, and CI never pins 333.
 Standing assertion:
 scenario builds NEVER define SGNS_USE_MEMORY_SECURE_STORAGE — durable
 secure storage is the whole point of the restart proof (identity and
@@ -118,6 +135,26 @@ WINDOW_EDGE_SERVE_SECONDS = 45
 GENESIS_WINDOW_EXPIRY_LINE = "Genesis serving window complete."
 NODE_BURN_WAIT_STATE = "WAITING_FOR_BURN_GENESIS"
 
+# dht-health (D-01 amended) observables — verified against the built
+# libraries: "CID Test:: <cid>" rides the node logger (SuperGeniusNode,
+# libgenius_node.a), "DHT: New Peer: <pid>" rides the GossipPubSub logger
+# (libipfs-pubsub.a — observable only because topology's INFO_LOGGERS
+# promotes it to info).
+CID_TEST_LINE = r"CID Test:: (\S+)"
+DHT_NEW_PEER_PREFIX = "DHT: New Peer: "
+# The dns4 dial proof hostname: dns4 resolves A records only, and the node
+# binds 0.0.0.0, so localhost -> 127.0.0.1 reaches node1's listener.
+DNS4_PROBE_HOSTNAME = "localhost"
+# The foreign node's default net: beside an explicit 333 run the pairing is
+# DEV (144 — the plan's proof pair); beside a default reserved-band run the
+# staging nodes sit on the silent DEV default, so the foreign pins TEST
+# (963). Both are registry-accepted in every binary (pre- and post-D-06) —
+# a reserved-band draw is NOT usable as a foreign net (the C++ registry
+# rejects the whole band for net_id, the same accept-list fact the RED run
+# proves live; recorded as the 04-01 plan deviation).
+FOREIGN_NET_BESIDE_STAGING = 144
+FOREIGN_NET_BESIDE_DEFAULT = 963
+
 STRANDED_MARKER = "STRANDED-GENESIS-DETECTED"
 
 
@@ -180,6 +217,22 @@ def _wait_for_file(path, timeout):
             raise RuntimeError("timeout after %ss waiting for %s"
                                % (timeout, path))
         time.sleep(supervisor.POLL_INTERVAL)
+
+
+# The tail of an observed PubSub multiaddr: /tcp/<port>/ipfs/<peer id> (the
+# built binary emits the /ipfs/ suffix form; /p2p/ is equivalent input).
+_MULTIADDR_TAIL_RE = re.compile(r"/tcp/(\d+)/(?:ipfs|p2p)/([^/\s]+)\s*$")
+
+
+def _multiaddr_tcp_peer(multiaddr):
+    """(tcp port, peer id) parsed from a live PubSub multiaddr capture — the
+    dns4 gate DERIVES its entry from the observation, never hand-transcribes
+    (the same parse-don't-recompute discipline as every other gate)."""
+    match = _MULTIADDR_TAIL_RE.search(multiaddr)
+    if not match:
+        raise RuntimeError("unparseable multiaddr (expected .../tcp/<port>/"
+                           "ipfs|p2p/<peer id>): %r" % multiaddr)
+    return int(match.group(1)), match.group(2)
 
 
 def _start_thread(name, work):
@@ -306,9 +359,11 @@ def _check_fatal(top):
                                   entry["node_log"]))
 
 
-def _boot_stage(runner, run_dir, top, timeout):
-    """IDENTITY -> START -> per-node WAITING_FOR_TRUST_GENESIS gates — the
-    02-02 boot path, unchanged; returns per-node spawn->gate timings."""
+def _boot_node1(runner, run_dir, top, timeout):
+    """IDENTITY -> trust configs -> node1 spawn + PubSub gate. The shared
+    prefix of every boot shape (extracted 04-01, behavior-preserving):
+    returns (spawn_times, node1 multiaddr) with the manifest stashes
+    (node1_multiaddr, authorized_full_node) already set."""
     node1 = top["nodes"][0]
     account_address = _identity_boot(runner, node1, run_dir, timeout)
     topology.write_trust_configs(top, account_address)
@@ -328,11 +383,13 @@ def _boot_stage(runner, run_dir, top, timeout):
     # B_1 too — a joiner needs the authorized creator to accept the genesis.
     top["node1_multiaddr"] = multiaddr
     top["authorized_full_node"] = account_address
-    topology.write_peer_configs(top, multiaddr)
-    for entry in top["nodes"][1:]:
-        _spawn_node(entry["name"], runner, entry, run_dir, spawn_times)
-        print("START: %s spawned (bootstrap %s)" % (entry["name"], multiaddr))
+    return spawn_times, multiaddr
 
+
+def _gate_nodes_waiting(top, spawn_times, timeout):
+    """Per-node WAITING_FOR_TRUST_GENESIS gates (the shared suffix of every
+    boot shape): returns per-node spawn->gate timings; FATAL_TRUST_MISMATCH
+    anywhere is the instant loud failure."""
     timings = {}
     for entry in top["nodes"]:
         match = supervisor.wait_for(entry["name"], WAITING_OR_FATAL, timeout)
@@ -345,6 +402,152 @@ def _boot_stage(runner, run_dir, top, timeout):
         print("GATE: %s node_state=%s after %.1fs"
               % (entry["name"], state, timings[entry["name"]]))
     return timings
+
+
+def _boot_stage(runner, run_dir, top, timeout):
+    """IDENTITY -> START -> per-node WAITING_FOR_TRUST_GENESIS gates — the
+    02-02 boot path, unchanged; returns per-node spawn->gate timings."""
+    spawn_times, multiaddr = _boot_node1(runner, run_dir, top, timeout)
+    topology.write_peer_configs(top, multiaddr)
+    for entry in top["nodes"][1:]:
+        _spawn_node(entry["name"], runner, entry, run_dir, spawn_times)
+        print("START: %s spawned (bootstrap %s)" % (entry["name"], multiaddr))
+    return _gate_nodes_waiting(top, spawn_times, timeout)
+
+
+def _dht_health_boot_stage(runner, run_dir, top, timeout):
+    """The dht-health boot (D-01 amended): the proven pipeline with a SPLIT
+    bootstrap in two waves and the co-located foreign-net node beside the
+    mesh. Wave 1: node1, then node2 whose ONLY bootstrap entry is the
+    /dns4/ form of node1's observed multiaddr (port + peer id parsed from
+    the capture — never hand-transcribed); node2 meshing proves the dns4
+    form resolves at dial time in this binary (research A1, closed
+    locally). Wave 2: node3 -> node1, nodes 4-5 -> node2's observed
+    multiaddr — node3 is never told about node4/node5, which is what the
+    discovery gate proves. The foreign node spawns between the waves (max
+    overlap with the mesh + ceremony) under its own base dir, registry
+    net, and EMPTY bootstrap. Gates never sleep. Returns the foreign node
+    record for the coexistence gate."""
+    spawn_times, multiaddr1 = _boot_node1(runner, run_dir, top, timeout)
+    top["node_multiaddrs"] = {top["nodes"][0]["name"]: multiaddr1}
+
+    # Wave 1: node2 dials the dns4 form of node1.
+    port1, peer1 = _multiaddr_tcp_peer(multiaddr1)
+    dns4_entry = topology.make_dns4_multiaddr(DNS4_PROBE_HOSTNAME, port1, peer1)
+    node2 = top["nodes"][1]
+    topology.write_peer_configs(top, multiaddr1,
+                                node_multiaddr_map={node2["name"]: dns4_entry})
+    _spawn_node(node2["name"], runner, node2, run_dir, spawn_times)
+    print("START: %s spawned (bootstrap %s — the dns4 dial proof)"
+          % (node2["name"], dns4_entry))
+    multiaddr2 = supervisor.wait_for(node2["name"], PUBSUB_LINE,
+                                     timeout).group(1)
+    top["node_multiaddrs"][node2["name"]] = multiaddr2
+
+    # The co-located foreign-net node: different registry net, empty
+    # bootstrap, next port band slot, no --key-file (a fresh foreign
+    # account — it is not a ceremony participant).
+    foreign_entry = topology.write_foreign_net_configs(run_dir,
+                                                       top["coexist_net_id"])
+    foreign_proc = supervisor.spawn(
+        foreign_entry["name"], [runner, foreign_entry["base_dir"]], run_dir,
+        extra_logs=[foreign_entry["node_log"]])
+    foreign_multiaddr = supervisor.wait_for(foreign_entry["name"], PUBSUB_LINE,
+                                            timeout).group(1)
+    _, foreign_peer_id = _multiaddr_tcp_peer(foreign_multiaddr)
+    print("START: foreign-net spawned (net_id %d, empty bootstrap, base %s) — "
+          "the co-location proof's other tenant"
+          % (foreign_entry["net_id"], foreign_entry["base_dir"]))
+
+    # Wave 2: node3 -> node1; nodes 4-5 -> node2. Node2's dns4 entry rides
+    # the map again (write_peer_configs rewrites every peer config; its
+    # boot-time read already happened, the rewrite is inert for it).
+    node3, node4, node5 = top["nodes"][2], top["nodes"][3], top["nodes"][4]
+    topology.write_peer_configs(top, multiaddr1, node_multiaddr_map={
+        node2["name"]: dns4_entry,
+        node4["name"]: multiaddr2,
+        node5["name"]: multiaddr2,
+    })
+    bootstrap_of = {node3["name"]: multiaddr1,
+                    node4["name"]: multiaddr2,
+                    node5["name"]: multiaddr2}
+    for entry in (node3, node4, node5):
+        _spawn_node(entry["name"], runner, entry, run_dir, spawn_times)
+        print("START: %s spawned (bootstrap %s)"
+              % (entry["name"], bootstrap_of[entry["name"]]))
+    for entry in (node3, node4, node5):
+        top["node_multiaddrs"][entry["name"]] = supervisor.wait_for(
+            entry["name"], PUBSUB_LINE, timeout).group(1)
+
+    timings = _gate_nodes_waiting(top, spawn_times, timeout)
+    print("DHT-GATE: dns4-dial ok (%s meshed via %s — WAITING_FOR_TRUST_"
+          "GENESIS reached through the /dns4/ bootstrap)"
+          % (node2["name"], dns4_entry))
+    return {"entry": foreign_entry, "proc": foreign_proc,
+            "peer_id": foreign_peer_id, "boot_timings": timings}
+
+
+def _dht_health_mesh_gates(top, timeout):
+    """Post-boot DHT gates over the per-net CID: every staging node must
+    have logged a byte-identical "CID Test::" value (same net-scoped
+    provide key), and node3 — which was only ever told about node1 — must
+    have learned node4 or node5 through "DHT: New Peer:" (discovery beyond
+    the configured bootstrap, the D-05 fact this gate exercises)."""
+    cids = {}
+    for entry in top["nodes"]:
+        cids[entry["name"]] = supervisor.wait_for(
+            entry["name"], CID_TEST_LINE, timeout).group(1)
+    distinct = set(cids.values())
+    if len(distinct) != 1:
+        raise RuntimeError("DHT CID divergence across staging nodes (expected "
+                           "one identical per-net CID): %s" % cids)
+    staging_cid = next(iter(distinct))
+    print("DHT-GATE: identical-cid ok (%s)" % staging_cid)
+    top["dht_staging_cid"] = staging_cid
+
+    node3 = top["nodes"][2]
+    discoverable = []
+    for candidate in top["nodes"][3:5]:  # node4, node5 — never in node3's config
+        _, peer_id = _multiaddr_tcp_peer(top["node_multiaddrs"][candidate["name"]])
+        discoverable.append(peer_id)
+    pattern = "%s(%s)" % (re.escape(DHT_NEW_PEER_PREFIX),
+                          "|".join(re.escape(pid) for pid in discoverable))
+    learned = supervisor.wait_for(node3["name"], pattern, timeout).group(1)
+    print("DHT-GATE: discovery-beyond-bootstrap ok (node3 learned %s)"
+          % learned)
+
+
+def _dht_health_coexistence_gate(top, foreign, timeout):
+    """The coexistence verdict (run after the ceremony): the foreign node
+    logged a DIFFERENT per-net CID (isolation, not silence — it runs its own
+    DHT), is still alive (co-location means co-existing), and NO staging
+    node ever learned its peer id through "DHT: New Peer:" (zero
+    cross-contamination — the AWS-box pattern's whole claim)."""
+    entry = foreign["entry"]
+    foreign_cid = supervisor.wait_for(entry["name"], CID_TEST_LINE,
+                                      timeout).group(1)
+    staging_cid = top["dht_staging_cid"]
+    if foreign_cid == staging_cid:
+        raise RuntimeError("foreign-net node (net_id %d) logged the SAME CID "
+                           "%s as the staging net — per-net CID isolation "
+                           "failed (net ids collided?)"
+                           % (entry["net_id"], foreign_cid))
+    if foreign["proc"].poll() is not None:
+        raise RuntimeError("foreign-net node exited %s before the ceremony "
+                           "completed (co-location means co-existing; see %s)"
+                           % (foreign["proc"].returncode, entry["node_log"]))
+    contamination = []
+    needle = "%s%s" % (DHT_NEW_PEER_PREFIX, foreign["peer_id"])
+    for node_entry in top["nodes"]:
+        with open(node_entry["node_log"], encoding="utf-8",
+                  errors="replace") as handle:
+            if needle in handle.read():
+                contamination.append(node_entry["name"])
+    if contamination:
+        raise RuntimeError("cross-net contamination: %s learned the foreign "
+                           "node's peer id via DHT (see their sgnslog2.log)"
+                           % ", ".join(contamination))
+    print("DHT-GATE: coexistence-isolation ok (foreign cid %s)" % foreign_cid)
 
 
 def _teardown_nodes(expect_clean):
@@ -782,12 +985,22 @@ def _ceremony_run(sgns_trust, runner, run_dir, top, timeout, approve_count,
         print("SCENARIO: %s — event-anchored scenario points (D-06/D-07, "
               "zero sleeps); failures exit 1" % scenario)
     print("SETUP: run dir %s" % run_dir)
-    print("SETUP: network_id %d (reserved band %d-%d)"
-          % (network_id, *topology.NETWORK_ID_RESERVED_RANGE))
+    if network_id == topology.STAGING_NET_ID:
+        print("SETUP: network_id %d (STAGING_NET_ID pin — the ONE sanctioned "
+              "non-reserved run: the dht-health pre-provision proof; default "
+              "draws stay in the reserved band, NET-05)" % network_id)
+    else:
+        print("SETUP: network_id %d (reserved band %d-%d)"
+              % (network_id, *topology.NETWORK_ID_RESERVED_RANGE))
     print("SETUP: bootstrapper %s" % top["bootstrapper"])
     print("SETUP: peer_set %s" % ", ".join(top["peer_set"]))
 
-    _boot_stage(runner, run_dir, top, timeout)
+    foreign = None
+    if scenario == "dht-health":
+        foreign = _dht_health_boot_stage(runner, run_dir, top, timeout)
+        _dht_health_mesh_gates(top, timeout)
+    else:
+        _boot_stage(runner, run_dir, top, timeout)
     _check_fatal(top)
 
     print("CEREMONY: make-manifest (peers = topology peer_set — the same list "
@@ -868,6 +1081,10 @@ def _ceremony_run(sgns_trust, runner, run_dir, top, timeout, approve_count,
         network_head = next(iter(distinct))
         print("HEAD %s identical across %d nodes"
               % (network_head, len(heads)))
+        if scenario == "dht-health":
+            # The quorum marker: the strict all-N post-burn gate plus the
+            # identical-head assertion are the confirmed-quorum proof.
+            print("DHT-GATE: quorum ok")
 
     if scenario == "restart-mid-sync":
         _restart_mid_sync_stage(runner, run_dir, top, network_head)
@@ -875,6 +1092,8 @@ def _ceremony_run(sgns_trust, runner, run_dir, top, timeout, approve_count,
         _quorum_loss_stage(runner, run_dir, top, network_head)
     elif scenario == "window-edge":
         _window_edge_joiner_gates(top, window, network_head)
+    elif scenario == "dht-health":
+        _dht_health_coexistence_gate(top, foreign, timeout)
 
     used_actors = [actor1] + peer_actors[:approve_count]
     for actor in used_actors:
@@ -1135,12 +1354,25 @@ def main():
                              "stranded-genesis negative control (exit 2)")
     parser.add_argument("--scenario", default=None,
                         choices=["restart-mid-ceremony", "restart-mid-sync",
-                                 "quorum-loss", "window-edge"],
-                        help="resilience scenario to run (D-09 token set, "
-                             "validated here at the edge; default: the Phase "
-                             "2 happy path, unchanged). Scenario failures are "
-                             "exit 1; the stranded negative control stays "
-                             "exit 2")
+                                 "quorum-loss", "window-edge", "dht-health"],
+                        help="resilience scenario to run (D-09 token set + "
+                             "the 04-01 dht-health gate, validated here at "
+                             "the edge; default: the Phase 2 happy path, "
+                             "unchanged). Scenario failures are exit 1; the "
+                             "stranded negative control stays exit 2")
+    parser.add_argument("--network-id", type=int, default=None, metavar="N",
+                        help="pin the run's network id (dht-health only; the "
+                             "reserved band or exactly STAGING_NET_ID 333 — "
+                             "the ONE sanctioned non-reserved value, the "
+                             "pre-provision proof. Default: reserved-band "
+                             "draw, NET-05)")
+    parser.add_argument("--coexist-net-id", type=int, default=None, metavar="N",
+                        help="net registry id for the dht-health co-located "
+                             "foreign node (must be one of 369/963/144/333 "
+                             "and differ from the staging net; default 144 "
+                             "beside an explicit 333 run, else 963 — the C++ "
+                             "registry rejects the whole reserved band for "
+                             "net_id)")
     parser.add_argument("--allow-a6-fallback", action="store_true",
                         help="downgrade the strict all-N post-burn gate ONLY "
                              "when at least one node advanced; prints the "
@@ -1180,13 +1412,54 @@ def main():
         if args.approve_peers is not None:
             parser.error("--scenario approves all peers (incompatible with "
                          "--approve-peers)")
-        if args.nodes < 5:
+        if args.nodes < 5 and args.scenario != "dht-health":
             parser.error("%s needs the 5-node topology (bootstrapper + 4 "
                          "peers; the kill points anchor on the parsed 3-of-4 "
                          "burn floor, the joiners join a 5-node net, "
                          "quorum-loss kills 2 of the 4 trusted peers, and "
                          "window-edge proves both boundary sides on it)"
                          % args.scenario)
+    if args.network_id is not None or args.coexist_net_id is not None:
+        if args.scenario != "dht-health":
+            parser.error("--network-id/--coexist-net-id belong to the "
+                         "dht-health scenario (NET-05: no other run may pin "
+                         "its net id)")
+    if args.scenario == "dht-health":
+        if args.nodes != 5:
+            parser.error("dht-health runs the exact 5-node topology (the "
+                         "split bootstrap anchors node3/node4/node5 by "
+                         "position and the foreign node takes the port band "
+                         "slot after the 5th seed)")
+        if args.network_id is not None:
+            try:
+                topology.validate_network_id(args.network_id)
+            except ValueError as error:
+                parser.error(str(error))
+        # The staging nodes' effective C++ net: 333 when pinned (the only
+        # value that pins — topology's payload escape), else the silent DEV
+        # default every Phase 2-3 run rides.
+        staging_net = (topology.STAGING_NET_ID
+                       if args.network_id == topology.STAGING_NET_ID else 144)
+        if args.coexist_net_id is None:
+            # Registry-accepted default differing from the staging net (see
+            # the FOREIGN_NET constants note for why a band draw cannot be
+            # the foreign net).
+            coexist_net_id = (FOREIGN_NET_BESIDE_STAGING
+                              if staging_net == topology.STAGING_NET_ID
+                              else FOREIGN_NET_BESIDE_DEFAULT)
+        else:
+            coexist_net_id = args.coexist_net_id
+            if coexist_net_id not in topology.REGISTRY_NET_IDS:
+                parser.error("--coexist-net-id %d is outside the C++ net "
+                             "registry %s — the foreign node would die at "
+                             "init (Pitfall 1)"
+                             % (coexist_net_id, topology.REGISTRY_NET_IDS))
+            if coexist_net_id == staging_net:
+                parser.error("--coexist-net-id %d equals the staging net — "
+                             "the coexistence proof needs a DIFFERENT net"
+                             % coexist_net_id)
+    else:
+        coexist_net_id = None
 
     # Harness-start self-checks: the EC pinned vector asserts at import of
     # topology/secp256k1_address; the scan self-test proves non-vacuity and
@@ -1209,14 +1482,16 @@ def main():
     success = False
     key_hexes = []
     try:
-        top = topology.build_topology(run_dir, args.nodes)
+        top = topology.build_topology(run_dir, args.nodes,
+                                      network_id=args.network_id)
         key_hexes = _read_key_hexes(top)
-        # NET-05 belt-and-braces: the drawn id is asserted in-band before any
-        # use (besides topology's own selftest); diagnostics carry it too.
-        low, high = topology.NETWORK_ID_RESERVED_RANGE
-        if not low <= top["network_id"] <= high:
-            raise RuntimeError("network_id %d outside the reserved band "
-                               "%d-%d" % (top["network_id"], low, high))
+        # NET-05 belt-and-braces: the id (drawn OR the sanctioned staging
+        # pin) is re-validated in-band before any use — one home for the
+        # policy since 04-01 (topology.validate_network_id); diagnostics
+        # carry it too.
+        topology.validate_network_id(top["network_id"])
+        if coexist_net_id is not None:
+            top["coexist_net_id"] = coexist_net_id
         if args.boot_only:
             _boot_only_run(runner, run_dir, top, args.timeout)
         else:
