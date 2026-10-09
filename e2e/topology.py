@@ -208,13 +208,21 @@ def build_topology(run_dir: str, nodes: int, runner_default_ports: bool = False,
     for i in range(1, nodes + 1):
         database = os.path.join(run_dir, "actor%ddb" % i)
         os.makedirs(database, exist_ok=True)  # reserve; DBs are disjoint trees
-        actor_entries.append({
+        entry = {
             "name": "actor%d" % i,
             "key_file": identities[i - 1][0],
             "network_config": os.path.join(run_dir, "actor%d-network.json" % i),
             "database": database,
             "pubsub_port": str(ACTOR_PORT_BASE + i - 1),  # STRING (actor parser)
-        })
+        }
+        if network_id == STAGING_NET_ID:
+            # Every pubsub/DHT topic an actor joins carries the net appendix
+            # (PubsubBroadcasterExt), so a staging actor MUST run the tool
+            # with --net-id 333 or its topics (.3.7.144) never meet the
+            # staging nodes' (.3.7.333) — the CRDT catch-up starves (observed
+            # live, 04-01). ceremony._shared_argv consumes this key.
+            entry["net_id"] = STAGING_NET_ID
+        actor_entries.append(entry)
 
     # Manifest carries key file PATHS only — never key bytes (T-02-06).
     topology = {
@@ -632,6 +640,13 @@ def _selftest() -> None:
         os.makedirs(staging_dir)
         staging = build_topology(staging_dir, 2, network_id=STAGING_NET_ID)
         assert staging["network_id"] == STAGING_NET_ID
+        # Staging actors carry the --net-id pin (topic appendix parity with
+        # the staging nodes); reserved-band actors carry nothing (default
+        # registry id both sides, exactly as Phase 2-3).
+        assert all(actor["net_id"] == STAGING_NET_ID
+                   for actor in staging["actors"])
+        assert all("net_id" not in actor
+                   for actor in topology["actors"])
         write_trust_configs(staging, authorized)
         staging_sgns = _read_json(os.path.join(
             staging["nodes"][0]["base_dir"], "sgns_config.json"))

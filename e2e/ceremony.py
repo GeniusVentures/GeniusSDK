@@ -101,12 +101,19 @@ def _shared_argv(sgns_trust, operation, actor, manifest):
     """The four options every local operation requires. --database is always
     the actor's own run-dir tree, never a live node base dir (RocksDB
     single-writer, Pitfall 2); --topic is always the node trust topic
-    (Pitfall 6 — a mismatched topic strands the ceremony silently)."""
-    return [sgns_trust, operation,
+    (Pitfall 6 — a mismatched topic strands the ceremony silently). A
+    staging actor additionally pins --net-id (every pubsub topic carries the
+    net appendix — without the pin the actor joins .3.7.144 topics while the
+    staging nodes are on .3.7.333 and the CRDT catch-up starves; the key is
+    set by topology only for a staging-pin run)."""
+    argv = [sgns_trust, operation,
             "--manifest", manifest,
             "--network-config", actor["network_config"],
             "--database", actor["database"],
             "--topic", topology.TOPIC]
+    if "net_id" in actor:
+        argv += ["--net-id", str(actor["net_id"])]
+    return argv
 
 
 def make_manifest(sgns_trust, run_dir, network_id, bootstrapper, peers):

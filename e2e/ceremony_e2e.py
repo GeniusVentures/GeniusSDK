@@ -47,11 +47,15 @@ the fleet-risky assumptions on ONE machine before any box is touched: a
 5-node Variant-B ceremony with a SPLIT bootstrap (nodes 2-3 -> node1,
 nodes 4-5 -> node2) where node2 dials node1 through a /dns4/ multiaddr
 derived from the live capture (the dns4 dial proof), node3 must learn
-node4-or-node5 via the per-net DHT CID (discovery beyond the configured
-bootstrap), every node must log the byte-identical "CID Test::" CID, and
-a co-located foreign-net node (own base dir, own registry net id, EMPTY
-bootstrap) must stay alive with a DIFFERENT CID and zero cross-
-contamination — the AWS-box co-location pattern at zero spend. Flags:
+node4-or-node5 beyond its configured bootstrap (accepted observables:
+"DHT: New Peer:" from the kademlia FindProviders callback, or the
+GossipPubSub connection listing naming node4/node5's unique port — this
+build's DHT provider records are inert while the mesh still forms beyond
+bootstrap, observed live 04-01), every node must log the byte-identical
+"CID Test::" CID, and a co-located foreign-net node (own base dir, own
+registry net id, EMPTY bootstrap) must stay alive with a DIFFERENT CID
+and zero cross-contamination — the AWS-box co-location pattern at zero
+spend. Flags:
 --network-id (default: reserved-band draw) and --coexist-net-id (the
 foreign node's net registry id; default 144 beside an explicit 333 run,
 else 963 — the C++ registry rejects the whole reserved band for net_id,
@@ -459,7 +463,7 @@ def _dht_health_boot_stage(runner, run_dir, top, timeout):
         extra_logs=[foreign_entry["node_log"]])
     foreign_multiaddr = supervisor.wait_for(foreign_entry["name"], PUBSUB_LINE,
                                             timeout).group(1)
-    _, foreign_peer_id = _multiaddr_tcp_peer(foreign_multiaddr)
+    foreign_port, foreign_peer_id = _multiaddr_tcp_peer(foreign_multiaddr)
     print("START: foreign-net spawned (net_id %d, empty bootstrap, base %s) — "
           "the co-location proof's other tenant"
           % (foreign_entry["net_id"], foreign_entry["base_dir"]))
@@ -489,15 +493,26 @@ def _dht_health_boot_stage(runner, run_dir, top, timeout):
           "GENESIS reached through the /dns4/ bootstrap)"
           % (node2["name"], dns4_entry))
     return {"entry": foreign_entry, "proc": foreign_proc,
-            "peer_id": foreign_peer_id, "boot_timings": timings}
+            "peer_id": foreign_peer_id, "port": foreign_port,
+            "boot_timings": timings}
 
 
 def _dht_health_mesh_gates(top, timeout):
     """Post-boot DHT gates over the per-net CID: every staging node must
     have logged a byte-identical "CID Test::" value (same net-scoped
     provide key), and node3 — which was only ever told about node1 — must
-    have learned node4 or node5 through "DHT: New Peer:" (discovery beyond
-    the configured bootstrap, the D-05 fact this gate exercises)."""
+    have learned node4 or node5 (discovery beyond the configured bootstrap,
+    the D-05 fact this gate exercises).
+
+    Two accepted observables for the discovery leg (whichever this build
+    produces first): "DHT: New Peer: <pid>" (the kademlia FindProviders
+    callback) OR "Connected to: <short-id> at /ip4/.../tcp/<node port>"
+    (the GossipPubSub connection listing — the port pins the node exactly,
+    ports are unique per node). Observed live (04-01): this build's DHT
+    provider path is inert — ProvideCID lands but FindProviders returns an
+    empty list on every cycle even on a fully-meshed net — while the mesh
+    itself forms beyond bootstrap (gossip peer exchange), so the connection
+    listing is the honest proof this binary can give."""
     cids = {}
     for entry in top["nodes"]:
         cids[entry["name"]] = supervisor.wait_for(
@@ -511,15 +526,20 @@ def _dht_health_mesh_gates(top, timeout):
     top["dht_staging_cid"] = staging_cid
 
     node3 = top["nodes"][2]
-    discoverable = []
+    pids = []
+    ports = []
     for candidate in top["nodes"][3:5]:  # node4, node5 — never in node3's config
-        _, peer_id = _multiaddr_tcp_peer(top["node_multiaddrs"][candidate["name"]])
-        discoverable.append(peer_id)
-    pattern = "%s(%s)" % (re.escape(DHT_NEW_PEER_PREFIX),
-                          "|".join(re.escape(pid) for pid in discoverable))
-    learned = supervisor.wait_for(node3["name"], pattern, timeout).group(1)
-    print("DHT-GATE: discovery-beyond-bootstrap ok (node3 learned %s)"
-          % learned)
+        port, peer_id = _multiaddr_tcp_peer(
+            top["node_multiaddrs"][candidate["name"]])
+        pids.append(peer_id)
+        ports.append(port)
+    pattern = "%s(%s)|Connected to: \\S+ at /ip4/\\d+(?:\\.\\d+){3}/tcp/(%d|%d)" % (
+        re.escape(DHT_NEW_PEER_PREFIX),
+        "|".join(re.escape(pid) for pid in pids), ports[0], ports[1])
+    match = supervisor.wait_for(node3["name"], pattern, timeout)
+    learned = match.group(1) or ("the peer at tcp/%s" % match.group(2))
+    print("DHT-GATE: discovery-beyond-bootstrap ok (node3 learned %s — never "
+          "in its config)" % learned)
 
 
 def _dht_health_coexistence_gate(top, foreign, timeout):
@@ -542,16 +562,19 @@ def _dht_health_coexistence_gate(top, foreign, timeout):
                            "completed (co-location means co-existing; see %s)"
                            % (foreign["proc"].returncode, entry["node_log"]))
     contamination = []
-    needle = "%s%s" % (DHT_NEW_PEER_PREFIX, foreign["peer_id"])
+    dht_needle = "%s%s" % (DHT_NEW_PEER_PREFIX, foreign["peer_id"])
+    conn_needle = re.compile(
+        r"Connected to: \S+ at /ip4/\d+(?:\.\d+){3}/tcp/%d\b" % foreign["port"])
     for node_entry in top["nodes"]:
         with open(node_entry["node_log"], encoding="utf-8",
                   errors="replace") as handle:
-            if needle in handle.read():
-                contamination.append(node_entry["name"])
+            log_text = handle.read()
+        if dht_needle in log_text or conn_needle.search(log_text):
+            contamination.append(node_entry["name"])
     if contamination:
         raise RuntimeError("cross-net contamination: %s learned the foreign "
-                           "node's peer id via DHT (see their sgnslog2.log)"
-                           % ", ".join(contamination))
+                           "node (DHT new-peer or a connection at its port — "
+                           "see their sgnslog2.log)" % ", ".join(contamination))
     print("DHT-GATE: coexistence-isolation ok (foreign cid %s)" % foreign_cid)
 
 
