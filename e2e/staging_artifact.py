@@ -36,6 +36,15 @@ import tempfile
 import topology
 
 
+def _expect_64_hex(value, what):
+    # The sha256-string shape (fingerprint, tarball/runner digests): exactly
+    # 64 lowercase hex, checked through topology's one hex charset home.
+    if not (isinstance(value, str) and len(value) == 64
+            and set(value) <= topology._HEX):
+        raise ValueError("%s must be 64 lowercase hex (got %r)"
+                         % (what, value))
+
+
 def write_staging_artifact(out_dir, facts):
     """Validate observed facts and assemble the published artifact set.
 
@@ -44,8 +53,81 @@ def write_staging_artifact(out_dir, facts):
       runner_sha256, ceremony_fingerprint, genesis_cid,
       authorized_full_node, bootstrapper_node, trusted_peers,
       manifest_path (the observed ceremony manifest.bin to copy).
+
+    Every fact is validated BEFORE anything is written (a reject leaves no
+    partial artifact set behind), manifest.bin is copied byte-identical and
+    never regenerated, and sha256(manifest.bin) must equal the recorded
+    ceremony_fingerprint — the make-manifest contract consumed at publication
+    time (a recomputed or mismatched fingerprint would publish an
+    unverifiable net). Returns the written staging-net.json payload.
     """
-    raise NotImplementedError("04-02 RED scaffold")
+    net = facts.get("net_id")
+    if not isinstance(net, int):
+        raise ValueError("net_id must be an int (got %r)" % (net,))
+    topology.validate_network_id(net)
+    if net != topology.STAGING_NET_ID:
+        raise ValueError("the published artifact set is THE staging net: "
+                         "net_id must be %d (got %r)"
+                         % (topology.STAGING_NET_ID, net))
+    multiaddr = facts.get("genesis_multiaddr", "")
+    if not (isinstance(multiaddr, str) and multiaddr.startswith("/dns4/")):
+        raise ValueError("genesis_multiaddr must be the /dns4/ DNS-named form "
+                         "(got %r)" % (multiaddr[:40],))
+    for field in ("node_version", "genesis_cid"):
+        if not facts.get(field):
+            raise ValueError("%s must be a non-empty observed string" % field)
+    _expect_64_hex(facts.get("supergenius_tarball_sha256"),
+                   "supergenius_tarball_sha256")
+    _expect_64_hex(facts.get("runner_sha256"), "runner_sha256")
+    fingerprint = facts.get("ceremony_fingerprint")
+    _expect_64_hex(fingerprint, "ceremony_fingerprint")
+    topology._expect_128_hex(facts["authorized_full_node"],
+                             "authorized_full_node")
+    topology._expect_128_hex(facts["bootstrapper_node"],
+                             "bootstrapper_node")
+    peers = facts.get("trusted_peers") or []
+    if not peers:
+        raise ValueError("trusted_peers must be non-empty")
+    for address in peers:
+        topology._expect_128_hex(address, "trusted peer")
+    manifest_path = facts.get("manifest_path")
+    if not manifest_path or not os.path.isfile(manifest_path):
+        raise ValueError("manifest_path must point at the observed "
+                         "manifest.bin (got %r)" % (manifest_path,))
+    with open(manifest_path, "rb") as handle:
+        manifest_bytes = handle.read()
+    if not manifest_bytes:
+        raise ValueError("observed manifest.bin is empty")
+    digest = hashlib.sha256(manifest_bytes).hexdigest()
+    if digest != fingerprint:
+        raise ValueError("ceremony_fingerprint %s != sha256(manifest.bin) %s "
+                         "— the artifact must publish observed, matching "
+                         "facts" % (fingerprint, digest))
+
+    # All facts validated — only now touch the output directory.
+    os.makedirs(out_dir, exist_ok=True)
+    published_manifest = os.path.join(out_dir, "manifest.bin")
+    shutil.copyfile(manifest_path, published_manifest)
+    with open(published_manifest, "rb") as handle:
+        if handle.read() != manifest_bytes:
+            raise ValueError("manifest copy is not byte-identical — refusing "
+                             "to publish")
+    artifact = {
+        "net_id": net,
+        "genesis_multiaddr": multiaddr,
+        "node_version": facts["node_version"],
+        "supergenius_tarball_sha256": facts["supergenius_tarball_sha256"],
+        "runner_sha256": facts["runner_sha256"],
+        "ceremony_fingerprint": fingerprint,
+        "genesis_cid": facts["genesis_cid"],
+        "authorized_full_node": facts["authorized_full_node"],
+        "bootstrapper_node": facts["bootstrapper_node"],
+        "trusted_peers": list(peers),
+    }
+    with open(os.path.join(out_dir, "staging-net.json"), "w") as handle:
+        json.dump(artifact, handle, indent=2)
+        handle.write("\n")
+    return artifact
 
 
 def _selftest() -> None:

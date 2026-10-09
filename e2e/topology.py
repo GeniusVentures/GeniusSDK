@@ -81,6 +81,22 @@ INFO_LOGGERS = {
     "GossipPubSub": "info",  # owns the DHT observables ("DHT: New Peer: <pid>")
 }
 
+# The canonical staging fleet is the 5-node ceremony (genesis on the AWS box +
+# 4 NAS peers); joiner port seeds continue the node band after it (one home
+# for the band continuation join mode uses).
+STAGING_FLEET_NODES = 5
+
+# WAN ceremony margins recorded in every fleet manifest — provisional until
+# 04-03's live fleet run calibrates them (loopback defaults are ceremony.py's
+# 90/60; both are argv-tunable at every call site).
+FLEET_SERVE_SECONDS = 180
+FLEET_TIMEOUT_SECONDS = 120
+
+# The co-located existing node on the AWS box (the services/network_config.json
+# shape) — the collision-check input every fleet port seed must clear by >300.
+# Correct it in fleet.json if the real box runs a different port.
+FLEET_EXISTING_NODE_PORT = 40001
+
 
 def draw_network_id() -> int:
     # ponytail: uniform draw from the reserved band. Cross-run collision chance
@@ -320,7 +336,7 @@ def write_identity_config(topology: dict) -> None:
         return
     _write_json(os.path.join(topology["nodes"][0]["base_dir"],
                              "sgns_config.json"),
-                {"node_type": "Full", "net_id": STAGING_NET_ID})
+                _minimal_identity_payload(STAGING_NET_ID))
 
 
 def write_trust_configs(topology: dict, authorized_full_node: str) -> None:
@@ -468,7 +484,7 @@ def write_foreign_net_configs(run_dir: str, net_id: int) -> dict:
                 {"auto_dht": True, "bootstrap_addresses": [],
                  "port_seed": port_seed})
     _write_json(os.path.join(base_dir, "sgns_config.json"),
-                {"node_type": "Full", "net_id": net_id})
+                _minimal_identity_payload(net_id))
     return {
         "name": "foreign-net",
         "base_dir": base_dir,
@@ -476,6 +492,259 @@ def write_foreign_net_configs(run_dir: str, net_id: int) -> dict:
         "port_seed": port_seed,
         "node_log": os.path.join(base_dir, "sgnslog2.log"),
     }
+
+
+def _minimal_identity_payload(net_id: int) -> dict:
+    """The net-pinned boot shape with NO trust wiring — ONE home shared by the
+    genesis identity boot (write_identity_config), the co-located foreign-net
+    node (write_foreign_net_configs), and the static-fleet genesis bundle
+    (write_fleet_configs): {"node_type": "Full", "net_id": <registry id>}."""
+    return {"node_type": "Full", "net_id": net_id}
+
+
+def _validate_fleet(fleet: dict) -> None:
+    """One home for the fleet-manifest invariants write_fleet_configs and
+    write_fleet_trust_configs consume (D-09: the manifest is generated,
+    validated code — never hand-trusted): THE staging net, address/peer-set
+    agreement, port seeds unique + spaced >300 + >300 clear of the co-located
+    AWS node's port, positive WAN margins, and a filled /dns4/ genesis
+    published multiaddr (D-04 — the one address every peer and joiner dials)."""
+    net = fleet.get("network_id")
+    if not isinstance(net, int):
+        raise ValueError("fleet network_id must be an int (got %r)" % (net,))
+    validate_network_id(net)
+    if net != STAGING_NET_ID:
+        raise ValueError("static-fleet mode writes THE staging net: "
+                         "network_id must be %d (got %r)"
+                         % (STAGING_NET_ID, net))
+    nodes = fleet.get("nodes") or []
+    if len(nodes) < 2:
+        raise ValueError("fleet needs >= 2 nodes (got %d)" % len(nodes))
+    if nodes[0].get("role") != "genesis":
+        raise ValueError("nodes[0] role must be 'genesis'")
+    if fleet.get("bootstrapper") != nodes[0].get("ceremony_address"):
+        raise ValueError("bootstrapper must be node1's ceremony_address")
+    if list(fleet.get("peer_set") or []) != \
+            [node.get("ceremony_address") for node in nodes[1:]]:
+        raise ValueError("peer_set must be exactly nodes 2..N addresses")
+    for node in nodes:
+        _expect_128_hex(node["ceremony_address"],
+                        "%s ceremony_address" % node.get("name"))
+        kind = (node.get("transport") or {}).get("kind")
+        if kind not in ("ssh", "compose", "local"):
+            raise ValueError("node %s transport kind must be ssh|compose|local"
+                             " (got %r)" % (node.get("name"), kind))
+        if not isinstance(node.get("port_seed"), int) or \
+                node["port_seed"] <= 0:
+            raise ValueError("node %s port_seed must be a positive int"
+                             % node.get("name"))
+    seeds = [node["port_seed"] for node in nodes]
+    ordered = sorted(seeds)
+    if len(set(ordered)) != len(ordered) or \
+            not all(b - a > 300 for a, b in zip(ordered, ordered[1:])):
+        raise ValueError("fleet port seeds must be unique and spaced >300 "
+                         "(Pitfall 4): %s" % seeds)
+    existing = fleet.get("existing_node_port")
+    if existing is not None:
+        if not isinstance(existing, int) or existing <= 0:
+            raise ValueError("existing_node_port must be a positive int or "
+                             "null (got %r)" % (existing,))
+        clash = [seed for seed in seeds if abs(seed - existing) <= 300]
+        if clash:
+            raise ValueError("fleet port seeds %s within 300 of the "
+                             "co-located node's port %d" % (clash, existing))
+    for field in ("serve_seconds", "timeout_seconds"):
+        value = fleet.get(field)
+        if not isinstance(value, int) or value <= 0:
+            raise ValueError("fleet %s must be a positive int (got %r)"
+                             % (field, value))
+    genesis_multiaddr = nodes[0].get("published_multiaddr", "")
+    if not genesis_multiaddr.startswith("/dns4/"):
+        raise ValueError("genesis published_multiaddr must be the /dns4/ form "
+                         "(got %r)" % (genesis_multiaddr[:40],))
+    if "PLACEHOLDER" in genesis_multiaddr:
+        raise ValueError("genesis published_multiaddr still carries a "
+                         "PLACEHOLDER — fill the real DNS name and the "
+                         "genesis peer id (captured at its identity boot) "
+                         "before generating bundles")
+
+
+def gen_fleet_keys(keys_dir: str, out_fleet: str) -> dict:
+    """Generate the 5 PERSISTENT staging identities into an operator-chosen
+    OFFLINE dir (D-08: 0600, held offline, never committed) and write the
+    fleet.json manifest carrying key file PATHS only — zero key hex
+    (T-04-02-01). write_key_file's O_EXCL makes a re-run into the same dir
+    fail loudly: persistent identities are generated ONCE.
+
+    The manifest mirrors topology.json's field names where facts coincide
+    (network_id, bootstrapper, peer_set, per-node name/port_seed) and adds
+    the remote facts as PATHS/handles the operator completes before
+    --static-fleet: transport (ssh genesis box / compose NAS peers / local
+    parity fixture), base_dir on the box, and the genesis
+    published_multiaddr (filled once the identity boot captured the peer id).
+    """
+    os.makedirs(keys_dir, exist_ok=True)
+    addresses = []
+    nodes = []
+    for i in range(1, STAGING_FLEET_NODES + 1):
+        key_hex = secp256k1_address.generate_key_hex()
+        key_path = os.path.join(keys_dir, "node%d.key" % i)
+        write_key_file(key_path, key_hex)
+        address = secp256k1_address.ceremony_address(key_hex)
+        addresses.append(address)
+        port_seed = NODE_PORT_BASE + (i - 1) * NODE_PORT_STRIDE
+        if i == 1:
+            transport = {"kind": "ssh", "host": "PLACEHOLDER-AWS-HOST",
+                         "unit_name": "sgns-staging-node.service"}
+            base_dir = "/var/lib/geniussdk/staging-genesis/"
+        else:
+            transport = {"kind": "compose", "service": "staging-peer-%d" % i}
+            base_dir = "/volume1/staging/peer-%d/" % i
+        nodes.append({
+            "name": "node%d" % i,
+            "role": "genesis" if i == 1 else "peer",
+            "ceremony_address": address,
+            "key_file": os.path.abspath(key_path),
+            "base_dir": base_dir,
+            "port_seed": port_seed,
+            "published_multiaddr": make_dns4_multiaddr(
+                "staging-genius.placeholder.invalid", port_seed,
+                "PLACEHOLDER-PEER-ID"),
+            "transport": transport,
+        })
+    fleet = {
+        "network_id": STAGING_NET_ID,
+        "topic": TOPIC,
+        "bootstrapper": addresses[0],
+        "peer_set": addresses[1:],
+        "serve_seconds": FLEET_SERVE_SECONDS,
+        "timeout_seconds": FLEET_TIMEOUT_SECONDS,
+        "existing_node_port": FLEET_EXISTING_NODE_PORT,
+        "nodes": nodes,
+    }
+    _write_json(out_fleet, fleet)
+    return fleet
+
+
+def write_fleet_configs(fleet: dict, out_dir: str) -> dict:
+    """Write the static-fleet config bundles (D-09): ONE directory per node
+    under out_dir/<name>/ — the unit 04-04 mounts (NAS peers) or scps (the
+    AWS genesis box) as a whole. Every node gets dev/log configs and a
+    network_config with its own port_seed; the GENESIS node additionally
+    gets the minimal identity-boot sgns_config (the write_identity_config
+    shape, one home — its first boot exists to capture B_1 and the peer id);
+    PEERS bootstrap to the genesis published /dns4/ multiaddr (amended D-04:
+    the ONE public entry address, also what the NAS peers dial from behind
+    home NAT). No key material is written — keys are staged offline by
+    provisioning. Records bundle_dir on each node and returns the fleet."""
+    _validate_fleet(fleet)
+    genesis_multiaddr = fleet["nodes"][0]["published_multiaddr"]
+    os.makedirs(out_dir, exist_ok=True)
+    for node in fleet["nodes"]:
+        node_dir = os.path.join(out_dir, node["name"]) + "/"
+        os.makedirs(node_dir, exist_ok=True)
+        _write_dev_config(node_dir)
+        _write_log_config(node_dir)
+        _write_json(os.path.join(node_dir, "network_config.json"), {
+            "auto_dht": True,
+            "port_seed": node["port_seed"],
+            "bootstrap_addresses": ([] if node["role"] == "genesis"
+                                    else [genesis_multiaddr]),
+        })
+        if node["role"] == "genesis":
+            _write_json(os.path.join(node_dir, "sgns_config.json"),
+                        _minimal_identity_payload(STAGING_NET_ID))
+        node["bundle_dir"] = node_dir
+    return fleet
+
+
+def write_fleet_trust_configs(fleet: dict, authorized_full_node: str) -> None:
+    """The post-B_1 push (04-03's extension point): once the genesis identity
+    boot's secure_storage_id yields B_1, write the FULL trust payload — the
+    SAME _sgns_trust_payload every ceremony node writes, net_id pinned beside
+    subnet_id — into every node's bundle dir, overwriting the genesis
+    identity-boot config exactly as the ephemeral write_trust_configs does."""
+    for node in fleet.get("nodes") or []:
+        if not node.get("bundle_dir"):
+            raise ValueError("node %s has no bundle_dir — run "
+                             "write_fleet_configs first" % node.get("name"))
+    net = fleet.get("network_id")
+    if not isinstance(net, int) or net != STAGING_NET_ID:
+        raise ValueError("fleet network_id must be exactly the staging id %d "
+                         "(got %r)" % (STAGING_NET_ID, net))
+    _expect_128_hex(authorized_full_node, "authorized_full_node")
+    for node in fleet["nodes"]:
+        _write_json(os.path.join(node["bundle_dir"], "sgns_config.json"),
+                    _sgns_trust_payload(fleet, authorized_full_node))
+
+
+def write_artifact_joiners(artifact_dir: str, out_dir: str,
+                           count: int = 1) -> list:
+    """Join mode (D-14, NET-04): consume the PUBLISHED artifact set's
+    staging-net.json and write joiner config bundles — a joiner boots WITHOUT
+    --key-file (no key file is ever written; a fresh account, the Phase 5
+    joiner shape) with the FULL trust payload rebuilt from the artifact's
+    facts (03-02 A3: joiners need the SAME payload, or they refuse the net's
+    genesis and fail closed) and bootstrap_addresses pointing at the
+    artifact's genesis_multiaddr. Port seeds take the band slots after the
+    5-node fleet. Rejects any artifact whose net_id is not exactly the
+    staging id — an ephemeral reserved-band artifact is another net's, never
+    joinable as the staging net."""
+    if count < 1:
+        raise ValueError("count must be >= 1")
+    artifact_path = os.path.join(artifact_dir, "staging-net.json")
+    with open(artifact_path) as handle:
+        artifact = json.load(handle)
+    net = artifact.get("net_id")
+    if not isinstance(net, int):
+        raise ValueError("artifact net_id must be an int (got %r)" % (net,))
+    validate_network_id(net)  # the 04-01 staging escape (Pitfall 6)
+    if net != STAGING_NET_ID:
+        raise ValueError("artifact %s pins net_id %r — join mode consumes "
+                         "exactly the staging net %d"
+                         % (artifact_path, net, STAGING_NET_ID))
+    multiaddr = artifact.get("genesis_multiaddr", "")
+    if not multiaddr.startswith("/dns4/"):
+        raise ValueError("artifact genesis_multiaddr must be the /dns4/ form "
+                         "(got %r)" % (multiaddr[:40],))
+    _expect_128_hex(artifact["authorized_full_node"],
+                    "artifact authorized_full_node")
+    _expect_128_hex(artifact["bootstrapper_node"],
+                    "artifact bootstrapper_node")
+    peers = list(artifact.get("trusted_peers") or [])
+    if not peers:
+        raise ValueError("artifact trusted_peers must be non-empty")
+    for address in peers:
+        _expect_128_hex(address, "artifact trusted peer")
+    payload = _sgns_trust_payload(
+        {"network_id": net,
+         "bootstrapper": artifact["bootstrapper_node"],
+         "peer_set": peers},
+        artifact["authorized_full_node"])
+    os.makedirs(out_dir, exist_ok=True)
+    joiners = []
+    for i in range(1, count + 1):
+        base_dir = os.path.join(out_dir, "joiner%d" % i) + "/"
+        os.makedirs(base_dir, exist_ok=True)
+        _write_dev_config(base_dir)
+        _write_log_config(base_dir)
+        port_seed = NODE_PORT_BASE + (STAGING_FLEET_NODES + i - 1) * \
+            NODE_PORT_STRIDE
+        network_config_path = os.path.join(base_dir, "network_config.json")
+        _write_json(network_config_path, {
+            "auto_dht": True,
+            "port_seed": port_seed,
+            "bootstrap_addresses": [multiaddr],
+        })
+        _write_json(os.path.join(base_dir, "sgns_config.json"), payload)
+        joiners.append({
+            "name": "joiner%d" % i,
+            "base_dir": base_dir,
+            "network_config": network_config_path,
+            "node_log": os.path.join(base_dir, "sgnslog2.log"),
+            "port_seed": port_seed,
+        })
+    return joiners
 
 
 def _read_json(path: str):
@@ -892,15 +1161,68 @@ def _selftest() -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Selftest for topology/config generation (5-node build "
-                    "into a temp dir; asserts parity, ports, secret-free "
-                    "manifest).")
+        description="Topology/config generation: selftest, the static-fleet "
+                    "trio (keygen -> bundles -> post-B_1 trust push), and "
+                    "artifact-driven join mode.")
     parser.add_argument("--selftest", action="store_true",
                         help="build a 5-node topology and assert invariants")
+    parser.add_argument("--gen-fleet-keys", action="store_true",
+                        help="generate the 5 persistent staging identities "
+                             "OFFLINE (0600) + the fleet.json manifest (key "
+                             "file PATHS only)")
+    parser.add_argument("--keys-dir",
+                        help="offline directory for the persistent fleet keys")
+    parser.add_argument("--out-fleet",
+                        help="path of the fleet.json manifest to write")
+    parser.add_argument("--static-fleet", metavar="FLEET_JSON",
+                        help="write per-node config bundles from a completed "
+                             "fleet.json into --out-dir")
+    parser.add_argument("--join", metavar="ARTIFACT_DIR",
+                        help="write joiner configs from a published "
+                             "staging-net artifact set into --out-dir")
+    parser.add_argument("--out-dir",
+                        help="output directory for --static-fleet/--join")
+    parser.add_argument("--count", type=int, default=1,
+                        help="joiner count for --join (default 1)")
     args = parser.parse_args()
     if args.selftest:
         _selftest()
         print("topology selftest PASS")
+        return
+    if args.gen_fleet_keys:
+        if not args.keys_dir or not args.out_fleet:
+            parser.error("--gen-fleet-keys requires --keys-dir and "
+                         "--out-fleet")
+        fleet = gen_fleet_keys(args.keys_dir, args.out_fleet)
+        print("wrote %d persistent keys to %s (0600; held offline)"
+              % (len(fleet["nodes"]), args.keys_dir))
+        print("wrote fleet manifest %s (key PATHS only — zero key hex)"
+              % args.out_fleet)
+        print("NEXT: fill the genesis published_multiaddr (real DNS name + "
+              "peer id from its identity boot) and the transport hosts, then "
+              "run --static-fleet %s --out-dir <bundle-dir>"
+              % args.out_fleet)
+        return
+    if args.static_fleet:
+        if not args.out_dir:
+            parser.error("--static-fleet requires --out-dir")
+        with open(args.static_fleet) as handle:
+            fleet = json.load(handle)
+        fleet = write_fleet_configs(fleet, args.out_dir)
+        for node in fleet["nodes"]:
+            print("wrote bundle %s (role %s, port_seed %d)"
+                  % (node["bundle_dir"], node["role"], node["port_seed"]))
+        print("genesis sgns_config is the minimal identity shape; run "
+              "write_fleet_trust_configs (04-03) after B_1 is read")
+        return
+    if args.join:
+        if not args.out_dir:
+            parser.error("--join requires --out-dir")
+        joiners = write_artifact_joiners(args.join, args.out_dir,
+                                         count=args.count)
+        for joiner in joiners:
+            print("wrote joiner bundle %s (boot WITHOUT --key-file; port_seed"
+                  " %d)" % (joiner["base_dir"], joiner["port_seed"]))
         return
     parser.error("nothing to do; use --selftest")
 

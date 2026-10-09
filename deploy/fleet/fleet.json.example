@@ -1,0 +1,89 @@
+{
+  "_comment": [
+    "fleet.json template (D-09) — the operator copies this beside the",
+    "gen_fleet_keys output, keeps the generated identity facts (addresses,",
+    "key paths, port seeds), and fills every PLACEHOLDER before running",
+    "topology.py --static-fleet. Key file PATHS only — never key hex.",
+    "Wave 4 (04-04) records the real hostnames; nothing here is secret."
+  ],
+  "network_id": 333,
+  "topic": "SuperGNUSNode.TestNet.FullNode",
+  "bootstrapper": "<FILL: node1 ceremony_address A_1, 128-hex, from gen-fleet-keys output>",
+  "peer_set": [
+    "<FILL: node2 ceremony_address A_2>",
+    "<FILL: node3 ceremony_address A_3>",
+    "<FILL: node4 ceremony_address A_4>",
+    "<FILL: node5 ceremony_address A_5>"
+  ],
+  "serve_seconds": 180,
+  "timeout_seconds": 120,
+  "existing_node_port": 40001,
+  "nodes": [
+    {
+      "name": "node1",
+      "role": "genesis",
+      "ceremony_address": "<FILL: A_1>",
+      "key_file": "/absolute/offline/path/keys/node1.key",
+      "base_dir": "/var/lib/geniussdk/staging-genesis/",
+      "port_seed": 41001,
+      "published_multiaddr": "/dns4/<FILL-DNS-NAME>/tcp/41001/ipfs/<FILL-GENESIS-PEER-ID>",
+      "transport": {
+        "kind": "ssh",
+        "host": "<FILL-AWS-HOST>",
+        "unit_name": "sgns-staging-node.service"
+      }
+    },
+    {
+      "name": "node2",
+      "role": "peer",
+      "ceremony_address": "<FILL: A_2>",
+      "key_file": "/absolute/offline/path/keys/node2.key",
+      "base_dir": "/volume1/staging/peer-2/",
+      "port_seed": 41501,
+      "published_multiaddr": "/dns4/<FILL-OR-LEAVE-PLACEHOLDER-UNTIL-FIRST-BOOT>/tcp/41501/ipfs/<FILL-PEER-ID>",
+      "transport": {
+        "kind": "compose",
+        "service": "staging-peer-2"
+      }
+    },
+    {
+      "name": "node3",
+      "role": "peer",
+      "ceremony_address": "<FILL: A_3>",
+      "key_file": "/absolute/offline/path/keys/node3.key",
+      "base_dir": "/volume1/staging/peer-3/",
+      "port_seed": 42001,
+      "published_multiaddr": "/dns4/<FILL-OR-LEAVE-PLACEHOLDER-UNTIL-FIRST-BOOT>/tcp/42001/ipfs/<FILL-PEER-ID>",
+      "transport": {
+        "kind": "compose",
+        "service": "staging-peer-3"
+      }
+    },
+    {
+      "name": "node4",
+      "role": "peer",
+      "ceremony_address": "<FILL: A_4>",
+      "key_file": "/absolute/offline/path/keys/node4.key",
+      "base_dir": "/volume1/staging/peer-4/",
+      "port_seed": 42501,
+      "published_multiaddr": "/dns4/<FILL-OR-LEAVE-PLACEHOLDER-UNTIL-FIRST-BOOT>/tcp/42501/ipfs/<FILL-PEER-ID>",
+      "transport": {
+        "kind": "compose",
+        "service": "staging-peer-4"
+      }
+    },
+    {
+      "name": "node5",
+      "role": "peer",
+      "ceremony_address": "<FILL: A_5>",
+      "key_file": "/absolute/offline/path/keys/node5.key",
+      "base_dir": "/volume1/staging/peer-5/",
+      "port_seed": 43001,
+      "published_multiaddr": "/dns4/<FILL-OR-LEAVE-PLACEHOLDER-UNTIL-FIRST-BOOT>/tcp/43001/ipfs/<FILL-PEER-ID>",
+      "transport": {
+        "kind": "compose",
+        "service": "staging-peer-5"
+      }
+    }
+  ]
+}
