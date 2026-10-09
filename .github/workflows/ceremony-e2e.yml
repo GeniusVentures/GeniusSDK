@@ -1,9 +1,12 @@
 # Ceremony E2E CI (CI-01) — runs the ceremony e2e suite (happy path, the four
-# resilience scenarios, and the stranded-genesis negative control) against an
-# EPHEMERAL LOCAL NET only: reserved-band network ids asserted in-band by the
-# harness; no persistent fleet endpoint anywhere in this workflow; strict gate
-# only (D-14 — the A6 fallback flag is a local-debugging tool and is never
-# passed here; anything weaker is a red build).
+# resilience scenarios, the dht-health gate, and the stranded-genesis
+# negative control) against an EPHEMERAL LOCAL NET only: reserved-band
+# network ids asserted in-band by the harness; no persistent fleet endpoint
+# anywhere in this workflow; strict gate only (D-14 — the A6 fallback flag is
+# a local-debugging tool and is never passed here; anything weaker is a red
+# build). The nightly dht-health leg runs on DEFAULT reserved-band draws —
+# CI never pins the staging id 333 (NET-05; the 333 proof is the one-time
+# local pre-provision gate, 04-01).
 #
 # Binary acquisition mirrors GeniusSDK/.github/workflows/cmake.yml exactly
 # (D-11): resolve-runners probe, AlmaLinux 8 container, the three
@@ -646,7 +649,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        mode: [happy, restart-mid-ceremony, restart-mid-sync, quorum-loss, window-edge, negative-control]
+        mode: [happy, restart-mid-ceremony, restart-mid-sync, quorum-loss, window-edge, negative-control, dht-health]
     steps:
       - name: Clean workspace (self-hosted runners)
         if: ${{ runner.environment == 'self-hosted' }}
@@ -935,7 +938,7 @@ jobs:
               EXTRA_ARGS=""
               EXPECTED_RC=0
               ;;
-            restart-mid-ceremony|restart-mid-sync|quorum-loss|window-edge)
+            restart-mid-ceremony|restart-mid-sync|quorum-loss|window-edge|dht-health)
               EXTRA_ARGS="--scenario $MATRIX_MODE"
               EXPECTED_RC=0
               ;;
