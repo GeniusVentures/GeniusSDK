@@ -58,7 +58,10 @@ on:
 
 # Less than the release workflow's contents: write — this workflow uploads
 # nothing to releases; GNUS_TOKEN_1 is only used for the mirrored
-# gh release download steps and the container pull.
+# gh release download steps and the container pull. The ONE job-scoped
+# exception is node-image: it carries packages: write to publish the NAS
+# runtime image to ghcr, and only from a green push-shape e2e run — every
+# other job stays read-only.
 permissions:
   contents: read
   packages: read
@@ -599,6 +602,34 @@ jobs:
             fi
             exit "$status"'
 
+      - name: Record runner dependency closure (ldd + sha256)
+        # ldd runs in the SAME EL8 container that built the binary (this
+        # job's container), so the closure is the real runtime dependency
+        # set. The sha256 line is the recorded digest the node-image job
+        # re-verifies before the image build and 04-05 pins into
+        # staging-net.json (T-04-02-02).
+        if: success()
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            ldd "$RUNNER_BIN"
+            echo "sha256: $(sha256sum "$RUNNER_BIN" | cut -d' ' -f1)"
+          } | tee "${RUNNER_TEMP}/runner-ldd.txt"
+
+      - name: Upload runner binary + dependency closure
+        # The AWS genesis distribution path (binary + closure scp'd on-box,
+        # 04-04) AND the node-image job's build input.
+        if: success()
+        uses: actions/upload-artifact@v7
+        with:
+          name: runner-binary
+          path: |
+            ${{ env.RUNNER_BIN }}
+            ${{ runner.temp }}/runner-ldd.txt
+          if-no-files-found: error
+          retention-days: 14
+
       - name: Upload ceremony e2e failure artifacts
         # ONLY the harness's scrubbed artifacts directory: the D-07
         # scrub-before-preserve plus the non-vacuous key-absence scan gate
@@ -995,6 +1026,29 @@ jobs:
               exit 1
             fi'
 
+      - name: Record runner dependency closure (ldd + sha256)
+        # Same recorded-digest + closure contract as the e2e job; nightly
+        # legs are evidence (no image publish ever rides a nightly run).
+        if: success()
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            ldd "$RUNNER_BIN"
+            echo "sha256: $(sha256sum "$RUNNER_BIN" | cut -d' ' -f1)"
+          } | tee "${RUNNER_TEMP}/runner-ldd.txt"
+
+      - name: Upload runner binary + dependency closure
+        if: success()
+        uses: actions/upload-artifact@v7
+        with:
+          name: runner-binary-${{ matrix.mode }}
+          path: |
+            ${{ env.RUNNER_BIN }}
+            ${{ runner.temp }}/runner-ldd.txt
+          if-no-files-found: error
+          retention-days: 3
+
       - name: Upload ceremony e2e failure artifacts
         # Scrubbed-by-contract artifacts directory only (see the e2e job).
         if: failure()
@@ -1012,3 +1066,131 @@ jobs:
           # Guarded pkill — never fail the job from cleanup.
           pkill -x GeniusSDKService 2>/dev/null || true
           pkill -x sgns-trust 2>/dev/null || true
+
+  # The NAS node-runtime image (further-amended D-03, 04-02): build and
+  # publish ghcr.io/geniusventures/geniussdk-staging-node ONLY from a green
+  # PUSH-shape e2e run — the green gate; never on PR, nightly schedule, or
+  # dispatch (no registry churn). Runs on the self-hosted runner WITHOUT the
+  # container block: it needs the runner host's own Docker (the same daemon
+  # the container jobs proxy through — asserted loudly by the preflight).
+  node-image:
+    needs: [resolve-runners, e2e]
+    if: ${{ github.event_name == 'push' }}
+    runs-on: ${{ fromJson(needs.resolve-runners.outputs.linux_x64) }}
+    timeout-minutes: 30
+    # The ONE job-scoped exception to the workflow's read-only default
+    # (see the header comment): short-lived GITHUB_TOKEN for the ghcr push.
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Docker preflight (host daemon + CLI)
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker version
+
+      - name: Checkout GeniusSDK (deploy tree)
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          path: "GeniusSDK"
+
+      - name: Login to ghcr.io (pull credential) + explicit base pull
+        # GNUS_TOKEN_1 — the proven base-image puller (same credential the
+        # container jobs use). Pulling the base explicitly makes base-image
+        # failures loud and attributable before any build work happens.
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "${{ secrets.GNUS_TOKEN_1 }}" | docker login ghcr.io \
+            -u "${{ github.actor }}" --password-stdin
+          docker pull ghcr.io/geniusventures/almalinux-8:latest
+
+      - name: Login to ghcr.io (push credential)
+        # The job's short-lived GITHUB_TOKEN with packages:write — no
+        # long-lived PAT in the push path (T-04-02-06). If the org restricts
+        # package creation this push fails closed; the fix is an org
+        # Packages-settings grant, never a wider token.
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "${{ github.token }}" | docker login ghcr.io \
+            -u "${{ github.actor }}" --password-stdin
+
+      - name: Download runner binary artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: runner-binary
+
+      - name: Stage + verify the runner binary
+        # Re-verify sha256 against the e2e job's recorded digest
+        # (T-04-02-02 — integrity via the recorded sha256, download only
+        # from the known green run), then stage at the Dockerfile's expected
+        # context layout (deploy/nas/GeniusSDKService).
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x GeniusSDKService
+          actual="$(sha256sum GeniusSDKService | cut -d' ' -f1)"
+          recorded="$(sed -n 's/^sha256: //p' runner-ldd.txt)"
+          if [ -z "$recorded" ] || [ "$actual" != "$recorded" ]; then
+            echo "FATAL: runner sha256 $actual != recorded ${recorded:-<none>}" >&2
+            exit 1
+          fi
+          mv GeniusSDKService GeniusSDK/deploy/nas/GeniusSDKService
+          {
+            echo "## Staging node image inputs"
+            echo
+            echo "- runner sha256: $actual"
+            echo "- e2e green-gate commit: ${{ github.sha }}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Build the node image
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd GeniusSDK/deploy
+          docker build -f nas/Dockerfile \
+            -t ghcr.io/geniusventures/geniussdk-staging-node:staging \
+            -t "ghcr.io/geniusventures/geniussdk-staging-node:${{ github.sha }}" .
+
+      - name: Pre-push gate - ldd closure inside the image
+        # The strongest verification point (Pitfall 8's cousin): the closure
+        # is checked INSIDE the assembled image, after the dnf runtime layer,
+        # before anything reaches the registry. Zero "not found" entries or
+        # the image is never pushed.
+        shell: bash
+        run: |
+          set -euo pipefail
+          missing="$(docker run --rm --entrypoint /usr/bin/bash \
+            ghcr.io/geniusventures/geniussdk-staging-node:staging \
+            -c 'ldd /usr/local/bin/GeniusSDKService | grep "not found" || true')"
+          if [ -n "$missing" ]; then
+            echo "FATAL: unresolved shared libraries inside the image:" >&2
+            echo "$missing" >&2
+            exit 1
+          fi
+          echo "in-image ldd gate: zero not-found entries"
+
+      - name: Push the node image
+        shell: bash
+        run: |
+          set -euo pipefail
+          push_log="$(mktemp)"
+          docker push ghcr.io/geniusventures/geniussdk-staging-node:staging \
+            2>&1 | tee "$push_log"
+          docker push "ghcr.io/geniusventures/geniussdk-staging-node:${{ github.sha }}" \
+            2>&1 | tee -a "$push_log"
+          digest="$(grep -oE 'sha256:[0-9a-f]{64}' "$push_log" | head -n 1)"
+          if [ -z "$digest" ]; then
+            echo "FATAL: no digest parsed from the push output" >&2
+            exit 1
+          fi
+          {
+            echo "## Published staging node image"
+            echo
+            echo "- tags: staging, ${{ github.sha }}"
+            echo "- digest: $digest"
+            echo
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "NODE_IMAGE_DIGEST=$digest" >> "$GITHUB_ENV"
