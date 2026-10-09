@@ -481,6 +481,71 @@ def _selftest() -> None:
         assert [j["name"] for j in manifest["joiners"]] == \
             [joiner["name"] for joiner in joiners]
         assert manifest["joiners"][0]["node_log"] == joiners[0]["node_log"]
+
+        # Phase D (04-01): the staging escape + the dht-health knobs.
+        # validate_network_id accepts EXACTLY the reserved band or the
+        # sanctioned staging id — no open range (T-04-01-02 reject path).
+        validate_network_id(low)
+        validate_network_id(high)
+        validate_network_id(STAGING_NET_ID)
+        for rejected in (0, 369, 963, 144, 65536, -1):
+            try:
+                validate_network_id(rejected)
+            except ValueError:
+                pass
+            else:
+                raise AssertionError("network_id %r must be rejected "
+                                     "(reserved band or STAGING_NET_ID only)"
+                                     % rejected)
+        # The dns4 helper emits the /ipfs/-suffixed form the parser accepts —
+        # never a bare address (Pitfall 5).
+        assert make_dns4_multiaddr("localhost", 41037, "QmPeer") == \
+            "/dns4/localhost/tcp/41037/ipfs/QmPeer"
+        # An explicit staging build pins the manifest id and the sgns_config
+        # net_id beside subnet_id; default draws add no net_id key (the
+        # silent dev-net default is the Phase 2-3 behavior, unchanged).
+        staging_dir = os.path.join(run_dir, "staging")
+        os.makedirs(staging_dir)
+        staging = build_topology(staging_dir, 2, network_id=STAGING_NET_ID)
+        assert staging["network_id"] == STAGING_NET_ID
+        write_trust_configs(staging, authorized)
+        staging_sgns = _read_json(os.path.join(
+            staging["nodes"][0]["base_dir"], "sgns_config.json"))
+        assert staging_sgns["net_id"] == STAGING_NET_ID
+        assert staging_sgns["subnet_id"] == STAGING_NET_ID
+        assert "net_id" not in _read_json(os.path.join(
+            node1["base_dir"], "sgns_config.json"))
+        # The staging escape opens the joiner writer for exactly the staging
+        # id (Pitfall 6): 333 passes where 369 (out of band) still raises.
+        write_joiner_configs(staging, multiaddr, authorized, count=1)
+        # The split-bootstrap map: named nodes get their own entry, everyone
+        # else keeps node1's (the dht-health two-wave boot shape).
+        split_entry = make_dns4_multiaddr("localhost", 41037, "QmPeer")
+        write_peer_configs(topology, multiaddr,
+                           node_multiaddr_map={"node3": split_entry})
+        for entry in topology["nodes"][1:]:
+            net = _read_json(entry["network_config"])
+            expected = split_entry if entry["name"] == "node3" else multiaddr
+            assert net["bootstrap_addresses"] == [expected]
+        # The co-located foreign-net node: own base dir, minimal sgns_config
+        # pinning a different registry net, empty bootstrap, the next port
+        # band slot, and the same promoted logger set (GossipPubSub rides
+        # INFO_LOGGERS — one home, inherited here).
+        foreign = write_foreign_net_configs(run_dir, 144)
+        assert foreign["name"] == "foreign-net"
+        fnet = _read_json(os.path.join(foreign["base_dir"],
+                                       "network_config.json"))
+        assert fnet["bootstrap_addresses"] == []
+        assert fnet["auto_dht"] is True
+        assert fnet["port_seed"] == NODE_PORT_BASE + 5 * NODE_PORT_STRIDE
+        fsgns = _read_json(os.path.join(foreign["base_dir"],
+                                        "sgns_config.json"))
+        assert fsgns == {"node_type": "Full", "net_id": 144}
+        flog = _read_json(os.path.join(foreign["base_dir"],
+                                       "log_config.json"))
+        assert flog["loggers"] == dict(INFO_LOGGERS)
+        assert "GossipPubSub" in flog["loggers"]
+        _read_json(os.path.join(foreign["base_dir"], "dev_config.json"))
     finally:
         shutil.rmtree(run_dir)
 
