@@ -607,26 +607,34 @@ jobs:
         # job's container), so the closure is the real runtime dependency
         # set. The sha256 line is the recorded digest the node-image job
         # re-verifies before the image build and 04-05 pins into
-        # staging-net.json (T-04-02-02).
+        # staging-net.json (T-04-02-02). BOTH files stage into ONE
+        # workspace dir so the artifact uploads FLAT: upload-artifact
+        # stores paths relative to the least-common-ancestor of the given
+        # paths and drops files outside the workspace — two unrelated
+        # roots nested the binary deep in the artifact and silently lost
+        # runner-ldd.txt entirely (run 38437902892, "1 file uploaded").
         if: success()
         shell: bash
         run: |
           set -euo pipefail
+          stage="$GITHUB_WORKSPACE/runner-stage"
+          mkdir -p "$stage"
+          cp "$RUNNER_BIN" "$stage/GeniusSDKService"
           {
             ldd "$RUNNER_BIN"
             echo "sha256: $(sha256sum "$RUNNER_BIN" | cut -d' ' -f1)"
-          } | tee "${RUNNER_TEMP}/runner-ldd.txt"
+          } | tee "$stage/runner-ldd.txt"
 
       - name: Upload runner binary + dependency closure
         # The AWS genesis distribution path (binary + closure scp'd on-box,
-        # 04-04) AND the node-image job's build input.
+        # 04-04) AND the node-image job's build input. The single staged
+        # directory is the artifact root — the node-image job downloads
+        # GeniusSDKService and runner-ldd.txt at ITS workspace root.
         if: success()
         uses: actions/upload-artifact@v7
         with:
           name: runner-binary
-          path: |
-            ${{ env.RUNNER_BIN }}
-            ${{ runner.temp }}/runner-ldd.txt
+          path: ${{ github.workspace }}/runner-stage
           if-no-files-found: error
           retention-days: 14
 
@@ -1029,23 +1037,26 @@ jobs:
       - name: Record runner dependency closure (ldd + sha256)
         # Same recorded-digest + closure contract as the e2e job; nightly
         # legs are evidence (no image publish ever rides a nightly run).
+        # Same single-dir staging for a flat artifact (see the e2e job's
+        # step comment for the LCA/out-of-workspace drop this avoids).
         if: success()
         shell: bash
         run: |
           set -euo pipefail
+          stage="$GITHUB_WORKSPACE/runner-stage"
+          mkdir -p "$stage"
+          cp "$RUNNER_BIN" "$stage/GeniusSDKService"
           {
             ldd "$RUNNER_BIN"
             echo "sha256: $(sha256sum "$RUNNER_BIN" | cut -d' ' -f1)"
-          } | tee "${RUNNER_TEMP}/runner-ldd.txt"
+          } | tee "$stage/runner-ldd.txt"
 
       - name: Upload runner binary + dependency closure
         if: success()
         uses: actions/upload-artifact@v7
         with:
           name: runner-binary-${{ matrix.mode }}
-          path: |
-            ${{ env.RUNNER_BIN }}
-            ${{ runner.temp }}/runner-ldd.txt
+          path: ${{ github.workspace }}/runner-stage
           if-no-files-found: error
           retention-days: 3
 
