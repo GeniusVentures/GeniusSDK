@@ -70,16 +70,44 @@ approvals must survive SIGKILL via durable state; the memory backend would
 make identity ephemeral per process and silently void every restart
 proof).
 
+Fleet mode (04-03, D-07 Shape A): --fleet <fleet.json> drives the WHOLE
+remote-fleet ceremony from this machine — the IDENTITY choreography
+remote-ized through a thin transport seam (fleet_transport.py: B_1 read,
+trust-config push, service restarts), local sgns-trust actors dialing the
+published /dns4/ multiaddr, and every node gate read from the nodes' real
+supervision surface (journald / docker logs on Linux; supervisor.combined on
+the local mapping — the same evidence set, the SAME supervisor STATUS
+regexes). Every networked sgns-trust operation carries --net-id 333 through
+the landed ceremony._shared_argv pinning. Serve/timeout margins come from
+fleet.json (WAN calibration is data, not code). Teardown ASYMMETRY (by
+design, T-04-03-03): fleet nodes are PERSISTENT services — the harness never
+stops a remote node (a failed ceremony leaves boxes inspectable; evidence
+preservation); the supervisor teardown applies to local processes only (on
+the all-local parity mapping that means the nodes too). A --fleet rerun over
+dirty state (any node whose sgns_config already carries authorized_full_node
+— the post-B_1 push happened) aborts loud: re-ceremony is a documented
+procedure (scrub the base dirs / re-provision; NET-02's artifact records
+which ceremony is canonical), never a silent retry. Offline key originals
+are never consumed: 0600 copies are staged into the run dir and the
+unlink-on-success asserts burn the copies (Pitfall 4). Exit codes keep the
+same contract (0/1/2; a fleet quorum failure is a stranded genesis, exit 2
+with the marker).
+
 Usage:
   python3 e2e/ceremony_e2e.py --nodes 5 --runner /abs/GeniusSDKService --sgns-trust /abs/sgns-trust
   python3 e2e/ceremony_e2e.py --nodes 5 --boot-only --runner /abs/GeniusSDKService
   python3 e2e/ceremony_e2e.py --nodes 5 --approve-peers 2 --runner ... --sgns-trust ...
       (below-floor negative control: must exit 2 with the marker, artifacts
        preserved scrubbed)
+  python3 e2e/ceremony_e2e.py --fleet /abs/fleet.json --runner ... --sgns-trust ...
+      (the fleet ceremony; transport kinds ssh|compose|local per fleet.json —
+       an all-local fleet.json is the local-parity proof, "FLEET:
+       local-parity ok" on success)
 Env fallbacks: SGNS_RUNNER_BIN, SGNS_TRUST_BIN.
 """
 
 import argparse
+import json
 import os
 import re
 import shutil
@@ -90,6 +118,7 @@ import threading
 import time
 
 import ceremony
+import fleet_transport
 import supervisor
 import topology  # imports secp256k1_address: pinned vector asserts at import
 import secp256k1_address
@@ -161,6 +190,14 @@ FOREIGN_NET_BESIDE_DEFAULT = 963
 
 STRANDED_MARKER = "STRANDED-GENESIS-DETECTED"
 
+# Fleet mode (04-03) topic-appendix evidence: every pubsub topic a process
+# joins is suffixed GetNetAndVersionAppendix() — staging topics read
+# "<topic>.3.7.333", the DEV default ".3.7.144" (the 04-01 topic-split
+# lesson). The fleet gate asserts the pin through the WHOLE path: appendix
+# present per node, DEV appendix absent (T-04-03-05 — a gate, not a habit).
+FLEET_TOPIC_APPENDIX = ".3.7.%d" % topology.STAGING_NET_ID
+FLEET_DEV_APPENDIX = ".3.7.144"
+
 
 class _Tee:
     """Console + <run_dir>/harness.out — the harness's own output is in D-07
@@ -202,16 +239,22 @@ def _spawn_joiner(name, runner, entry, run_dir, spawn_times):
     spawn_times[name] = time.monotonic()
 
 
+def _parse_account_address(text, source):
+    """B_1 parser (one home): the first 128-hex line of a secure_storage_id
+    capture — the text may come from a local file or a transport read."""
+    for line in text.splitlines():
+        match = re.match(ACCOUNT_ADDRESS_RE, line.strip())
+        if match:
+            return match.group(1)
+    raise RuntimeError("no 128-hex account address in %s" % source)
+
+
 def _read_account_address(node_entry):
     """B_1: the bootstrapper's SDK account address from secure_storage_id
     (KDF-derived, never equal to A_1 — research Fact 5; do not derive it)."""
     path = os.path.join(node_entry["base_dir"], "secure_storage_id")
     with open(path) as handle:
-        for line in handle:
-            match = re.match(ACCOUNT_ADDRESS_RE, line.strip())
-            if match:
-                return match.group(1)
-    raise RuntimeError("no 128-hex account address in %s" % path)
+        return _parse_account_address(handle.read(), path)
 
 
 def _wait_for_file(path, timeout):
@@ -296,13 +339,17 @@ def _post_burn_window(serve_seconds):
     return serve_seconds + POST_BURN_GRACE_SECONDS
 
 
-def _sample_heads(names, window_seconds, what):
+def _sample_heads(names, window_seconds, what, head_of=None):
     """Bounded head sampling (Pitfall 7 headroom discipline): poll head_of per
     name until every name has shown a STATUS head=, or the window elapses.
-    Returns {name: head}; raises naming the missing names otherwise."""
+    Returns {name: head}; raises naming the missing names otherwise.
+    head_of (fleet mode) swaps the evidence source to the transport-scraped
+    STATUS surface (same _HEAD_RE, different capture)."""
+    if head_of is None:
+        head_of = supervisor.head_of
     deadline = time.monotonic() + window_seconds
     while True:
-        heads = {name: supervisor.head_of(name) for name in names}
+        heads = {name: head_of(name) for name in names}
         if all(heads.values()) or time.monotonic() >= deadline:
             break
         time.sleep(1.0)
@@ -351,16 +398,21 @@ def _identity_boot(runner, node1, run_dir, timeout):
     return account_address
 
 
-def _check_fatal(top):
+def _check_fatal(top, state_of=None):
     """FATAL_TRUST_MISMATCH anywhere = instant loud failure (trust wiring
-    conflict is never the stranded class — it is an unexpected failure)."""
+    conflict is never the stranded class — it is an unexpected failure).
+    state_of (fleet mode) swaps the evidence source: a callable
+    entry -> state read from the node's transport supervision surface instead
+    of the local supervisor capture."""
+    if state_of is None:
+        state_of = lambda entry: supervisor.state_of(entry["name"])
     for entry in top["nodes"]:
-        state = supervisor.state_of(entry["name"])
+        state = state_of(entry)
         if state == "FATAL_TRUST_MISMATCH":
             raise RuntimeError("network_id=%d: %s reached FATAL_TRUST_MISMATCH "
                                "(trust wiring conflict — see %s)"
                                % (top["network_id"], entry["name"],
-                                  entry["node_log"]))
+                                  entry.get("node_log", entry["base_dir"])))
 
 
 def _boot_node1(runner, run_dir, top, timeout):
@@ -961,26 +1013,438 @@ def _boot_only_run(runner, run_dir, top, timeout):
     _teardown_nodes(expect_clean=True)
 
 
+# --- Fleet mode (04-03, D-07 Shape A) --------------------------------------
+
+def _load_fleet(fleet_path):
+    """Load the fleet manifest and validate it through topology's ONE home
+    (_validate_fleet: THE staging net, address/peer-set agreement, seed
+    spacing, positive WAN margins, the filled /dns4/ genesis multiaddr)."""
+    with open(fleet_path) as handle:
+        fleet = json.load(handle)
+    topology._validate_fleet(fleet)
+    return fleet
+
+
+def _fleet_transport_for(node, spawn_node):
+    """The FleetTransport seam: local-kind nodes map to LocalTransport over
+    the supervisor (the test seam AND the local-fleet mapping); ssh/compose
+    kinds map to SshTransport(host) — argv-only ssh, never a shell."""
+    kind = (node.get("transport") or {}).get("kind")
+    if kind == "local":
+        return fleet_transport.LocalTransport(supervisor, spawn_node)
+    host = (node.get("transport") or {}).get("host")
+    if not host:
+        raise RuntimeError("node %s transport kind %r has no host — fill the "
+                           "fleet.json transport (the compose-kind host is "
+                           "the NAS ssh host)" % (node.get("name"), kind))
+    return fleet_transport.SshTransport(host)
+
+
+def _fleet_log_wait(transport, node, pattern, timeout, what):
+    """Bounded gate on a fleet node's supervision surface — the fleet twin of
+    supervisor.wait_for: same regexes, same POLL_INTERVAL cadence, capture is
+    transport.log_lines (journald / docker logs on the real fleet;
+    supervisor.combined on the local mapping — the same evidence set)."""
+    regex = re.compile(pattern)
+    deadline = time.monotonic() + timeout
+    while True:
+        text = transport.log_lines(node)
+        match = regex.search(text)
+        if match:
+            return match
+        if time.monotonic() >= deadline:
+            tail = "\n".join(text.splitlines()[-15:]) or "(no log lines yet)"
+            raise RuntimeError("timeout after %ss waiting for %s to print %r "
+                               "(%s)\n%s" % (timeout, node["name"], pattern,
+                                             what, tail))
+        time.sleep(supervisor.POLL_INTERVAL)
+
+
+def _fleet_state_of(transport, node):
+    """Latest STATUS state across the node's supervision surface, or None —
+    the SAME _STATUS_RE supervisor.wait_for/state_of use (one home for STATUS
+    parsing), applied to the transport capture."""
+    states = supervisor._STATUS_RE.findall(transport.log_lines(node))
+    return states[-1] if states else None
+
+
+def _fleet_head_of(transport, node):
+    """Latest STATUS head= across the node's supervision surface, or None —
+    the SAME _HEAD_RE, applied to the transport capture."""
+    heads = supervisor._HEAD_RE.findall(transport.log_lines(node))
+    return heads[-1] if heads else None
+
+
+def _fleet_wait_file(transport, node, path, timeout):
+    """Bounded wait for a file on a fleet node (e.g. secure_storage_id)
+    through the seam: read_file raises while the file is absent; the poll is
+    bounded and the timeout names node + path."""
+    deadline = time.monotonic() + timeout
+    while True:
+        try:
+            return transport.read_file(path)
+        except fleet_transport.FleetTransportError:
+            if time.monotonic() >= deadline:
+                raise RuntimeError("timeout after %ss waiting for %s on %s"
+                                   % (timeout, path, node["name"]))
+            time.sleep(supervisor.POLL_INTERVAL)
+
+
+def _fleet_run(sgns_trust, runner, run_dir, fleet, timeout):
+    """The fleet ceremony (D-07 Shape A): the proven stage ORDER with only
+    the co-located mechanics swapped for the transport seam. Returns
+    (stranded, key_hexes) — stranded is None on success, else the diagnostics
+    dict the caller turns into exit 2."""
+    nodes = fleet["nodes"]
+    network_id = fleet["network_id"]  # == STAGING_NET_ID (validated at load)
+    restart_times = {}
+
+    def _spawn_fleet_node(entry):
+        supervisor.spawn(entry["name"],
+                         [runner, entry["base_dir"], "--key-file",
+                          entry["key_file"]],
+                         run_dir, extra_logs=[entry["node_log"]])
+        restart_times[entry["name"]] = time.monotonic()
+
+    transports = {}
+    node_by_name = {node["name"]: node for node in nodes}
+    for node in nodes:
+        if node["transport"]["kind"] == "local":
+            # The local node logger's file sink (macOS build) — extra_logs
+            # makes combined() carry it; on Linux the node logger rides
+            # stdout, which the tee'd .out already carries (04-01 CI lesson).
+            node["node_log"] = os.path.join(node["base_dir"], "sgnslog2.log")
+        transports[node["name"]] = _fleet_transport_for(node,
+                                                        _spawn_fleet_node)
+
+    # 1. PREFLIGHT: transport smoke per node (exec true; read the canary
+    # provisioning guarantees; restart is NOT called yet) — a loud failure
+    # names node + op. Dirty-state gate (Pitfall 9): a node whose sgns_config
+    # already carries authorized_full_node has been through the post-B_1
+    # push — re-ceremony is a documented procedure, never a silent retry.
+    print("SETUP: run dir %s" % run_dir)
+    print("SETUP: network_id %d (STAGING_NET_ID pin — the fleet ceremony)"
+          % network_id)
+    print("SETUP: bootstrapper %s" % fleet["bootstrapper"])
+    print("SETUP: peer_set %s" % ", ".join(fleet["peer_set"]))
+    for node in nodes:
+        transport = transports[node["name"]]
+        rc, _ = transport.exec(["true"])
+        if rc != 0:
+            raise RuntimeError("FLEET PREFLIGHT: %s exec true exited %s"
+                               % (node["name"], rc))
+        if node["transport"]["kind"] != "local":
+            canary = transport.read_file(
+                os.path.join(node["base_dir"], "network_config.json"))
+            json.loads(canary)  # provisioned config readable and parses
+        try:
+            pushed = transport.read_file(
+                os.path.join(node["base_dir"], "sgns_config.json"))
+        except fleet_transport.FleetTransportError:
+            pushed = None
+        if pushed is not None and "authorized_full_node" in pushed:
+            raise RuntimeError(
+                "FLEET PREFLIGHT: %s sgns_config already carries "
+                "authorized_full_node — the post-B_1 push happened on "
+                "this base dir. A --fleet rerun over dirty state is "
+                "forbidden: re-ceremony is a documented procedure (scrub "
+                "the base dirs / re-provision; NET-02's artifact records "
+                "which ceremony is canonical)" % node["name"])
+        print("FLEET PREFLIGHT: %s ok (kind %s, base %s)"
+              % (node["name"], node["transport"]["kind"], node["base_dir"]))
+
+    # Local nodes' provisioning stand-in: the 04-02 one-home bundle writer
+    # generates every pre-ceremony config (the genesis minimal net-pinned
+    # identity shape included); delivery goes through the seam like every
+    # other co-located write. Base dirs may already hold the provisioning
+    # identity boot's material (the Wave-4 flow: the genesis identity boot
+    # runs at provision time to capture the published peer id) — the dirty
+    # gate above is the ceremony-state check, not base-dir existence.
+    # Remote nodes were provisioned by 04-04 (the canary just proved it) and
+    # are NOT rewritten. bundle_dir lands on every node —
+    # write_fleet_trust_configs consumes it below.
+    scratch = os.path.join(run_dir, "fleet-bundles")
+    topology.write_fleet_configs(fleet, scratch)
+    for node in nodes:
+        if node["transport"]["kind"] != "local":
+            continue
+        transport = transports[node["name"]]
+        os.makedirs(node["base_dir"], exist_ok=True)
+        for fname in sorted(os.listdir(node["bundle_dir"])):
+            with open(os.path.join(node["bundle_dir"], fname)) as handle:
+                transport.write_file(
+                    os.path.join(node["base_dir"], fname), handle.read())
+    if any(node["transport"]["kind"] == "local" for node in nodes):
+        print("FLEET: local nodes provisioned from the static-fleet bundle "
+              "writer (one home)")
+
+    # 2. IDENTITY (the 02-02 choreography, order unchanged, remote-ized): the
+    # genesis identity boot runs with its minimal net-pinned sgns_config —
+    # the 04-01 as-landed necessity (an empty-config boot hands the final
+    # boot a fresh peer id and strands every captured bootstrap address).
+    genesis = nodes[0]
+    gtransport = transports[genesis["name"]]
+    print("FLEET IDENTITY: %s identity boot (minimal net-pinned sgns_config, "
+          "base %s)" % (genesis["name"], genesis["base_dir"]))
+    gtransport.restart(genesis)
+    multiaddr = _fleet_log_wait(gtransport, genesis, PUBSUB_LINE, timeout,
+                                "the identity boot's PubSub line").group(1)
+    live_port, live_peer = _multiaddr_tcp_peer(multiaddr)
+    published_port, published_peer = _multiaddr_tcp_peer(
+        genesis["published_multiaddr"])
+    if (live_port, live_peer) != (published_port, published_peer):
+        raise RuntimeError(
+            "genesis identity boot answered as tcp/%s/ipfs/%s but "
+            "published_multiaddr says tcp/%s/ipfs/%s — the published address "
+            "is stale (fill it from THIS boot's capture; every dial against "
+            "it would strand)" % (live_port, live_peer, published_port,
+                                  published_peer))
+    print("GATE: %s PubSub at %s (matches the published multiaddr's port + "
+          "peer id)" % (genesis["name"], multiaddr))
+    b1_text = _fleet_wait_file(
+        gtransport, genesis,
+        os.path.join(genesis["base_dir"], "secure_storage_id"), timeout)
+    account_address = _parse_account_address(
+        b1_text, "%s:secure_storage_id" % genesis["name"])
+    print("IDENTITY: %s account address %s" % (genesis["name"],
+                                               account_address))
+
+    # Post-B_1 push: the ONE trust-payload home (04-02) writes every node's
+    # full sgns_config (net_id pinned beside subnet_id) into the bundles;
+    # delivery to each base dir and the restart go through the seam.
+    topology.write_fleet_trust_configs(fleet, account_address)
+    print("IDENTITY: trust configs written (authorized_full_node = genesis "
+          "account address)")
+    for node in nodes:
+        transport = transports[node["name"]]
+        with open(os.path.join(node["bundle_dir"], "sgns_config.json")) \
+                as handle:
+            payload = handle.read()
+        transport.write_file(
+            os.path.join(node["base_dir"], "sgns_config.json"), payload)
+        transport.restart(node)
+        restart_times[node["name"]] = time.monotonic()
+    print("START: %s restarted with the full trust config" % genesis["name"])
+    for node in nodes[1:]:
+        print("START: %s started (bootstrap %s)"
+              % (node["name"], genesis["published_multiaddr"]))
+
+    # 3. WAITING gates: every node past identity, FATAL anywhere is loud.
+    fleet_state_of = lambda entry: _fleet_state_of(
+        transports[entry["name"]], entry)
+    for node in nodes:
+        match = _fleet_log_wait(transports[node["name"]], node,
+                                WAITING_OR_FATAL, timeout,
+                                "the fleet WAITING gate")
+        state = match.group(1)
+        if state == "FATAL_TRUST_MISMATCH":
+            raise RuntimeError("%s reached FATAL_TRUST_MISMATCH (trust wiring "
+                               "conflict — see its supervision surface)"
+                               % node["name"])
+        print("GATE: %s node_state=%s after %.1fs"
+              % (node["name"], state,
+                 time.monotonic() - restart_times[node["name"]]))
+    _check_fatal(fleet, state_of=fleet_state_of)
+
+    # 4. Key copies (Pitfall 4): stage 0600 copies of every fleet key_file
+    # into the run dir; actors point at the copies, so the tools'
+    # unlink-on-success asserts consume COPIES — the offline originals are
+    # never passed to any actor.
+    keys_dir = os.path.join(run_dir, "keys")
+    os.makedirs(keys_dir, exist_ok=True)
+    key_hexes = []
+    actors = []
+    for index, node in enumerate(nodes, start=1):
+        with open(node["key_file"]) as handle:
+            key_hex = handle.read().strip()
+        copy_path = os.path.join(keys_dir, "node%d.key" % index)
+        topology.write_key_file(copy_path, key_hex)
+        key_hexes.append(key_hex)
+        database = os.path.join(run_dir, "actor%ddb" % index)
+        os.makedirs(database, exist_ok=True)
+        actors.append({
+            "name": "actor%d" % index,
+            "key_file": copy_path,
+            "network_config": os.path.join(run_dir,
+                                           "actor%d-network.json" % index),
+            "database": database,
+            # STRING (the actor parser reads pubsub_port as a string)
+            "pubsub_port": str(topology.ACTOR_PORT_BASE + index - 1),
+            # The _shared_argv net-id pin (04-01 as-landed): every networked
+            # sgns-trust operation this actor runs carries --net-id 333.
+            "net_id": network_id,
+        })
+    # Actor network configs from the ONE writer (write_peer_configs' actor
+    # loop): bootstrap_addresses = the fleet's published /dns4/ multiaddr.
+    topology.write_peer_configs(
+        {"nodes": [genesis], "actors": actors, "runner_default_ports": False},
+        genesis["published_multiaddr"])
+    print("FLEET: %d actor key copies staged 0600 (originals never passed to "
+          "any actor); actors dial %s"
+          % (len(actors), genesis["published_multiaddr"]))
+
+    # A2 calibration is data, not code: the fleet.json margins flow through
+    # ceremony's argv plumbing by rebinding the module constants the drivers
+    # read at call time — no timing constants change, ceremony.py untouched.
+    serve_seconds = fleet["serve_seconds"]
+    ceremony.SERVE_SECONDS = serve_seconds
+    ceremony.TIMEOUT_SECONDS = fleet["timeout_seconds"]
+    ceremony.ACTOR_HARD_TIMEOUT = serve_seconds + fleet["timeout_seconds"] + 90
+    print("FLEET: WAN margins from fleet.json (serve %ds, timeout %ds)"
+          % (serve_seconds, fleet["timeout_seconds"]))
+
+    # 5. CEREMONY: local actors with the net-id pin, unchanged drivers.
+    print("CEREMONY: make-manifest (peers = fleet peer_set — the same list "
+          "every sgns_config trusted_peers carries)")
+    manifest = ceremony.make_manifest(sgns_trust, run_dir, network_id,
+                                      fleet["bootstrapper"], fleet["peer_set"])
+    print("CEREMONY: fingerprint %s (sha256-verified against manifest.bin; "
+          "double-make byte-identical)" % manifest["fingerprint"])
+    print("CEREMONY: membership threshold %d, burn threshold %d (parsed from "
+          "make-manifest stdout — never recomputed)"
+          % (manifest["membership_threshold"], manifest["burn_threshold"]))
+    actor1 = actors[0]
+    print("FLEET: actor argv pin (every networked operation): %s"
+          % " ".join(ceremony._shared_argv(sgns_trust, "genesis", actor1,
+                                           manifest["manifest"])))
+    ceremony.genesis(sgns_trust, actor1, manifest["manifest"],
+                     manifest["fingerprint"], run_dir,
+                     serve_seconds=serve_seconds)
+    print("CEREMONY: actor1 Genesis durably confirmed. (COPY key file "
+          "unlinked by the tool — the offline original is intact; serve "
+          "window %ds)" % serve_seconds)
+    _check_fatal(fleet, state_of=fleet_state_of)
+
+    approved = []
+    peer_actors = actors[1:]
+    for actor, address in zip(peer_actors, fleet["peer_set"]):
+        candidates = ceremony.list_candidates(sgns_trust, actor,
+                                              manifest["manifest"], run_dir)
+        burn_ids = [cid for kind, cid in candidates if kind == "burn"]
+        if not burn_ids:
+            raise ceremony.CeremonyError(
+                "%s listed %d candidate(s) but no burn candidate (content-"
+                "gated): %s" % (actor["name"], len(candidates), candidates))
+        candidate_id = burn_ids[0]
+        print("CEREMONY: %s listed burn candidate %s"
+              % (actor["name"], candidate_id))
+        ceremony.approve(sgns_trust, actor, manifest["manifest"],
+                         candidate_id, run_dir, serve_seconds=serve_seconds)
+        approved.append(address)
+        print("CEREMONY: %s (%s) approved %s (%d of %d peers; burn threshold "
+              "%d)" % (actor["name"], address, candidate_id, len(approved),
+                       len(peer_actors), manifest["burn_threshold"]))
+        _check_fatal(fleet, state_of=fleet_state_of)
+
+    # 6. GATES: all-N quorum + identical head, scraped from the nodes' real
+    # supervision surface (the SAME _STATUS_RE/_HEAD_RE via the transport).
+    post_burn_window = _post_burn_window(serve_seconds)
+    print("ASSERT: approved %d of %d peers, burn threshold %d — bounded "
+          "post-burn window %ds (serve %ds + grace %ds)"
+          % (len(approved), len(peer_actors), manifest["burn_threshold"],
+             post_burn_window, serve_seconds, POST_BURN_GRACE_SECONDS))
+    all_advanced, ladder, last = _wait_post_burn(fleet, post_burn_window,
+                                                 state_of=fleet_state_of)
+    for node in nodes:
+        print("ASSERT: %s node_state=%s"
+              % (node["name"], last.get(node["name"]) or "NONE"))
+    print("ASSERT: observed post-burn ladder: %s" % _format_ladder(ladder))
+    if not all_advanced:
+        _print_stranded(fleet, manifest, approved, peer_actors, ladder, last,
+                        serve_seconds)
+        _teardown_nodes(expect_clean=False)
+        return {"approved": list(approved),
+                "burn_threshold": manifest["burn_threshold"]}, key_hexes
+
+    fleet_head_of = lambda name: _fleet_head_of(transports[name],
+                                                node_by_name[name])
+    heads = _sample_heads([node["name"] for node in nodes],
+                          HEAD_SAMPLE_SECONDS,
+                          "the fleet post-burn head assertion",
+                          head_of=fleet_head_of)
+    distinct = set(heads.values())
+    if len(distinct) != 1:
+        raise RuntimeError("diverged heads across fleet nodes (expected one "
+                           "identical genesis CID): %s" % heads)
+    network_head = next(iter(distinct))
+    print("HEAD %s identical across %d fleet nodes" % (network_head,
+                                                       len(nodes)))
+
+    # The net-id pin asserted as a gate through the whole fleet path
+    # (T-04-03-05): every node logged the staging topic appendix, none the
+    # DEV default's — the 04-01 topic-split observable, not a habit.
+    for node in nodes:
+        text = transports[node["name"]].log_lines(node)
+        if FLEET_TOPIC_APPENDIX not in text:
+            raise RuntimeError("%s never logged the staging topic appendix "
+                               "%r — the net-id pin is not in effect on the "
+                               "fleet path" % (node["name"],
+                                               FLEET_TOPIC_APPENDIX))
+        if FLEET_DEV_APPENDIX in text:
+            raise RuntimeError("%s logged the DEV topic appendix %r — a "
+                               "process is on the wrong net"
+                               % (node["name"], FLEET_DEV_APPENDIX))
+    print("FLEET-GATE: topic-appendix ok (every node on %s, none on the DEV "
+          "%s)" % (FLEET_TOPIC_APPENDIX, FLEET_DEV_APPENDIX))
+
+    for actor in [actor1] + peer_actors:
+        readback = ceremony.list_candidates(sgns_trust, actor,
+                                            manifest["manifest"], run_dir)
+        if not any(kind == "burn" for kind, _ in readback):
+            raise ceremony.CeremonyError(
+                "%s readback shows no burn candidate after quorum: %s"
+                % (actor["name"], readback))
+        print("READBACK: %s %s"
+              % (actor["name"],
+                 " ".join("%s %s" % pair for pair in readback)))
+
+    # Teardown asymmetry (T-04-03-03): the supervisor teardown stops LOCAL
+    # processes only — on the all-local parity mapping that includes the
+    # nodes; real-fleet nodes (systemd/compose) are persistent services the
+    # harness never stops (a failed ceremony leaves boxes inspectable).
+    _teardown_nodes(expect_clean=True)
+    for node in nodes:
+        if not (os.path.isfile(node["key_file"])
+                and os.path.getsize(node["key_file"]) > 0):
+            raise RuntimeError("offline key original %s was consumed — only "
+                               "run-dir copies may be unlinked (Pitfall 4)"
+                               % node["key_file"])
+    print("FLEET: offline key originals intact (%d files — the "
+          "unlink-on-success asserts consumed run-dir copies only)"
+          % len(nodes))
+    if all(node["transport"]["kind"] == "local" for node in nodes):
+        print("FLEET: local-parity ok")
+    print("FLEET CEREMONY PASS: network_id=%d — %d fleet nodes beyond "
+          "WAITING_FOR_BURN_GENESIS, %d of %d peers approved (threshold %d)"
+          % (network_id, len(nodes), len(approved), len(peer_actors),
+             manifest["burn_threshold"]))
+    return None, key_hexes
+
+
 def _format_ladder(ladder):
     return "; ".join("%s: %s" % (name, " -> ".join(states) or "(none observed)")
                      for name, states in sorted(ladder.items()))
 
 
-def _wait_post_burn(top, window):
+def _wait_post_burn(top, window, state_of=None):
     """STRICT bounded wait: every node's latest STATUS state must be beyond
     WAITING_FOR_BURN_GENESIS (economic readiness) inside the window.
 
     Returns (all_advanced, ladder, last) — ladder records each node's observed
     states (in order) from gate start, last is the final per-node state. A
     FATAL_TRUST_MISMATCH observed here fails instantly (not stranded).
+    state_of (fleet mode) swaps the evidence source to the transport-scraped
+    STATUS surface (same _STATUS_RE, different capture).
     """
+    if state_of is None:
+        state_of = lambda entry: supervisor.state_of(entry["name"])
     deadline = time.monotonic() + window
     ladder = {entry["name"]: [] for entry in top["nodes"]}
     last = {}
     while True:
         advanced = 0
         for entry in top["nodes"]:
-            state = supervisor.state_of(entry["name"])
+            state = state_of(entry)
             if state is None:
                 continue
             if state == "FATAL_TRUST_MISMATCH":
@@ -988,7 +1452,7 @@ def _wait_post_burn(top, window):
                                    "FATAL_TRUST_MISMATCH during the post-burn "
                                    "window (see %s)"
                                    % (top["network_id"], entry["name"],
-                                      entry["node_log"]))
+                                      entry.get("node_log", entry["base_dir"])))
             if not ladder[entry["name"]] or ladder[entry["name"]][-1] != state:
                 ladder[entry["name"]].append(state)
             last[entry["name"]] = state
@@ -1409,6 +1873,17 @@ def main():
                              "distinct A6-FALLBACK-ENGAGED label with the "
                              "observed ladder (exit 0 then requires "
                              "orchestrator sign-off on the SUMMARY)")
+    parser.add_argument("--fleet", default=None, metavar="FLEET_JSON",
+                        help="run the FLEET ceremony from a fleet.json "
+                             "(validated through topology's one home; "
+                             "transport kinds ssh|compose|local — an "
+                             "all-local fleet is the local-parity proof). "
+                             "Local actors + remote-ized IDENTITY/gates "
+                             "through the transport seam; exit codes keep "
+                             "the 0/1/2 contract. Incompatible with "
+                             "--scenario, --boot-only, --approve-peers, "
+                             "--network-id, --coexist-net-id (--nodes comes "
+                             "from the fleet manifest)")
     parser.add_argument("--keep-dir", action="store_true",
                         help="keep the run dir even on success (debugging)")
     parser.add_argument("--timeout", type=int, default=300,
@@ -1428,6 +1903,22 @@ def main():
         if args.nodes < 2:
             sys.exit("FAIL: the full ceremony needs at least 2 nodes "
                      "(bootstrapper + 1 peer)")
+    if args.fleet:
+        if args.boot_only:
+            parser.error("--fleet runs the full fleet ceremony (incompatible "
+                         "with --boot-only)")
+        if args.scenario:
+            parser.error("--fleet is its own scenario (incompatible with "
+                         "--scenario)")
+        if args.approve_peers is not None:
+            parser.error("--approve-peers is the local negative control (the "
+                         "fleet ceremony approves all peers)")
+        if args.network_id is not None or args.coexist_net_id is not None:
+            parser.error("--network-id/--coexist-net-id belong to the "
+                         "dht-health scenario (the fleet pins STAGING_NET_ID "
+                         "via fleet.json, NET-05)")
+        if not os.path.isfile(args.fleet):
+            parser.error("--fleet manifest not found: %r" % args.fleet)
     peers_total = args.nodes - 1
     approve_count = args.approve_peers
     if approve_count is None:
@@ -1512,23 +2003,28 @@ def main():
     success = False
     key_hexes = []
     try:
-        top = topology.build_topology(run_dir, args.nodes,
-                                      network_id=args.network_id)
-        key_hexes = _read_key_hexes(top)
-        # NET-05 belt-and-braces: the id (drawn OR the sanctioned staging
-        # pin) is re-validated in-band before any use — one home for the
-        # policy since 04-01 (topology.validate_network_id); diagnostics
-        # carry it too.
-        topology.validate_network_id(top["network_id"])
-        if coexist_net_id is not None:
-            top["coexist_net_id"] = coexist_net_id
-        if args.boot_only:
-            _boot_only_run(runner, run_dir, top, args.timeout)
+        if args.fleet:
+            fleet = _load_fleet(args.fleet)
+            stranded, key_hexes = _fleet_run(sgns_trust, runner, run_dir,
+                                             fleet, args.timeout)
         else:
-            stranded = _ceremony_run(sgns_trust, runner, run_dir, top,
-                                     args.timeout, approve_count,
-                                     args.allow_a6_fallback,
-                                     scenario=args.scenario)
+            top = topology.build_topology(run_dir, args.nodes,
+                                          network_id=args.network_id)
+            key_hexes = _read_key_hexes(top)
+            # NET-05 belt-and-braces: the id (drawn OR the sanctioned staging
+            # pin) is re-validated in-band before any use — one home for the
+            # policy since 04-01 (topology.validate_network_id); diagnostics
+            # carry it too.
+            topology.validate_network_id(top["network_id"])
+            if coexist_net_id is not None:
+                top["coexist_net_id"] = coexist_net_id
+            if args.boot_only:
+                _boot_only_run(runner, run_dir, top, args.timeout)
+            else:
+                stranded = _ceremony_run(sgns_trust, runner, run_dir, top,
+                                         args.timeout, approve_count,
+                                         args.allow_a6_fallback,
+                                         scenario=args.scenario)
         success = stranded is None
     except BaseException as caught:  # broad by design: D-16/D-17 failure boundary
         failure = caught
@@ -1572,6 +2068,9 @@ def main():
     if args.boot_only:
         print("BOOT-ONLY PASS: %d nodes reached WAITING_FOR_TRUST_GENESIS "
               "and exited 0" % args.nodes)
+    elif args.fleet:
+        print("FLEET E2E PASS: full Variant B fleet ceremony to confirmed "
+              "quorum through the transport seam (exit 0; run dir deleted)")
     else:
         print("CEREMONY E2E PASS: %d nodes, full Variant B ceremony to "
               "confirmed quorum (exit 0; run dir deleted)" % args.nodes)
