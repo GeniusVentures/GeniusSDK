@@ -1,0 +1,17 @@
+{
+  "net_id": 333,
+  "genesis_multiaddr": "/ip4/208.113.209.106/tcp/41273/ipfs/12D3KooWMvXKGwt2mDcgusWrjALbLMwfYCgTvWJxMSmwLi633txx",
+  "node_version": "3.7.0-develop.2272673",
+  "supergenius_tarball_sha256": "53dc42a4b2b6debb712988c9ec651a7d97f948ff45910b8da51562edce6c948d",
+  "runner_sha256": "4f032165cf6de81b1076619209ae7d3057b219ebd89f820ec8aa1b00cc0b3006",
+  "ceremony_fingerprint": "4f6840f5bdffca6d51d463c4f02d85bde76b5ce88dd3d1ab4ed59e39663a7afb",
+  "genesis_cid": "QmPZynsQE2hhJvQdYuC66bMzEdknpYaPTE2vtwFg3xarrf",
+  "authorized_full_node": "9798e85e31bcb9ee077d9152c30af391ea0a555ff4680e17bede5a09a1183dd2c158a6da9e626f3c0527b23bef57d95b82f47a6ffb43f4efa07fedd7c8509b16",
+  "bootstrapper_node": "4005f03e71463c4083b96c25098b50c3d08c2d0427b144f9a0bfe68ca19b562a6e5b83c896277156f450315d50498f892d0690a3eb1415d06eab21a30a16030f",
+  "trusted_peers": [
+    "544ebd2133eb05b014ee8f14235cbb5f15e0e25a9c64ad1c9a090c532c10eb937a7f031f4e065ca2d34021db48db15933d19a6a822e19b905e3275b7b3088bc6",
+    "9aebaf501fa2ba06b47998e9cb87953f5adbb28ac4db68b79fc35ddac807c58fd06e358826d1a298eb24146dac0662c93ccd9daba3673160afb916e0124b4da9",
+    "7484ac2b68aca0bee80a9e227c471c8148d38b811e59875365df9d4d3f215f9a8dbacd0ff0a17d461fff4667bb891d89c44ae636959aea73b1b7cb167f83e407",
+    "fe412dcde2b0ed942ba9fad260c68774f8dbd3c3eaab88e4406a78301d8df591765cd026a6184426ffc6a2c41bba77444f8e421c4cc3e55a6f3e3dc34711f422"
+  ]
+}
