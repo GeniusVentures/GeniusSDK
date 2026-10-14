@@ -122,10 +122,15 @@ supervised shape.)
 
 ## 6. Verify sync (no RPC)
 
-Watch the joiner's stdout log for the STATUS cadence. After the node reports
-READY, its head must equal the artifact's genesis CID — the same value every
-fleet node settled on at ceremony time, consumed here from the artifact and
-never recomputed:
+Watch the joiner's stdout log for the STATUS cadence. Expect to sit in
+INITIALIZING_BLOCKCHAIN for ~60–90s while the genesis syncs — that is normal,
+not stuck; READY typically lands within ~2 minutes of boot. The genesis-sync
+evidence itself lands in the base dir's `sgnslog2.log`, not stdout
+(`grep -i genesis [ABSOLUTE_PATH_TO_JOINER_BASE_PARENT]/joiner1/sgnslog2.log`
+shows the request/verify lines; stdout carries only the STATUS cadence). After
+the node reports READY, its head must equal the artifact's genesis CID — the
+same value every fleet node settled on at ceremony time, consumed here from
+the artifact and never recomputed:
 
 ```bash
 jq -r .genesis_cid staging-net/staging-net.json
@@ -139,8 +144,14 @@ re-fetch the artifact set (step 2) before anything else.
 
 ## Troubleshooting
 
-- `head=` never appears / stuck INITIALIZING_BLOCKCHAIN: check outbound TCP to
-  the `genesis_multiaddr` address and port first.
+- `head=` never appears / INITIALIZING_BLOCKCHAIN well past the ~2 min norm:
+  check outbound TCP to the `genesis_multiaddr` address and port first.
+- `Error starting blockchain … Scheduling blockchain retry after failure`
+  during INITIALIZING_BLOCKCHAIN: expected, not a failure — the node retries
+  until the genesis syncs.
+- `ChainRpcEndpointProvider: cannot open …/bridge_chains_config.json`:
+  expected, not a failure for a joiner — the bridge chain config wires
+  EVM-relay endpoints and plays no part in syncing the net.
 - FATAL_TRUST_MISMATCH: the `sgns_config.json` facts and the live net
   disagree — stale artifact; re-fetch.
 - The joiner must not pass `--key-file`: that shape belongs to fleet nodes,
