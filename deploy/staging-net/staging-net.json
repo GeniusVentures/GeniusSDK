@@ -1,6 +1,6 @@
 {
   "net_id": 333,
-  "genesis_multiaddr": "/ip4/208.113.209.106/tcp/41273/ipfs/12D3KooWMvXKGwt2mDcgusWrjALbLMwfYCgTvWJxMSmwLi633txx",
+  "genesis_multiaddr": "/dns4/sg-fullnode-1s.gnus.ai/tcp/41273/ipfs/12D3KooWMvXKGwt2mDcgusWrjALbLMwfYCgTvWJxMSmwLi633txx",
   "node_version": "3.7.0-develop.2272673",
   "supergenius_tarball_sha256": "53dc42a4b2b6debb712988c9ec651a7d97f948ff45910b8da51562edce6c948d",
   "runner_sha256": "4f032165cf6de81b1076619209ae7d3057b219ebd89f820ec8aa1b00cc0b3006",

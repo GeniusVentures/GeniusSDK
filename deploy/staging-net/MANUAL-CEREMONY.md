@@ -42,7 +42,7 @@ cat > actor1-network.json <<'EOF'
 {
   "pubsub_port": "41051",
   "pubsub_bind_address": "0.0.0.0",
-  "bootstrap_addresses": ["/ip4/208.113.209.106/tcp/41273/ipfs/12D3KooWMvXKGwt2mDcgusWrjALbLMwfYCgTvWJxMSmwLi633txx"]
+  "bootstrap_addresses": ["/dns4/sg-fullnode-1s.gnus.ai/tcp/41273/ipfs/12D3KooWMvXKGwt2mDcgusWrjALbLMwfYCgTvWJxMSmwLi633txx"]
 }
 EOF
 ```
