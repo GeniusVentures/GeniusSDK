@@ -156,3 +156,7 @@ __pycache__/
 
 # Preserved e2e failure runs (D-17) — never commit run artifacts
 /e2e/artifacts/
+
+# The REAL fleet manifest (operator-local: ssh alias, public IP, on-box
+# paths) — the sanitized shape lives in fleet.json.example
+deploy/fleet/fleet.json

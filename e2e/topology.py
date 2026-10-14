@@ -127,6 +127,14 @@ def make_dns4_multiaddr(hostname: str, port, peer_id: str) -> str:
     return "/dns4/%s/tcp/%d/ipfs/%s" % (hostname, int(port), peer_id)
 
 
+def make_ip4_multiaddr(ip: str, port, peer_id: str) -> str:
+    """/ip4/<address>/tcp/<port>/ipfs/<peer_id> — the raw-IP entry form
+    (04-04's operator waiver of D-04: the staging entry address is the VPS's
+    public IP until a DNS name is adopted; the /ipfs/ suffix requirement and
+    dial-time semantics are identical to the /dns4/ form)."""
+    return "/ip4/%s/tcp/%d/ipfs/%s" % (ip, int(port), peer_id)
+
+
 def write_key_file(path: str, key_hex: str) -> None:
     # O_EXCL + 0600 inside the 0700 run dir: no symlink race, no loose perms
     # (Pitfall 7); the runner re-enforces the policy independently at boot.
@@ -507,8 +515,9 @@ def _validate_fleet(fleet: dict) -> None:
     write_fleet_trust_configs consume (D-09: the manifest is generated,
     validated code — never hand-trusted): THE staging net, address/peer-set
     agreement, port seeds unique + spaced >300 + >300 clear of the co-located
-    AWS node's port, positive WAN margins, and a filled /dns4/ genesis
-    published multiaddr (D-04 — the one address every peer and joiner dials)."""
+    AWS node's port, positive WAN margins, and a filled /dns4/ (or /ip4/,
+    04-04 raw-IP waiver) genesis published multiaddr (D-04 — the one address
+    every peer and joiner dials)."""
     net = fleet.get("network_id")
     if not isinstance(net, int):
         raise ValueError("fleet network_id must be an int (got %r)" % (net,))
@@ -559,14 +568,15 @@ def _validate_fleet(fleet: dict) -> None:
             raise ValueError("fleet %s must be a positive int (got %r)"
                              % (field, value))
     genesis_multiaddr = nodes[0].get("published_multiaddr", "")
-    if not genesis_multiaddr.startswith("/dns4/"):
+    if not genesis_multiaddr.startswith(("/dns4/", "/ip4/")):
         raise ValueError("genesis published_multiaddr must be the /dns4/ form "
+                         "(or /ip4/ under the 04-04 raw-IP waiver) "
                          "(got %r)" % (genesis_multiaddr[:40],))
     if "PLACEHOLDER" in genesis_multiaddr:
         raise ValueError("genesis published_multiaddr still carries a "
-                         "PLACEHOLDER — fill the real DNS name and the "
-                         "genesis peer id (captured at its identity boot) "
-                         "before generating bundles")
+                         "PLACEHOLDER — fill the real DNS name (or public IP) "
+                         "and the genesis peer id (captured at its identity "
+                         "boot) before generating bundles")
 
 
 def gen_fleet_keys(keys_dir: str, out_fleet: str) -> dict:
@@ -628,15 +638,19 @@ def gen_fleet_keys(keys_dir: str, out_fleet: str) -> dict:
 
 def write_fleet_configs(fleet: dict, out_dir: str) -> dict:
     """Write the static-fleet config bundles (D-09): ONE directory per node
-    under out_dir/<name>/ — the unit 04-04 mounts (NAS peers) or scps (the
-    AWS genesis box) as a whole. Every node gets dev/log configs and a
-    network_config with its own port_seed; the GENESIS node additionally
-    gets the minimal identity-boot sgns_config (the write_identity_config
-    shape, one home — its first boot exists to capture B_1 and the peer id);
-    PEERS bootstrap to the genesis published /dns4/ multiaddr (amended D-04:
-    the ONE public entry address, also what the NAS peers dial from behind
-    home NAT). No key material is written — keys are staged offline by
-    provisioning. Records bundle_dir on each node and returns the fleet."""
+    under out_dir/<name>/ — the unit 04-04 scps to the node's base dir as a
+    whole. Every node gets dev/log configs, a network_config with its own
+    port_seed, and the minimal net-pinned identity-boot sgns_config (the
+    write_identity_config shape, one home): provisioned nodes boot as
+    supervised services BEFORE the ceremony's post-B_1 push, and a boot with
+    no sgns_config would fall to the DEV-default net (a NET-05 violation on
+    the staging box) — the ceremony's write_fleet_trust_configs overwrites
+    this file with the full trust payload; the dirty gate keys on
+    authorized_full_node, which the minimal payload never carries. PEERS
+    bootstrap to the genesis published multiaddr (amended D-04: the ONE
+    public entry address; /dns4/ or the 04-04 raw-IP /ip4/ waiver). No key
+    material is written — keys are staged offline by provisioning. Records
+    bundle_dir on each node and returns the fleet."""
     _validate_fleet(fleet)
     genesis_multiaddr = fleet["nodes"][0]["published_multiaddr"]
     os.makedirs(out_dir, exist_ok=True)
@@ -651,9 +665,8 @@ def write_fleet_configs(fleet: dict, out_dir: str) -> dict:
             "bootstrap_addresses": ([] if node["role"] == "genesis"
                                     else [genesis_multiaddr]),
         })
-        if node["role"] == "genesis":
-            _write_json(os.path.join(node_dir, "sgns_config.json"),
-                        _minimal_identity_payload(STAGING_NET_ID))
+        _write_json(os.path.join(node_dir, "sgns_config.json"),
+                    _minimal_identity_payload(STAGING_NET_ID))
         node["bundle_dir"] = node_dir
     return fleet
 
@@ -1030,14 +1043,14 @@ def _selftest() -> None:
             fleet_seeds.append(node["port_seed"])
             if node["role"] == "genesis":
                 assert net["bootstrap_addresses"] == []
-                assert _read_json(os.path.join(
-                    node_dir, "sgns_config.json")) == {
-                    "node_type": "Full", "net_id": STAGING_NET_ID}
             else:
                 assert net["bootstrap_addresses"] == \
                     [fleet["nodes"][0]["published_multiaddr"]]
-                assert not os.path.exists(os.path.join(node_dir,
-                                                      "sgns_config.json"))
+            # EVERY node boots net-pinned at provision time (04-04): the
+            # minimal identity shape, never authorized_full_node.
+            assert _read_json(os.path.join(
+                node_dir, "sgns_config.json")) == {
+                "node_type": "Full", "net_id": STAGING_NET_ID}
         sorted_seeds = sorted(fleet_seeds)
         assert all(b - a > 300 for a, b in zip(sorted_seeds, sorted_seeds[1:]))
         assert all(abs(seed - fleet["existing_node_port"]) > 300
@@ -1067,9 +1080,10 @@ def _selftest() -> None:
             assert sgns["trusted_peers"] == fleet["peer_set"]
 
         # Bundle-writer reject paths (each its own ValueError): seeds within
-        # 300 of each other, a seed within 300 of the co-located AWS node, a
-        # non-dns4 genesis multiaddr, an unfilled PLACEHOLDER multiaddr, and a
-        # fleet that is not the staging net.
+        # 300 of each other, a seed within 300 of the co-located node, a
+        # non-multiaddr genesis entry (neither /dns4/ nor the waived /ip4/),
+        # an unfilled PLACEHOLDER multiaddr, and a fleet that is not the
+        # staging net.
         def _clone_fleet():
             return json.loads(json.dumps(fleet))
 
@@ -1083,8 +1097,8 @@ def _selftest() -> None:
         bad_cases.append((bad, "seed within 300 of existing_node_port"))
         bad = _clone_fleet()
         bad["nodes"][0]["published_multiaddr"] = \
-            "/ip4/127.0.0.1/tcp/41001/ipfs/QmX"
-        bad_cases.append((bad, "non-dns4 published_multiaddr"))
+            "/dns6/host.invalid/tcp/41001/ipfs/QmX"
+        bad_cases.append((bad, "non-multiaddr published_multiaddr"))
         bad = _clone_fleet()
         bad["nodes"][0]["published_multiaddr"] = make_dns4_multiaddr(
             "host.invalid", 41001, "PLACEHOLDER-PEER-ID")
@@ -1099,6 +1113,20 @@ def _selftest() -> None:
                 pass
             else:
                 raise AssertionError("%s must be rejected" % why)
+
+        # The 04-04 raw-IP waiver: the /ip4/ entry form validates exactly
+        # like /dns4/ (same bundle shape, peers bootstrap to it verbatim).
+        fleet["nodes"][0]["published_multiaddr"] = make_ip4_multiaddr(
+            "208.113.209.106", 41001, "QmGenesisPeer")
+        fleet = write_fleet_configs(fleet, bundle_dir)
+        for node in fleet["nodes"]:
+            if node["role"] != "genesis":
+                net = _read_json(os.path.join(node["bundle_dir"],
+                                              "network_config.json"))
+                assert net["bootstrap_addresses"] == \
+                    ["/ip4/208.113.209.106/tcp/41001/ipfs/QmGenesisPeer"]
+        assert make_ip4_multiaddr("127.0.0.1", 41037, "QmPeer") == \
+            "/ip4/127.0.0.1/tcp/41037/ipfs/QmPeer"
 
         # Join mode: a fixture artifact set; joiner sgns_config is the FULL
         # trust payload from the artifact (net_id 333 — 03-02 A3), no key file

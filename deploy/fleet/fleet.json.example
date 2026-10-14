@@ -4,7 +4,14 @@
     "gen_fleet_keys output, keeps the generated identity facts (addresses,",
     "key paths, port seeds), and fills every PLACEHOLDER before running",
     "topology.py --static-fleet. Key file PATHS only — never key hex.",
-    "Wave 4 (04-04) records the real hostnames; nothing here is secret."
+    "04-04 fleet shape (operator-confirmed): ALL five nodes run on ONE VPS",
+    "as systemd instances of deploy/systemd/sgns-staging-node@.service —",
+    "every transport is ssh to the same host with its own unit_name and",
+    "base dir; no docker, no NAS this phase. The published entry address is",
+    "the RAW-IP /ip4/ form (the operator's conscious waiver of D-04's DNS",
+    "rationale — recorded in 04-04-SUMMARY and STATE.md). The REAL",
+    "fleet.json (hosts, paths, IP) is operator-local and gitignored;",
+    "nothing here is secret."
   ],
   "network_id": 333,
   "topic": "SuperGNUSNode.TestNet.FullNode",
@@ -17,20 +24,20 @@
   ],
   "serve_seconds": 180,
   "timeout_seconds": 120,
-  "existing_node_port": 40001,
+  "existing_node_port": null,
   "nodes": [
     {
       "name": "node1",
       "role": "genesis",
       "ceremony_address": "<FILL: A_1>",
       "key_file": "/absolute/offline/path/keys/node1.key",
-      "base_dir": "/var/lib/geniussdk/staging-genesis/",
+      "base_dir": "/home/ubuntu/staging/node1/",
       "port_seed": 41001,
-      "published_multiaddr": "/dns4/<FILL-DNS-NAME>/tcp/41001/ipfs/<FILL-GENESIS-PEER-ID>",
+      "published_multiaddr": "/ip4/<FILL-PUBLIC-IP>/tcp/41001/ipfs/<FILL-GENESIS-PEER-ID>",
       "transport": {
         "kind": "ssh",
-        "host": "<FILL-AWS-HOST>",
-        "unit_name": "sgns-staging-node.service"
+        "host": "<FILL-VPS-SSH-ALIAS>",
+        "unit_name": "sgns-staging-node@1.service"
       }
     },
     {
@@ -38,13 +45,13 @@
       "role": "peer",
       "ceremony_address": "<FILL: A_2>",
       "key_file": "/absolute/offline/path/keys/node2.key",
-      "base_dir": "/volume1/staging/peer-2/",
+      "base_dir": "/home/ubuntu/staging/node2/",
       "port_seed": 41501,
-      "published_multiaddr": "/dns4/<FILL-OR-LEAVE-PLACEHOLDER-UNTIL-FIRST-BOOT>/tcp/41501/ipfs/<FILL-PEER-ID>",
+      "published_multiaddr": "/ip4/<FILL-OR-LEAVE-PLACEHOLDER-UNTIL-FIRST-BOOT>/tcp/41501/ipfs/<FILL-PEER-ID>",
       "transport": {
-        "kind": "compose",
-        "host": "<FILL-NAS-SSH-HOST>",
-        "service": "staging-peer-2"
+        "kind": "ssh",
+        "host": "<FILL-VPS-SSH-ALIAS>",
+        "unit_name": "sgns-staging-node@2.service"
       }
     },
     {
@@ -52,13 +59,13 @@
       "role": "peer",
       "ceremony_address": "<FILL: A_3>",
       "key_file": "/absolute/offline/path/keys/node3.key",
-      "base_dir": "/volume1/staging/peer-3/",
+      "base_dir": "/home/ubuntu/staging/node3/",
       "port_seed": 42001,
-      "published_multiaddr": "/dns4/<FILL-OR-LEAVE-PLACEHOLDER-UNTIL-FIRST-BOOT>/tcp/42001/ipfs/<FILL-PEER-ID>",
+      "published_multiaddr": "/ip4/<FILL-OR-LEAVE-PLACEHOLDER-UNTIL-FIRST-BOOT>/tcp/42001/ipfs/<FILL-PEER-ID>",
       "transport": {
-        "kind": "compose",
-        "host": "<FILL-NAS-SSH-HOST>",
-        "service": "staging-peer-3"
+        "kind": "ssh",
+        "host": "<FILL-VPS-SSH-ALIAS>",
+        "unit_name": "sgns-staging-node@3.service"
       }
     },
     {
@@ -66,13 +73,13 @@
       "role": "peer",
       "ceremony_address": "<FILL: A_4>",
       "key_file": "/absolute/offline/path/keys/node4.key",
-      "base_dir": "/volume1/staging/peer-4/",
+      "base_dir": "/home/ubuntu/staging/node4/",
       "port_seed": 42501,
-      "published_multiaddr": "/dns4/<FILL-OR-LEAVE-PLACEHOLDER-UNTIL-FIRST-BOOT>/tcp/42501/ipfs/<FILL-PEER-ID>",
+      "published_multiaddr": "/ip4/<FILL-OR-LEAVE-PLACEHOLDER-UNTIL-FIRST-BOOT>/tcp/42501/ipfs/<FILL-PEER-ID>",
       "transport": {
-        "kind": "compose",
-        "host": "<FILL-NAS-SSH-HOST>",
-        "service": "staging-peer-4"
+        "kind": "ssh",
+        "host": "<FILL-VPS-SSH-ALIAS>",
+        "unit_name": "sgns-staging-node@4.service"
       }
     },
     {
@@ -80,13 +87,13 @@
       "role": "peer",
       "ceremony_address": "<FILL: A_5>",
       "key_file": "/absolute/offline/path/keys/node5.key",
-      "base_dir": "/volume1/staging/peer-5/",
+      "base_dir": "/home/ubuntu/staging/node5/",
       "port_seed": 43001,
-      "published_multiaddr": "/dns4/<FILL-OR-LEAVE-PLACEHOLDER-UNTIL-FIRST-BOOT>/tcp/43001/ipfs/<FILL-PEER-ID>",
+      "published_multiaddr": "/ip4/<FILL-OR-LEAVE-PLACEHOLDER-UNTIL-FIRST-BOOT>/tcp/43001/ipfs/<FILL-PEER-ID>",
       "transport": {
-        "kind": "compose",
-        "host": "<FILL-NAS-SSH-HOST>",
-        "service": "staging-peer-5"
+        "kind": "ssh",
+        "host": "<FILL-VPS-SSH-ALIAS>",
+        "unit_name": "sgns-staging-node@5.service"
       }
     }
   ]

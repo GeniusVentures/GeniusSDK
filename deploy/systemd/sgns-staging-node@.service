@@ -1,0 +1,46 @@
+# GeniusSDK staging-net node (net 333) — the all-VPS systemd template unit.
+#
+# 04-04 fleet shape (operator-confirmed facts): ALL FIVE staging nodes run
+# on ONE Ubuntu 24.04 VPS as five instances of this template
+# (sgns-staging-node@1..@5.service), each with its own base dir, port seed,
+# and key via /etc/geniussdk/node<i>.conf — the NAS/docker route is out of
+# this phase. Shape extends services/genius-full-node.service exactly like
+# the 04-02 single-genesis unit (honest args, env-indirected paths,
+# network-online ordering, Restart=on-failure) with the dbus-run-session +
+# gnome-keyring wrapper: Linux nodes hard-require a Secret Service via
+# libsecret — without it they stick in INITIALIZING_DATABASE.
+#
+# Per-node facts live in /etc/geniussdk/node%i.conf (EnvironmentFile): the
+# operator sets GENIUSSDK_BASE (trailing slash — service.cpp concatenates
+# config names with no separator) and GENIUSSDK_KEY_FILE there;
+# GENIUSSDK_BIN (and LD_LIBRARY_PATH if the box needs shipped libs) live in
+# the shared /etc/geniussdk/common.conf. This unit hardcodes no paths.
+#
+# User=ubuntu (deviation from the 04-02 geniussdk user, documented in
+# 04-04-SUMMARY): the box's admin user owns /home/ubuntu/staging/node*/ —
+# one identity for ssh provisioning, journal scraping, and the ceremony's
+# B_1 read keeps ownership and read-back trivially consistent; staging
+# grade (the T-04-04-08 precedent), the mainnet path differs.
+#
+# Address note: this VPS carries its public IP on ens3 (no NAT), so the
+# node advertises the published address itself; the entry address is the
+# raw-IP /ip4/ form under the 04-04 D-04 waiver (no DNS name this phase).
+
+[Unit]
+Description=GeniusSDK Staging Node %i (net 333)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+EnvironmentFile=-/etc/geniussdk/common.conf
+EnvironmentFile=-/etc/geniussdk/node%i.conf
+ExecStart=/usr/bin/dbus-run-session -- /usr/local/bin/sgns-node-wrap.sh
+Restart=on-failure
+RestartSec=5s
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
