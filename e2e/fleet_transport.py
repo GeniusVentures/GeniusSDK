@@ -118,7 +118,11 @@ class SshTransport(FleetTransport):
     """The real-fleet mapping: every op is ["ssh", -o BatchMode=yes, <host>,
     <command...>] — argv lists only, key auth assumed (established in Wave 4's
     preflight; BatchMode refuses interactive prompts instead of hanging).
-    restart maps to systemctl restart <unit> for ssh-kind nodes and docker
+    restart maps to sudo -n systemctl restart <unit> for ssh-kind nodes
+    (the all-VPS fleet's admin user has passwordless sudo but no polkit
+    manage-units grant — observed live 04-05: a bare systemctl restart over
+    ssh fails "Interactive authentication required"; sudo -n uses the
+    operator's EXISTING grant, creates no new host authority) and docker
     restart <service> for compose-kind nodes (the compose host is the NAS ssh
     host); log_lines maps to journalctl -u <unit> -n 200 --no-pager /
     docker logs --tail 200 <service> — both carry stdout, exactly the surface
@@ -154,7 +158,12 @@ class SshTransport(FleetTransport):
                 raise FleetTransportError(
                     "%s: ssh-kind node %s has no unit_name"
                     % (self._where(), node_ref.get("name")))
-            return ["systemctl", "restart", unit]
+            # sudo -n: the fleet admin user restarts system units through its
+            # existing passwordless sudo (non-interactive: refuses rather than
+            # hangs if a password were required). Bare systemctl would need a
+            # polkit manage-units grant this host does not give (observed
+            # 04-05).
+            return ["sudo", "-n", "systemctl", "restart", unit]
         if kind == "compose":
             service = transport.get("service")
             if not service:
@@ -319,7 +328,7 @@ def _selftest():
         "unit_name": "sgns-staging-node.service"}}
     assert ssh.build_restart_argv(aws_node) == \
         ["ssh", "-o", "BatchMode=yes", "fleet-box.example",
-         "systemctl", "restart", "sgns-staging-node.service"]
+         "sudo", "-n", "systemctl", "restart", "sgns-staging-node.service"]
     assert ssh.build_logs_argv(aws_node) == \
         ["ssh", "-o", "BatchMode=yes", "fleet-box.example",
          "journalctl", "-u", "sgns-staging-node.service", "-n", "200",
