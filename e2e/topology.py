@@ -135,6 +135,19 @@ def make_ip4_multiaddr(ip: str, port, peer_id: str) -> str:
     return "/ip4/%s/tcp/%d/ipfs/%s" % (ip, int(port), peer_id)
 
 
+def _expect_entry_multiaddr(value, what: str) -> None:
+    """The public entry multiaddr form, ONE home (both in-module copies
+    validate identically): /dns4/ (D-04) or /ip4/ under the operator's
+    documented 04-04 raw-IP waiver — dial-time semantics are identical, so
+    the published artifact set (writer AND join-mode consumer) accepts
+    exactly these two forms."""
+    if not (isinstance(value, str) and value.startswith(("/dns4/", "/ip4/"))):
+        raise ValueError("%s must be the /dns4/ form (or /ip4/ under the "
+                         "04-04 raw-IP waiver) (got %r)"
+                         % (what, value[:40] if isinstance(value, str)
+                            else value))
+
+
 def write_key_file(path: str, key_hex: str) -> None:
     # O_EXCL + 0600 inside the 0700 run dir: no symlink race, no loose perms
     # (Pitfall 7); the runner re-enforces the policy independently at boot.
@@ -568,10 +581,7 @@ def _validate_fleet(fleet: dict) -> None:
             raise ValueError("fleet %s must be a positive int (got %r)"
                              % (field, value))
     genesis_multiaddr = nodes[0].get("published_multiaddr", "")
-    if not genesis_multiaddr.startswith(("/dns4/", "/ip4/")):
-        raise ValueError("genesis published_multiaddr must be the /dns4/ form "
-                         "(or /ip4/ under the 04-04 raw-IP waiver) "
-                         "(got %r)" % (genesis_multiaddr[:40],))
+    _expect_entry_multiaddr(genesis_multiaddr, "genesis published_multiaddr")
     if "PLACEHOLDER" in genesis_multiaddr:
         raise ValueError("genesis published_multiaddr still carries a "
                          "PLACEHOLDER — fill the real DNS name (or public IP) "
@@ -717,9 +727,7 @@ def write_artifact_joiners(artifact_dir: str, out_dir: str,
                          "exactly the staging net %d"
                          % (artifact_path, net, STAGING_NET_ID))
     multiaddr = artifact.get("genesis_multiaddr", "")
-    if not multiaddr.startswith("/dns4/"):
-        raise ValueError("artifact genesis_multiaddr must be the /dns4/ form "
-                         "(got %r)" % (multiaddr[:40],))
+    _expect_entry_multiaddr(multiaddr, "artifact genesis_multiaddr")
     _expect_128_hex(artifact["authorized_full_node"],
                     "artifact authorized_full_node")
     _expect_128_hex(artifact["bootstrapper_node"],
@@ -1167,6 +1175,17 @@ def _selftest() -> None:
             assert _read_json(os.path.join(joiner["base_dir"],
                                            "log_config.json"))["loggers"] == \
                 dict(INFO_LOGGERS)
+        # The 04-04 raw-IP waiver: the /ip4/ artifact form joins too — the
+        # PUBLISHED staging-net.json carries the raw-IP entry, so join mode
+        # must consume exactly that shape (bootstrap == the artifact entry).
+        ip4_multiaddr = make_ip4_multiaddr(
+            "208.113.209.106", 41273,
+            "12D3KooWMvXKGwt2mDcgusWrjALbLMwfYCgTvWJxMSmwLi633txx")
+        _write_json(artifact_path,
+                    dict(artifact, genesis_multiaddr=ip4_multiaddr))
+        joiner_ip4 = write_artifact_joiners(artifact_dir, joiner_out)[0]
+        assert _read_json(joiner_ip4["network_config"])["bootstrap_addresses"] \
+            == [ip4_multiaddr]
         _write_json(artifact_path, dict(artifact, net_id=62000))
         try:
             write_artifact_joiners(artifact_dir, joiner_out)
