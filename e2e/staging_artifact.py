@@ -15,7 +15,9 @@ consumed at publication time).
 
 Output shape (deploy/staging-net/, fetched by raw URL, consumed by topology
 join mode):
-  staging-net.json — net_id, genesis_multiaddr (/dns4/ form, D-04),
+  staging-net.json — net_id, genesis_multiaddr (/dns4/ DNS-named form, D-04;
+    /ip4/ accepted under the operator's documented 04-04 raw-IP waiver —
+    never a silent weakening: both forms name the one public entry),
     node_version, supergenius_tarball_sha256, runner_sha256,
     ceremony_fingerprint, genesis_cid, authorized_full_node,
     bootstrapper_node, trusted_peers
@@ -70,9 +72,11 @@ def write_staging_artifact(out_dir, facts):
                          "net_id must be %d (got %r)"
                          % (topology.STAGING_NET_ID, net))
     multiaddr = facts.get("genesis_multiaddr", "")
-    if not (isinstance(multiaddr, str) and multiaddr.startswith("/dns4/")):
+    if not (isinstance(multiaddr, str)
+            and multiaddr.startswith(("/dns4/", "/ip4/"))):
         raise ValueError("genesis_multiaddr must be the /dns4/ DNS-named form "
-                         "(got %r)" % (multiaddr[:40],))
+                         "(or /ip4/ under the operator's documented 04-04 "
+                         "raw-IP waiver) (got %r)" % (multiaddr[:40],))
     for field in ("node_version", "genesis_cid"):
         if not facts.get(field):
             raise ValueError("%s must be a non-empty observed string" % field)
@@ -180,12 +184,23 @@ def _selftest() -> None:
         assert sorted(os.listdir(publish_dir)) == \
             ["manifest.bin", "staging-net.json"]
 
+        # The 04-04 raw-IP waiver: the /ip4/ entry form round-trips too.
+        waiver_dir = os.path.join(run_dir, "publish-ip4")
+        os.makedirs(waiver_dir)
+        waiver_facts = dict(facts)
+        waiver_facts["genesis_multiaddr"] = topology.make_ip4_multiaddr(
+            "208.113.209.106", 41273, "12D3KooWMvXKGwt2mDcgusWrjALbLMwfYCgTvWJxMSmwLi633txx")
+        write_staging_artifact(waiver_dir, waiver_facts)
+        with open(os.path.join(waiver_dir, "staging-net.json")) as handle:
+            assert json.load(handle)["genesis_multiaddr"] == \
+                waiver_facts["genesis_multiaddr"]
+
         # Reject paths: each a loud ValueError before anything is written.
         rejects = [
             ("net_id", 62000, "non-staging net_id"),
             ("net_id", 369, "registry-but-not-staging net_id"),
             ("genesis_multiaddr",
-             "/ip4/127.0.0.1/tcp/41001/ipfs/QmX", "non-dns4 multiaddr"),
+             "/dns6/::1/tcp/41001/ipfs/QmX", "non-dns4/ip4 multiaddr"),
             ("authorized_full_node", "zz", "non-128-hex address"),
             ("bootstrapper_node", "0x1234", "non-128-hex bootstrapper"),
             ("trusted_peers", ["cc" * 64, "zz"], "non-128-hex trusted peer"),
