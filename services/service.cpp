@@ -2,16 +2,16 @@
  * @file       service.cpp
  * @brief      GeniusSDKService runner: boots one node through the public SDK C API
  *             (random account, or an identity read from a policy-checked key file),
- *             emits a flushed STATUS line every 10 s, and parks in sigwait until one
- *             termination signal cleanly stops the node.
+ *             emits a flushed STATUS line every 10 s, and parks in the platform
+ *             shutdown wait until one termination signal cleanly stops the node.
  * @date       2026-10-06
  * @author     Henrique A. Klein (hklein@gnus.ai)
  */
 
 #include "GeniusSDK.h"
 #include "GeniusSDK.hpp"
+#include "ServiceLifetime.hpp"
 
-#include <pthread.h>
 #include <openssl/crypto.h>
 
 #include <algorithm>
@@ -20,7 +20,6 @@
 #include <cctype>
 #include <chrono>
 #include <condition_variable>
-#include <csignal>
 #include <cstdlib>
 #include <exception>
 #include <cstring>
@@ -40,6 +39,7 @@ namespace
 {
     using sgns::trustedpeer::GenesisCeremony;
     namespace genesis_platform = sgns::trustedpeer::genesis_ceremony_platform;
+    namespace service_lifetime = sgns::service_lifetime;
 
     // Indices are GeniusNode::NodeState values - keep in sync with the NodeState enum in
     // account/GeniusNode.hpp (fixed order, exactly 10 entries).
@@ -223,13 +223,10 @@ namespace
 
     int RunNode( int argc, char **argv )
     {
-        // Block termination signals BEFORE any SDK call so every node thread inherits the
-        // mask; main then parks in sigwait (no busy-wait) and one signal cleanly stops the node.
-        sigset_t shutdown_signals{};
-        sigemptyset( &shutdown_signals );
-        sigaddset( &shutdown_signals, SIGTERM );
-        sigaddset( &shutdown_signals, SIGINT );
-        pthread_sigmask( SIG_BLOCK, &shutdown_signals, nullptr );
+        // Arm the shutdown wait BEFORE any SDK call so every node thread inherits the
+        // capture (signal mask on POSIX, console-ctrl handler on Windows); main then
+        // parks in it (no busy-wait) and one termination cleanly stops the node.
+        service_lifetime::ArmShutdownWait();
 
         const auto arguments = ParseArguments( argc, argv, std::cerr );
         if ( !arguments )
@@ -265,7 +262,7 @@ namespace
                                                 dev_config.c_str(),
                                                 identity_key.c_str() );
             // The secret must never outlive its use - scrub the local copy (GenesisCeremony
-            // cleanse discipline) before parking in sigwait.
+            // cleanse discipline) before parking in the shutdown wait.
             OPENSSL_cleanse( identity_key.data(), identity_key.size() );
             identity_key.clear();
         }
@@ -277,8 +274,8 @@ namespace
         }
 
         // Staying resident is part of the contract: exiting destroys the process's
-        // pubsub/GraphSync transports. The sigwait below is this runner's equivalent of the
-        // genesis tool's ServeBeforeExit window.
+        // pubsub/GraphSync transports. The shutdown wait below is this runner's equivalent
+        // of the genesis tool's ServeBeforeExit window.
         std::atomic<bool>       stop_status_printer{ false };
         std::mutex              wakeup_mutex;
         std::condition_variable wakeup;
@@ -299,8 +296,7 @@ namespace
                 }
             } );
 
-        int received_signal = 0;
-        sigwait( &shutdown_signals, &received_signal );
+        const int received_signal = service_lifetime::WaitForShutdownSignal();
 
         {
             const std::scoped_lock lock( wakeup_mutex );
