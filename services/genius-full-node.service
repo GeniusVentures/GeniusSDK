@@ -10,7 +10,7 @@ EnvironmentFile=-/etc/geniussdk/full-node.conf
 Environment="GENIUSSDK_BIN=/usr/bin/GeniusSDKService"
 Environment="GENIUSSDK_FULL_PATH=/var/lib/geniussdk/full/"
 Environment="GENIUS_PROCESS=1"
-ExecStart=/bin/sh -c 'exec $GENIUSSDK_BIN $GENIUSSDK_FULL_PATH 1 $GENIUS_PROCESS 40001 1'
+ExecStart=/bin/sh -c 'exec $GENIUSSDK_BIN $GENIUSSDK_FULL_PATH'
 Restart=on-failure
 RestartSec=5s
 StandardOutput=journal

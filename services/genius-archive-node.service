@@ -8,7 +8,7 @@ User=geniussdk
 EnvironmentFile=-/etc/geniussdk/common.conf
 Environment="GENIUSSDK_BIN=/usr/bin/GeniusSDKService"
 Environment="GENIUSSDK_ARCHIVE_PATH=/var/lib/geniussdk/archive/"
-ExecStart=/bin/sh -c 'exec $GENIUSSDK_BIN $GENIUSSDK_ARCHIVE_PATH 1 0 40001 1'
+ExecStart=/bin/sh -c 'exec $GENIUSSDK_BIN $GENIUSSDK_ARCHIVE_PATH'
 Restart=on-failure
 RestartSec=5s
 StandardOutput=journal

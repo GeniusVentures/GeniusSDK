@@ -1,0 +1,37 @@
+# GeniusSDK staging-net genesis node (net 333) — the AWS-box systemd unit.
+#
+# Shape extends services/genius-full-node.service (honest args, env-indirected
+# paths) with the two fleet additions: network-online ordering (the node dials
+# the mesh at boot) and the dbus-run-session + gnome-keyring wrapper (Linux
+# nodes hard-require a Secret Service via libsecret — without it they stick in
+# INITIALIZING_DATABASE; the wrapper is the CI-proven shape).
+#
+# Per-node facts live in /etc/geniussdk/node.conf (EnvironmentFile): the
+# operator sets GENIUSSDK_BIN, GENIUSSDK_BASE (trailing slash — service.cpp
+# concatenates config names with no separator), and GENIUSSDK_KEY_FILE there;
+# this unit hardcodes no paths.
+#
+# AWS advertised-address note (accepted, no C++ change): the box's public IP
+# is 1:1-NAT, so the node advertises its private address — configured
+# bootstrap is unaffected (peers and joiners dial the published /dns4/
+# multiaddr from the artifact set); only DHT-discovered addresses degrade
+# off-box, which this 5-node explicitly-bootstrapped fleet does not rely on.
+
+[Unit]
+Description=GeniusSDK Staging Node (genesis, net 333)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=geniussdk
+EnvironmentFile=-/etc/geniussdk/common.conf
+EnvironmentFile=-/etc/geniussdk/node.conf
+ExecStart=/usr/bin/dbus-run-session -- /usr/local/bin/sgns-node-wrap.sh
+Restart=on-failure
+RestartSec=5s
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

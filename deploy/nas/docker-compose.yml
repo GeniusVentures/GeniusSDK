@@ -1,0 +1,83 @@
+# The 4 NAS staging peers (further-amended D-03): each peer runs FROM the
+# CI-built image (binary + wrapper inside), with its per-peer config bundle
+# directory (topology.py --static-fleet output, pushed by 04-04) and 0600 key
+# file bind-mounted to /data — RocksDB, secure_storage_id, and the wrapper's
+# keyring files all persist OUTSIDE the container on the NAS volume, so peer
+# identity survives container recreation and host reboots.
+#
+# Registry access: if the org ghcr package is private, the NAS needs a
+# one-time `docker login ghcr.io` with a read:packages credential before
+# `docker compose pull` (04-04 Task 1 collects this decision; the compose
+# references the floating :staging tag — the provisioning preflight records
+# the pulled digest).
+#
+# Host-side ownership: provisioning places node.key 0600 (owner = root, the
+# image's default user) inside each mounted peer dir; the runner re-validates
+# regular/user-owned/0600 at every boot.
+#
+# Ports: the published host port equals the peer's port_seed from fleet.json
+# (unique per peer; >300 spacing, clear of any other service on the NAS).
+services:
+  staging-peer-2:
+    image: ghcr.io/geniusventures/geniussdk-staging-node:staging
+    container_name: staging-peer-2
+    cap_add:
+      - IPC_LOCK
+    volumes:
+      - /volume1/staging/peer-2:/data
+    environment:
+      - HOME=/data
+      - GENIUSSDK_BIN=/usr/local/bin/GeniusSDKService
+      - GENIUSSDK_BASE=/data/
+      - GENIUSSDK_KEY_FILE=/data/node.key
+    ports:
+      - "41501:41501"
+    restart: unless-stopped
+
+  staging-peer-3:
+    image: ghcr.io/geniusventures/geniussdk-staging-node:staging
+    container_name: staging-peer-3
+    cap_add:
+      - IPC_LOCK
+    volumes:
+      - /volume1/staging/peer-3:/data
+    environment:
+      - HOME=/data
+      - GENIUSSDK_BIN=/usr/local/bin/GeniusSDKService
+      - GENIUSSDK_BASE=/data/
+      - GENIUSSDK_KEY_FILE=/data/node.key
+    ports:
+      - "42001:42001"
+    restart: unless-stopped
+
+  staging-peer-4:
+    image: ghcr.io/geniusventures/geniussdk-staging-node:staging
+    container_name: staging-peer-4
+    cap_add:
+      - IPC_LOCK
+    volumes:
+      - /volume1/staging/peer-4:/data
+    environment:
+      - HOME=/data
+      - GENIUSSDK_BIN=/usr/local/bin/GeniusSDKService
+      - GENIUSSDK_BASE=/data/
+      - GENIUSSDK_KEY_FILE=/data/node.key
+    ports:
+      - "42501:42501"
+    restart: unless-stopped
+
+  staging-peer-5:
+    image: ghcr.io/geniusventures/geniussdk-staging-node:staging
+    container_name: staging-peer-5
+    cap_add:
+      - IPC_LOCK
+    volumes:
+      - /volume1/staging/peer-5:/data
+    environment:
+      - HOME=/data
+      - GENIUSSDK_BIN=/usr/local/bin/GeniusSDKService
+      - GENIUSSDK_BASE=/data/
+      - GENIUSSDK_KEY_FILE=/data/node.key
+    ports:
+      - "43001:43001"
+    restart: unless-stopped
