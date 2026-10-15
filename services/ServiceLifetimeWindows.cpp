@@ -1,7 +1,7 @@
 /**
  * @file       ServiceLifetimeWindows.cpp
  * @brief      Windows arm of the service runner lifetime: a console-ctrl handler
- *             captures CTRL+C / close / logoff / shutdown; main parks on the event
+ *             captures CTRL+C / Ctrl+Break / console close; main parks on the event
  *             until one of them stops the node.
  * @date       2026-10-15
  * @author     Henrique A. Klein (hklein@gnus.ai)
@@ -35,10 +35,19 @@ namespace sgns::service_lifetime
                     g_received_signal.store( SIGINT );
                     break;
                 default:
+                    // ponytail: console-ctrl gives close/logoff/shutdown only the OS's
+                    // termination budget (seconds) after the handler returns, so the
+                    // node's GeniusSDKShutdown flush may be cut short (SIGKILL-class).
+                    // Clean stop is guaranteed only for CTRL_C/CTRL_BREAK. Durable fix:
+                    // run as an SCM service (SERVICE_CONTROL_STOP) instead of a console
+                    // handler.
                     g_received_signal.store( SIGTERM );
                     break;
             }
-            SetEvent( g_shutdown_event );
+            if ( !SetEvent( g_shutdown_event ) )
+            {
+                return FALSE;
+            }
             return TRUE;
         }
 
@@ -49,8 +58,8 @@ namespace sgns::service_lifetime
         g_shutdown_event = CreateEventA( nullptr, TRUE, FALSE, nullptr );
         if ( g_shutdown_event == nullptr || !SetConsoleCtrlHandler( &ShutdownHandler, TRUE ) )
         {
-            std::fputs( "Error: could not arm the console shutdown wait\n", stderr );
-            std::exit( 1 );
+            static_cast<void>( std::fputs( "Error: could not arm the console shutdown wait\n", stderr ) );
+            std::exit( 1 ); // NOLINT(concurrency-mt-unsafe): boot-time fail-fast, no thread exists yet
         }
     }
 

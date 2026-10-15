@@ -9,6 +9,8 @@
 #include "ServiceLifetime.hpp"
 
 #include <csignal>
+#include <cstdio>
+#include <cstdlib>
 #include <pthread.h>
 
 namespace sgns::service_lifetime
@@ -30,7 +32,11 @@ namespace sgns::service_lifetime
     {
         sigset_t shutdown_signals{};
         FillShutdownSignalSet( shutdown_signals );
-        pthread_sigmask( SIG_BLOCK, &shutdown_signals, nullptr );
+        if ( pthread_sigmask( SIG_BLOCK, &shutdown_signals, nullptr ) != 0 )
+        {
+            static_cast<void>( std::fputs( "Error: could not arm the signal shutdown wait\n", stderr ) );
+            std::exit( 1 ); // NOLINT(concurrency-mt-unsafe): boot-time fail-fast, no thread exists yet
+        }
     }
 
     int WaitForShutdownSignal()

@@ -17,8 +17,10 @@ namespace sgns::service_lifetime
      *
      * POSIX blocks SIGTERM/SIGINT in the calling thread so every node thread created
      * afterwards inherits the mask; Windows registers the console-ctrl handler that
-     * captures CTRL+C / close / logoff / shutdown. Fail-fast: terminates the process
-     * if the platform mechanism cannot be armed.
+     * captures CTRL+C / Ctrl+Break / console close (logoff and shutdown are
+     * services-only events this console process never receives). Windows handler
+     * dispatch is last-registered-first; no other in-tree registrant exists today.
+     * Fail-fast: terminates the process if the platform mechanism cannot be armed.
      */
     void ArmShutdownWait();
 
@@ -27,6 +29,9 @@ namespace sgns::service_lifetime
      * @return The POSIX signal number of the received termination (SIGINT=2,
      *         SIGTERM=15) on both platforms; 0 if the platform wait itself failed
      *         (the caller still runs its shutdown path, mirroring sigwait).
+     *
+     * Windows note: console close is time-boxed by the OS once the handler returns;
+     * a clean stop is guaranteed for CTRL+C / CTRL+BREAK only.
      */
     int WaitForShutdownSignal();
 } // namespace sgns::service_lifetime
