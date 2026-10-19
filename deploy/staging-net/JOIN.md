@@ -118,7 +118,9 @@ account:
 
 (On Linux the same dbus session wrapper the fleet uses applies — see
 `deploy/systemd/` and `deploy/sgns-node-wrap.sh` in this repository for the
-supervised shape.)
+supervised shape.) That wrapper also runs WITHOUT `GENIUSSDK_KEY_FILE` — set
+`GENIUSSDK_BIN`/`GENIUSSDK_BASE` and leave the key unset for the
+container/keyless joiner path, which is every joiner's shape.
 
 ## 6. Verify sync (no RPC)
 

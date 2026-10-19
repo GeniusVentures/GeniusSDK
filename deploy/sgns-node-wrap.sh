@@ -5,12 +5,17 @@
 # the AWS systemd unit (dbus-run-session -- /usr/local/bin/sgns-node-wrap.sh)
 # and the NAS containers (the image ENTRYPOINT) — every path arrives through
 # the ENVIRONMENT (the AWS unit's EnvironmentFile or the compose environment
-# block); this script hardcodes none.
+# block); this script hardcodes none. The same wrapper also boots the keyless
+# joiner (fresh account) when GENIUSSDK_KEY_FILE is unset — the keyring
+# seeding below is unconditional because the dbus session, not the key, is
+# the hard Linux requirement.
 #
 # Required environment:
 #   GENIUSSDK_BIN      path to the GeniusSDKService binary
 #   GENIUSSDK_BASE     the node's base dir WITH trailing slash
-#   GENIUSSDK_KEY_FILE path to the 0600 identity key (user-owned)
+# Optional environment:
+#   GENIUSSDK_KEY_FILE path to the 0600 identity key (user-owned); unset
+#                      boots the keyless joiner shape (D-11)
 #
 # Keyring seeding is idempotent (only when absent): the files persist on the
 # service user's $HOME volume — on the NAS peers HOME=/data, the mounted
@@ -20,7 +25,9 @@ set -euo pipefail
 
 : "${GENIUSSDK_BIN:?GENIUSSDK_BIN must be set (path to GeniusSDKService)}"
 : "${GENIUSSDK_BASE:?GENIUSSDK_BASE must be set (node base dir, trailing slash)}"
-: "${GENIUSSDK_KEY_FILE:?GENIUSSDK_KEY_FILE must be set (0600 identity key)}"
+# Optional: unset boots the keyless joiner shape (every real joiner's shape,
+# D-11) — the node creates its fresh account through the keyring below.
+GENIUSSDK_KEY_FILE="${GENIUSSDK_KEY_FILE:-}"
 
 mkdir -p "$HOME/.cache" "$HOME/.local/share/keyrings"
 if [ ! -f "$HOME/.local/share/keyrings/default" ]; then
@@ -37,4 +44,9 @@ eval "$(printf '\n' | gnome-keyring-daemon --unlock --components=secrets)"
 
 # Honest args, env-indirected: exec replaces the shell so the node is PID of
 # record under the session supervisor (systemd/container restart policy).
-exec "$GENIUSSDK_BIN" "$GENIUSSDK_BASE" --key-file "$GENIUSSDK_KEY_FILE"
+# --key-file rides along ONLY when set — a joiner boots keyless (D-11).
+args=("$GENIUSSDK_BASE")
+if [ -n "$GENIUSSDK_KEY_FILE" ]; then
+    args+=("--key-file" "$GENIUSSDK_KEY_FILE")
+fi
+exec "$GENIUSSDK_BIN" "${args[@]}"
