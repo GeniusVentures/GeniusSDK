@@ -2356,10 +2356,18 @@ jobs:
         # bounds the joiner's lifetime at 13 min via SIGTERM — the runner's
         # honored lifetime contract (e3fff7e/b192165) — one minute past the
         # 12-min refusal bound. The three observables are staging-refuse-net's
-        # exact gate: retry pair strictly increasing across the bound, zero
-        # READY (HALF-JOIN-DETECTED if not), zero head= — scanned over the
-        # tee'd log AND the base dir's sgnslog2.log when present (Linux
-        # console-sink builds ride stdout — Pitfall 4).
+        # exact gate: the recurring blockchain-failure pair strictly
+        # increasing across the bound, zero READY (HALF-JOIN-DETECTED if
+        # not), zero head=. NOTE the version axis lands its recurring pair at
+        # a DIFFERENT stage than the net axis (observed, run 39328864467):
+        # same-version-wrong-net parks in INITIALIZING_BLOCKCHAIN printing
+        # "Scheduling blockchain retry after failure" on stdout, while the
+        # 3.6 franken parks in MIGRATING_DATABASE with the recurring
+        # "Error starting blockchain: Blockchain not fully initialized"
+        # pair in the base dir's sgnslog2.log — the DB migration path is
+        # version-keyed, so the blockchain never even starts. Both families
+        # are counted, across BOTH logs (Pitfall 4: console-sink builds ride
+        # stdout; the promoted file sink carries the rest).
         shell: bash
         run: |
           set -euo pipefail
@@ -2379,7 +2387,15 @@ jobs:
               exit 1
             fi
             ts="$(date -u +%FT%TZ)"
-            retries="$(grep -c 'Scheduling blockchain retry after failure' fake-old-joiner.log || true)"
+            retries=0
+            for f in fake-old-joiner.log joiners/joiner1/sgnslog2.log; do
+              if [ -f "$f" ]; then
+                n="$(grep -c 'Scheduling blockchain retry after failure' "$f" || true)"
+                retries=$(( retries + n ))
+                n="$(grep -c 'Error starting blockchain' "$f" || true)"
+                retries=$(( retries + n ))
+              fi
+            done
             echo "REFUSE-3.6 $ts retries=$retries" | tee -a refuse-samples.log
             counts+=("$retries")
           done
@@ -2391,7 +2407,7 @@ jobs:
           last="${counts[11]}"
           echo "joiner lifetime: bounded by timeout 780 (rc=$joiner_rc; 124 is the expected SIGTERM bound)"
           if [ "$last" -le "$third" ]; then
-            echo "FATAL: the retry pair stopped recurring between the one-third mark (retries=$third) and the end (retries=$last) — persistence plus never-READY is the D-07 proof" >&2
+            echo "FATAL: the recurring blockchain-failure pair stopped between the one-third mark (retries=$third) and the end (retries=$last) — persistence plus never-READY is the D-07 proof" >&2
             exit 1
           fi
           if grep -q 'node_state=READY' fake-old-joiner.log; then
@@ -2410,7 +2426,7 @@ jobs:
             echo "FATAL: a head= line was observed in the joiner base dir sgnslog2.log" >&2
             exit 1
           fi
-          echo "refusal proven per D-07 (version-skew axis): retries $third -> $last (still recurring at the bound), zero node_state=READY, zero head="
+          echo "refusal proven per D-07 (version-skew axis): recurring blockchain-failure pair $third -> $last (still recurring at the bound), zero node_state=READY, zero head="
           # Corroborating, NOT a hard gate (same stance as refuse-net): the
           # quarantined joiner exchanged nothing (topic-appendix segregation).
           find joiners/joiner1 -maxdepth 2 | sort | tee refuse-baseir.log || true
@@ -2419,7 +2435,7 @@ jobs:
             echo
             echo "- leg: version-skew mechanism test (franken-build, D-10) — sed set(PROJECT_VERSION 3.7.0) -> 3.6.0 on the checked-out develop source (major.minor only, workspace copy only)"
             echo "- SuperGenius develop source sha: $SGNS_SOURCE_SHA"
-            echo "- retry pair: $third -> $last across the 12-min bound (still recurring)"
+            echo "- recurring blockchain-failure pair: $third -> $last across the 12-min bound (still recurring; both retry families, stdout + sgnslog2.log)"
             echo "- node_state=READY lines: 0; head= lines: 0 (tee'd log + base-dir sgnslog2.log scanned)"
             echo '```'
             cat refuse-samples.log
