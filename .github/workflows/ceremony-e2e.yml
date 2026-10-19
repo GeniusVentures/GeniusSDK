@@ -1481,3 +1481,217 @@ jobs:
           path: evidence
           if-no-files-found: warn
           retention-days: 14
+
+  # The wrong-net refusal leg (D-05 leg 1, 05-02 Task 2 / NET-03): the SAME
+  # hosted keyless-joiner shape with net_id deliberately flipped to 144
+  # (subnet_id untouched — Pitfall 1's two knobs), refused per D-07's locked
+  # operational definition: never READY, the blockchain retry pair still
+  # recurring at the end of a 12-minute bound, and no head= line ever. The
+  # retry pair is EXPECTED noise during healthy joins (Pitfall 5) — presence
+  # proves nothing; persistence plus never-READY is the proof.
+  staging-refuse-net:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.scenario == 'staging-refuse' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout GeniusSDK (topology.py at the dispatch ref)
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      - name: Fetch the canonical artifact pair + fingerprint assert (JOIN.md §2)
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p staging-net
+          curl -fsSL -o staging-net/staging-net.json \
+            https://raw.githubusercontent.com/GeniusVentures/GeniusSDK/develop/deploy/staging-net/staging-net.json
+          curl -fsSL -o staging-net/manifest.bin \
+            https://raw.githubusercontent.com/GeniusVentures/GeniusSDK/develop/deploy/staging-net/manifest.bin
+          recorded="$(jq -r .ceremony_fingerprint staging-net/staging-net.json)"
+          actual="$(sha256sum staging-net/manifest.bin | cut -d' ' -f1)"
+          if [ -z "$recorded" ] || [ "$actual" != "$recorded" ]; then
+            echo "FATAL: sha256(manifest.bin) $actual != ceremony_fingerprint ${recorded:-<none>} — re-fetch the artifact set before anything else (JOIN.md troubleshooting)" >&2
+            exit 1
+          fi
+          echo "artifact fingerprint verified: $actual"
+
+      - name: Generate the joiner bundle (topology.py --join)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 e2e/topology.py --join staging-net --out-dir joiners --count 1
+          net_id="$(jq -r .net_id joiners/joiner1/sgns_config.json)"
+          if [ "$net_id" != "333" ]; then
+            echo "FATAL: pre-mutation joiner sgns_config net_id=$net_id != 333 (staging pin)" >&2
+            exit 1
+          fi
+          echo "joiner bundle generated: net_id=333 (about to be deliberately mismatched)"
+
+      - name: "Apply the deliberate net_id=144 mismatch (Pitfall 1: net_id ONLY)"
+        # A harness mutation of the locally generated sgns_config.json —
+        # never a writer change. subnet_id is the manifest knob and must
+        # stay pinned at 333; network_config.json stays untouched.
+        shell: bash
+        run: |
+          set -euo pipefail
+          jq '.net_id=144' joiners/joiner1/sgns_config.json > sgns-mutated.json
+          mv sgns-mutated.json joiners/joiner1/sgns_config.json
+          net_id="$(jq -r .net_id joiners/joiner1/sgns_config.json)"
+          subnet_id="$(jq -r .subnet_id joiners/joiner1/sgns_config.json)"
+          if [ "$net_id" != "144" ]; then
+            echo "FATAL: mutated net_id=$net_id != 144" >&2
+            exit 1
+          fi
+          if [ "$subnet_id" != "333" ]; then
+            echo "FATAL: subnet_id=$subnet_id != 333 — the manifest knob must stay pinned (Pitfall 1: two knobs, one flipped)" >&2
+            exit 1
+          fi
+          echo "mismatch applied: net_id=144, subnet_id=$subnet_id, network_config.json untouched"
+
+      - name: Docker preflight + pull the staging image
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker version
+          docker pull ghcr.io/geniusventures/geniussdk-staging-node:staging
+          digest="$(docker inspect --format '{{index .RepoDigests 0}}' \
+            ghcr.io/geniusventures/geniussdk-staging-node:staging | cut -d'@' -f2)"
+          if [ -z "$digest" ]; then
+            echo "FATAL: no digest resolved for the pulled :staging image" >&2
+            exit 1
+          fi
+          echo "IMAGE_DIGEST=$digest" >> "$GITHUB_ENV"
+          {
+            echo "## staging-refuse-net (net_id 144 leg, D-07)"
+            echo
+            echo "- image digest: $digest"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Image provenance asserts (wrapper freshness + runner lineage)
+        # Same gate as staging-join (T-05-02-02): see that job's step comment
+        # for the lineage-vs-fleet-pin rationale.
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! docker run --rm --entrypoint /usr/bin/bash \
+              ghcr.io/geniusventures/geniussdk-staging-node:staging \
+              -c 'grep -q "GENIUSSDK_KEY_FILE:-" /usr/local/bin/sgns-node-wrap.sh'; then
+            echo "FATAL: in-image wrapper lacks the optional-key assignment (GENIUSSDK_KEY_FILE:-) — the 05-01 push's node-image republish has not landed; wait for its green node-image job before dispatching" >&2
+            exit 1
+          fi
+          publish_run="$(gh run list --workflow ceremony-e2e.yml --event push \
+            --status success --limit 1 --json databaseId --jq '.[0].databaseId')"
+          if [ -z "$publish_run" ] || [ "$publish_run" = "null" ]; then
+            echo "FATAL: no successful push run found to source the runner lineage" >&2
+            exit 1
+          fi
+          gh run download "$publish_run" -n runner-binary -D runner-lineage
+          expected="$(sed -n 's/^sha256: //p' runner-lineage/runner-ldd.txt)"
+          actual="$(docker run --rm --entrypoint /usr/bin/bash \
+            ghcr.io/geniusventures/geniussdk-staging-node:staging \
+            -c 'sha256sum /usr/local/bin/GeniusSDKService' | cut -d' ' -f1)"
+          fleet_pin="$(jq -r .runner_sha256 staging-net/staging-net.json)"
+          echo "in-image runner sha256:    $actual"
+          echo "CI lineage runner sha256:  $expected (push run $publish_run)"
+          echo "artifact fleet pin:        $fleet_pin (informational skew, JOIN.md §2)"
+          if [ -z "$expected" ] || [ "$actual" != "$expected" ]; then
+            echo "FATAL: in-image runner sha256 $actual != CI lineage ${expected:-<none>} — the pulled :staging image is not the latest green push build" >&2
+            exit 1
+          fi
+          {
+            echo "- in-image runner sha256: $actual (== CI lineage, push run $publish_run)"
+            echo "- artifact fleet runner pin: $fleet_pin (recorded skew, not a gate)"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Boot the keyless 144 joiner container (D-11 shape)
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run -d --name staging-refuse-net --cap-add IPC_LOCK \
+            -e GENIUSSDK_BIN=/usr/local/bin/GeniusSDKService \
+            -e GENIUSSDK_BASE=/data/joiner1/ \
+            -e HOME=/data/joiner1 \
+            -v "$PWD/joiners/joiner1:/data/joiner1" \
+            ghcr.io/geniusventures/geniussdk-staging-node:staging
+          sleep 5
+          docker ps --filter name=staging-refuse-net --format 'table {{.Names}}\t{{.Status}}'
+
+      - name: "Refusal gate (D-07: never-READY + persistent retry pair + no head, 12-min bound)"
+        # 12 minutes is >> the ~2 min healthy-join norm (Pitfall 5): the
+        # retry pair recurs during healthy joins too, so only persistence
+        # across the bound PLUS never-READY PLUS zero head= lines is the
+        # refusal proof. The one-third-vs-end comparison guards against a
+        # joiner that gave up mid-bound (a stopped retry is NOT a refusal).
+        shell: bash
+        run: |
+          set -euo pipefail
+          : > refuse-samples.log
+          counts=()
+          for i in $(seq 1 12); do
+            sleep 60
+            if [ "$(docker inspect --format '{{.State.Running}}' staging-refuse-net 2>/dev/null || echo false)" != "true" ]; then
+              docker logs staging-refuse-net > joiner.log 2>&1 || true
+              echo "FATAL: the 144 joiner container exited at sample $i — not the expected persistent-retry refusal shape" >&2
+              exit 1
+            fi
+            ts="$(date -u +%FT%TZ)"
+            retries="$(docker logs staging-refuse-net 2>&1 | grep -c 'Scheduling blockchain retry after failure' || true)"
+            echo "REFUSE $ts retries=$retries" | tee -a refuse-samples.log
+            counts+=("$retries")
+          done
+          docker logs staging-refuse-net > joiner.log 2>&1
+          third="${counts[3]}"
+          last="${counts[11]}"
+          if [ "$last" -le "$third" ]; then
+            echo "FATAL: the retry pair stopped recurring between the one-third mark (retries=$third) and the end (retries=$last) — persistence plus never-READY is the D-07 proof" >&2
+            exit 1
+          fi
+          if grep -q 'node_state=READY' joiner.log; then
+            echo "FATAL: HALF-JOIN-DETECTED — node_state=READY observed on the net_id 144 joiner" >&2
+            exit 1
+          fi
+          if grep -q 'head=' joiner.log; then
+            echo "FATAL: a head= line was observed on the net_id 144 joiner" >&2
+            exit 1
+          fi
+          echo "refusal proven per D-07: retries $third -> $last (still recurring at the bound), zero node_state=READY, zero head="
+          # Corroborating, NOT a hard gate: TrustStateStore keys are
+          # RocksDB-interior; the quarantined joiner exchanged nothing
+          # (topic-appendix segregation, RQ4) so no trust writes occurred.
+          # The base dir is discarded with the runner workspace.
+          find joiners/joiner1 -maxdepth 2 | sort | tee refuse-baseir.log || true
+          {
+            echo "- retry pair: $third -> $last across the 12-min bound (still recurring)"
+            echo "- node_state=READY lines: 0; head= lines: 0"
+            echo "- base dir listing: recorded in refuse-baseir.log (corroborating)"
+            echo '```'
+            cat refuse-samples.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Stage evidence + remove the joiner container
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence
+          docker logs staging-refuse-net > evidence/joiner.log 2>&1 || true
+          if [ -f refuse-samples.log ]; then cp refuse-samples.log evidence/; fi
+          if [ -f refuse-baseir.log ]; then cp refuse-baseir.log evidence/; fi
+          if [ -f joiners/joiner1/sgns_config.json ]; then cp joiners/joiner1/sgns_config.json evidence/sgns_config.mutated-144.json; fi
+          if [ -f joiners/joiner1/log_config.json ]; then cp joiners/joiner1/log_config.json evidence/; fi
+          if [ -f joiners/joiner1/sgnslog2.log ]; then cp joiners/joiner1/sgnslog2.log evidence/; fi
+          docker rm -f staging-refuse-net > /dev/null 2>&1 || true
+
+      - name: Upload refusal evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: staging-refuse-net-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: evidence
+          if-no-files-found: warn
+          retention-days: 14
