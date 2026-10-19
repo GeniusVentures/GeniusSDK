@@ -55,10 +55,10 @@ on:
           - window-edge
           - negative-control
           - nightly
-          # Phase 5 dispatch-only legs (05-02): the hosted external joiner
-          # against the LIVE staging net, and its wrong-net refusal sibling.
-          # staging-session-bin's job lands in 05-03 — the value registers
-          # now so the choice list has one edit point.
+          # Phase 5 dispatch-only legs (05-02/05-03): the hosted external
+          # joiner against the LIVE staging net, its wrong-net refusal
+          # sibling (a staging-refuse dispatch runs BOTH refusal legs — net
+          # AND version), and the source-build session binary.
           - staging-join
           - staging-refuse
           - staging-session-bin
@@ -1692,6 +1692,763 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: staging-refuse-net-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: evidence
+          if-no-files-found: warn
+          retention-days: 14
+
+  # The session-binary source build (05-03 Task 1 / D-08's driver): node_example
+  # exists in NO tarball (no install rule; this workflow otherwise consumes the
+  # prebuilt SuperGenius install tree), so a clean DEVELOP source build of the
+  # SuperGenius tree produces it — the SAME EL8 container + thirdparty/zkLLVM
+  # release chain the e2e job uses, with the prebuilt Download SuperGenius step
+  # REPLACED by a source checkout at develop. NO version sed here: this must be
+  # the true develop build the witnessed session runs (the 3.6 franken-build is
+  # staging-refuse-version's leg, never this one). Deliberate dispatch only;
+  # touches nothing on the VPS, the published artifact set, or the registry.
+  staging-session-bin:
+    needs: resolve-runners
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.scenario == 'staging-session-bin' }}
+    runs-on: ${{ fromJson(needs.resolve-runners.outputs.linux_x64) }}
+    timeout-minutes: 240
+    env:
+      GRPC_BUILD_ENABLE_CCACHE: "ON"
+      GH_TOKEN: ${{ secrets.GNUS_TOKEN_1 }}
+    container:
+      image: ghcr.io/geniusventures/almalinux-8:latest
+      # IPC_LOCK mirrors the e2e job's container block (copied verbatim): EL8's
+      # gnome-keyring-daemon carries file capabilities, and exec of a file-caps
+      # binary in a container whose bounding set lacks the cap returns EPERM.
+      options: --cap-add=IPC_LOCK
+      credentials:
+        username: ${{github.actor}}
+        password: ${{secrets.GNUS_TOKEN_1}}
+    steps:
+      - name: Clean workspace (self-hosted runners)
+        if: ${{ runner.environment == 'self-hosted' }}
+        shell: bash
+        run: |
+          # Container jobs leave root-owned build trees behind; clear the four
+          # build-input dirs so this job's downloads/checkouts start clean
+          # (the e2e job's cleanup step, same guards).
+          SUDO=""
+          if [ "$(uname)" = "Linux" ]; then
+            SUDO="sudo"
+          fi
+          for dir in thirdparty zkLLVM SuperGenius GeniusSDK; do
+            if [ -d "$dir" ]; then
+              echo "Removing $dir directory..."
+              $SUDO rm -rf "$dir"
+            fi
+          done
+
+      - name: Set build directory
+        shell: bash
+        run: |
+          # Same abi-suffixed layout as the e2e job: the thirdparty/zkLLVM
+          # tarballs extract to build/Linux/Release/x86_64 and the SuperGenius
+          # source build below points its dependency overrides at the same
+          # shape.
+          BUILD_DIRECTORY=build/Linux/Release/x86_64
+          echo "BUILD_DIRECTORY=$BUILD_DIRECTORY" >> $GITHUB_ENV
+
+      - name: Download thirdparty release
+        working-directory: ${{github.workspace}}
+        shell: bash
+        env:
+          GITHUB_EVENT_INPUTS_TAG: ${{ github.event.inputs.tag }}
+          GITHUB_EVENT_PULL_REQUEST_HEAD_REF: ${{ github.pull_request.head.ref }}
+        run: |
+          # Determine current branch or tag
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ] && [ "${GITHUB_EVENT_INPUTS_TAG}" ]; then
+            CURRENT_BRANCH="${GITHUB_EVENT_INPUTS_TAG}"
+            IS_TAG=true
+          elif ${{github.event_name == 'pull_request'}}; then
+            CURRENT_BRANCH=${GITHUB_EVENT_PULL_REQUEST_HEAD_REF}
+            IS_TAG=false
+          else
+            CURRENT_BRANCH=$GITHUB_REF_NAME
+            IS_TAG=false
+          fi
+
+          echo "Identified current branch/tag as ${CURRENT_BRANCH}"
+          echo "CURRENT_BRANCH=${CURRENT_BRANCH}" >>$GITHUB_ENV
+          echo "IS_TAG=${IS_TAG}" >>$GITHUB_ENV
+
+          # Determine thirdparty branch to use
+          if [ "$IS_TAG" == "true" ]; then
+            thirdparty_branch="$CURRENT_BRANCH"
+          elif [ "$CURRENT_BRANCH" == "main" ]; then
+            thirdparty_branch="main"
+          else
+            thirdparty_branch="develop"
+          fi
+
+          echo "Using ${thirdparty_branch} for thirdparty"
+
+          FILE_NAME=Linux-x86_64-Release.tar.gz
+          echo "FILE_NAME=${FILE_NAME}" >> $GITHUB_ENV
+
+          mkdir thirdparty
+          cd thirdparty
+
+          if [ "$IS_TAG" == "true" ]; then
+            tag_name="${thirdparty_branch}"
+          else
+            tag_name="Linux-x86_64-${thirdparty_branch}-Release"
+          fi
+
+          gh release download ${tag_name} --repo GeniusVentures/thirdparty -p "${FILE_NAME}"
+          tar -zxf "${FILE_NAME}"
+
+          echo "THIRDPARTY_BUILD_DIR=$(pwd)/${BUILD_DIRECTORY}" >> $GITHUB_ENV
+
+      - name: Download zkLLVM release
+        working-directory: ${{github.workspace}}
+        shell: bash
+        run: |
+          # Use same branch determination logic for zkLLVM
+          if [ "$IS_TAG" == "true" ]; then
+            zkLLVM_branch="$CURRENT_BRANCH"
+          elif [ "$CURRENT_BRANCH" == "main" ]; then
+            zkLLVM_branch="main"
+          else
+            zkLLVM_branch="develop"
+          fi
+
+          mkdir zkLLVM
+          cd zkLLVM
+
+          ZKLLVM_FILE_NAME=Linux-x86_64-Release.tar.gz
+          ZKLLVM_BUILD_DIR=${BUILD_DIRECTORY}
+          if [ "$IS_TAG" == "true" ]; then
+            tag_name="${zkLLVM_branch}"
+          else
+            tag_name="Linux-x86_64-${zkLLVM_branch}-Release"
+          fi
+
+          gh release download ${tag_name} --repo GeniusVentures/zkLLVM -p "${ZKLLVM_FILE_NAME}"
+
+          tar --exclude='*bin/assigner' --exclude='*bin/clang-zkllvm' --exclude='*bin/llvm-link-zkllvm' --exclude='*bin/transpiler' -zxf "${ZKLLVM_FILE_NAME}"
+
+          echo "ZKLLVM_BUILD_DIR=$(pwd)/${ZKLLVM_BUILD_DIR}" >> $GITHUB_ENV
+
+      - name: Checkout SuperGenius source at develop
+        # The step that REPLACES the e2e job's prebuilt Download SuperGenius:
+        # node_example has no install rule, so the session binary must come
+        # from a SOURCE build. develop is the canonical branch (SuperGenius
+        # publishes releases only from develop/main); the exact commit is
+        # recorded below and rides the artifact chain.
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          repository: GeniusVentures/SuperGenius
+          ref: develop
+          path: SuperGenius
+          submodules: "recursive"
+          token: ${{ secrets.GNUS_TOKEN_1 }}
+          persist-credentials: false
+
+      - name: Record the source SHA + no-sed integrity gate
+        # This job must build develop VERBATIM — the fake-old 3.6 sed lives
+        # ONLY in the staging-refuse-version leg. Gate the source (and the
+        # configure log, later) on the absence of 3.6.0.
+        shell: bash
+        run: |
+          set -euo pipefail
+          SGNS_SOURCE_SHA="$(git -C SuperGenius rev-parse HEAD)"
+          echo "SGNS_SOURCE_SHA=$SGNS_SOURCE_SHA" >> "$GITHUB_ENV"
+          if grep -q '3\.6\.0' SuperGenius/cmake/version.cmake; then
+            echo "FATAL: SuperGenius develop cmake/version.cmake carries 3.6.0 — refusing to pass a stale/sedded tree off as the clean session binary" >&2
+            exit 1
+          fi
+          echo "SuperGenius develop source: $SGNS_SOURCE_SHA"
+          grep '^set(PROJECT_VERSION' SuperGenius/cmake/version.cmake
+
+      - name: Configure Linux host
+        if: ${{ runner.os == 'Linux'}}
+        run: |
+          sudo update-alternatives --install /usr/bin/cc cc $(which clang) 100
+          sudo update-alternatives --install /usr/bin/c++ c++ $(which clang++) 100
+          sudo update-alternatives --set cc $(which clang)
+          sudo update-alternatives --set c++ $(which clang++)
+
+          # The e2e job's package set (ccache/ninja/vulkan-loader/libsecret/
+          # libzstd) plus the source-build additions the SuperGenius release
+          # workflow installs (vulkan-headers, perl-IPC-Cmd for OpenSSL's
+          # Configure). The image ships most of these; the dnf branch is the
+          # guarded safety net.
+          if command -v dnf >/dev/null 2>&1; then
+            if ! rpm -q ccache ninja-build vulkan-loader-devel vulkan-headers libsecret-devel libzstd-devel which perl perl-IPC-Cmd >/dev/null 2>&1; then
+              sudo dnf install -y ccache ninja-build vulkan-loader-devel vulkan-headers libsecret-devel libzstd-devel which perl perl-IPC-Cmd
+            fi
+          else
+            sudo apt install ccache ninja-build libvulkan-dev libzstd-dev libsecret-1-dev -y
+          fi
+          echo "CMAKE_GENERATOR=Ninja" >> $GITHUB_ENV
+
+      - name: Install bindgen + wasm Rust target
+        # Unconditional source-build steps from SuperGenius's
+        # build-release-tags.yml (the source-build reference this job
+        # mirrors): cbindgen drives the header codegen and the wasm target is
+        # required by the processing toolchain.
+        run: |
+          cargo install cbindgen
+          rustup target add wasm32-unknown-emscripten
+
+      - name: Configure CMake for the SuperGenius source build
+        working-directory: ${{ github.workspace }}/SuperGenius
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The exact Linux-leg invocation of build-release-tags.yml (clang
+          # pinned against the g++ 8.5 trap, SGNS_NETWORK=release,
+          # THIRDPARTY_DIR/BUILD_DIR + ZKLLVM_DIR/BUILD_DIR against the
+          # downloaded releases, abi subfolder) — tee'd so the configure log
+          # is a gate-able record.
+          cmake -S build/Linux -B "$BUILD_DIRECTORY" \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DSGNS_NETWORK=release \
+            -DCMAKE_C_COMPILER="$(which clang)" \
+            -DCMAKE_CXX_COMPILER="$(which clang++)" \
+            -DTHIRDPARTY_DIR="$GITHUB_WORKSPACE/thirdparty" \
+            -DTHIRDPARTY_BUILD_DIR="$THIRDPARTY_BUILD_DIR" \
+            -DZKLLVM_DIR="$ZKLLVM_BUILD_DIR" \
+            -DZKLLVM_BUILD_DIR="$ZKLLVM_BUILD_DIR" \
+            -DABI_SUBFOLDER_NAME=x86_64 \
+            2>&1 | tee "$GITHUB_WORKSPACE/supergenius-configure.log"
+
+      - name: Build node_example (pulls genius_node)
+        working-directory: ${{ github.workspace }}/SuperGenius/${{ env.BUILD_DIRECTORY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Only the session binary's dependency closure — the install rules
+          # (the release workflow's full build) are this job's non-goal.
+          cmake --build . --config Release --target node_example -j
+
+      - name: "Resolve node_example + ldd gate + no-3.6 configure-log gate"
+        shell: bash
+        run: |
+          set -euo pipefail
+          NODE_EXAMPLE_BIN="$GITHUB_WORKSPACE/SuperGenius/${BUILD_DIRECTORY}/example/node_test/node_example"
+          if [ ! -x "$NODE_EXAMPLE_BIN" ]; then
+            NODE_EXAMPLE_BIN="$(find "$GITHUB_WORKSPACE/SuperGenius/${BUILD_DIRECTORY}" -type f -name node_example -perm -u+x 2>/dev/null | head -n 1)"
+          fi
+          if [ -z "$NODE_EXAMPLE_BIN" ] || [ ! -x "$NODE_EXAMPLE_BIN" ]; then
+            echo "FATAL: node_example not found under the SuperGenius build tree" >&2
+            exit 1
+          fi
+          echo "NODE_EXAMPLE_BIN=$NODE_EXAMPLE_BIN" >> "$GITHUB_ENV"
+
+          # The node-image job's own check shape: ldd runs in the SAME EL8
+          # container that built the binary, so the closure is the real
+          # runtime dependency set the VPS gate re-verifies.
+          missing="$(ldd "$NODE_EXAMPLE_BIN" | grep "not found" || true)"
+          if [ -n "$missing" ]; then
+            echo "FATAL: unresolved shared libraries:" >&2
+            echo "$missing" >&2
+            exit 1
+          fi
+
+          if grep -q 'PROJECT_VERSION: 3\.6\.0' "$GITHUB_WORKSPACE/supergenius-configure.log"; then
+            echo "FATAL: the configure log carries PROJECT_VERSION 3.6.0 — a sed reached this clean-build leg" >&2
+            exit 1
+          fi
+          grep -- '-- PROJECT_VERSION' "$GITHUB_WORKSPACE/supergenius-configure.log" || true
+          echo "node_example: $NODE_EXAMPLE_BIN"
+          echo "ldd gate: zero not-found entries"
+
+      - name: Stage the session binary flat + record provenance
+        # ONE flat dir (the 04-02 LCA lesson: upload-artifact stores paths
+        # relative to the least-common ancestor and drops files outside the
+        # workspace). The sha256 goes to BOTH the log and the step summary —
+        # the summary is not API-retrievable, the log is (the capacity-probe
+        # precedent), and the VPS provisioning step verifies its download
+        # against this value.
+        if: success()
+        shell: bash
+        run: |
+          set -euo pipefail
+          stage="$GITHUB_WORKSPACE/session-bin-stage"
+          mkdir -p "$stage"
+          cp "$NODE_EXAMPLE_BIN" "$stage/node_example"
+          sha="$(sha256sum "$stage/node_example" | cut -d' ' -f1)"
+          echo "NODE_EXAMPLE_SHA256=$sha" >> "$GITHUB_ENV"
+          {
+            ldd "$stage/node_example"
+            echo "sha256: $sha"
+            echo "supergenius_source_sha: $SGNS_SOURCE_SHA"
+          } | tee "$stage/node-example-ldd.txt"
+          echo "session binary sha256: $sha"
+          echo "SuperGenius develop source sha: $SGNS_SOURCE_SHA"
+          {
+            echo "## staging-session-bin (source-built session binary, 05-03)"
+            echo
+            echo "- node_example sha256: $sha"
+            echo "- SuperGenius develop source sha: $SGNS_SOURCE_SHA"
+            echo "- ldd gate: zero not-found entries; configure log carries no 3.6.0 (no sed in this leg)"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the session binary
+        if: success()
+        uses: actions/upload-artifact@v7
+        with:
+          name: staging-session-bin-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ github.workspace }}/session-bin-stage
+          if-no-files-found: error
+          retention-days: 14
+
+  # The version-skew refusal leg (D-10, 05-03 Task 1 / NET-03's second axis):
+  # the SAME source-build machinery with an honestly-labeled franken-build —
+  # sed PROJECT_VERSION 3.7.0 -> 3.6.0 on the CHECKED-OUT develop source
+  # (major.minor ONLY: the topic appendix carries .{major}.{minor}.{net}, so
+  # patch skew is wire-invisible — Pitfall 6) — then the GeniusSDK runner
+  # built against that install tree, booted keyless in-container through the
+  # repo's own wrapper, and refused per D-07's operational definition (the
+  # same three observables as staging-refuse-net). The sed touches the CI
+  # workspace copy ONLY — never a repo file, never a published artifact; the
+  # 3.6 binary exists solely inside this job and its evidence upload. One
+  # staging-refuse dispatch runs BOTH refusal legs (refuse-net plus this).
+  staging-refuse-version:
+    needs: resolve-runners
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.scenario == 'staging-refuse' }}
+    runs-on: ${{ fromJson(needs.resolve-runners.outputs.linux_x64) }}
+    timeout-minutes: 240
+    env:
+      GRPC_BUILD_ENABLE_CCACHE: "ON"
+      GH_TOKEN: ${{ secrets.GNUS_TOKEN_1 }}
+    container:
+      image: ghcr.io/geniusventures/almalinux-8:latest
+      # IPC_LOCK mirrors the e2e job's container block (copied verbatim): the
+      # in-container gnome-keyring-daemon below (through sgns-node-wrap.sh)
+      # needs it — same EPERM trap the e2e harness's dbus wrapper documents.
+      options: --cap-add=IPC_LOCK
+      credentials:
+        username: ${{github.actor}}
+        password: ${{secrets.GNUS_TOKEN_1}}
+    steps:
+      - name: Clean workspace (self-hosted runners)
+        if: ${{ runner.environment == 'self-hosted' }}
+        shell: bash
+        run: |
+          # Container jobs leave root-owned build trees behind; clear the four
+          # build-input dirs so this job's downloads/checkouts start clean
+          # (the e2e job's cleanup step, same guards).
+          SUDO=""
+          if [ "$(uname)" = "Linux" ]; then
+            SUDO="sudo"
+          fi
+          for dir in thirdparty zkLLVM SuperGenius GeniusSDK; do
+            if [ -d "$dir" ]; then
+              echo "Removing $dir directory..."
+              $SUDO rm -rf "$dir"
+            fi
+          done
+
+      - name: Checkout GeniusSDK (topology.py + the wrapper at the dispatch ref)
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          path: "GeniusSDK"
+          submodules: "recursive"
+
+      - name: Set build directory
+        shell: bash
+        run: |
+          # Same abi-suffixed layout as the e2e job — both build trees below
+          # (SuperGenius source + GeniusSDK) and the downloaded releases
+          # share the shape.
+          BUILD_DIRECTORY=build/Linux/Release/x86_64
+          echo "BUILD_DIRECTORY=$BUILD_DIRECTORY" >> $GITHUB_ENV
+
+      - name: Download thirdparty release
+        working-directory: ${{github.workspace}}
+        shell: bash
+        env:
+          GITHUB_EVENT_INPUTS_TAG: ${{ github.event.inputs.tag }}
+          GITHUB_EVENT_PULL_REQUEST_HEAD_REF: ${{ github.pull_request.head.ref }}
+        run: |
+          # Determine current branch or tag
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ] && [ "${GITHUB_EVENT_INPUTS_TAG}" ]; then
+            CURRENT_BRANCH="${GITHUB_EVENT_INPUTS_TAG}"
+            IS_TAG=true
+          elif ${{github.event_name == 'pull_request'}}; then
+            CURRENT_BRANCH=${GITHUB_EVENT_PULL_REQUEST_HEAD_REF}
+            IS_TAG=false
+          else
+            CURRENT_BRANCH=$GITHUB_REF_NAME
+            IS_TAG=false
+          fi
+
+          echo "Identified current branch/tag as ${CURRENT_BRANCH}"
+          echo "CURRENT_BRANCH=${CURRENT_BRANCH}" >>$GITHUB_ENV
+          echo "IS_TAG=${IS_TAG}" >>$GITHUB_ENV
+
+          # Determine thirdparty branch to use
+          if [ "$IS_TAG" == "true" ]; then
+            thirdparty_branch="$CURRENT_BRANCH"
+          elif [ "$CURRENT_BRANCH" == "main" ]; then
+            thirdparty_branch="main"
+          else
+            thirdparty_branch="develop"
+          fi
+
+          echo "Using ${thirdparty_branch} for thirdparty"
+
+          FILE_NAME=Linux-x86_64-Release.tar.gz
+          echo "FILE_NAME=${FILE_NAME}" >> $GITHUB_ENV
+
+          mkdir thirdparty
+          cd thirdparty
+
+          if [ "$IS_TAG" == "true" ]; then
+            tag_name="${thirdparty_branch}"
+          else
+            tag_name="Linux-x86_64-${thirdparty_branch}-Release"
+          fi
+
+          gh release download ${tag_name} --repo GeniusVentures/thirdparty -p "${FILE_NAME}"
+          tar -zxf "${FILE_NAME}"
+
+          echo "THIRDPARTY_BUILD_DIR=$(pwd)/${BUILD_DIRECTORY}" >> $GITHUB_ENV
+
+      - name: Download zkLLVM release
+        working-directory: ${{github.workspace}}
+        shell: bash
+        run: |
+          # Use same branch determination logic for zkLLVM
+          if [ "$IS_TAG" == "true" ]; then
+            zkLLVM_branch="$CURRENT_BRANCH"
+          elif [ "$CURRENT_BRANCH" == "main" ]; then
+            zkLLVM_branch="main"
+          else
+            zkLLVM_branch="develop"
+          fi
+
+          mkdir zkLLVM
+          cd zkLLVM
+
+          ZKLLVM_FILE_NAME=Linux-x86_64-Release.tar.gz
+          ZKLLVM_BUILD_DIR=${BUILD_DIRECTORY}
+          if [ "$IS_TAG" == "true" ]; then
+            tag_name="${zkLLVM_branch}"
+          else
+            tag_name="Linux-x86_64-${zkLLVM_branch}-Release"
+          fi
+
+          gh release download ${tag_name} --repo GeniusVentures/zkLLVM -p "${ZKLLVM_FILE_NAME}"
+
+          tar --exclude='*bin/assigner' --exclude='*bin/clang-zkllvm' --exclude='*bin/llvm-link-zkllvm' --exclude='*bin/transpiler' -zxf "${ZKLLVM_FILE_NAME}"
+
+          echo "ZKLLVM_BUILD_DIR=$(pwd)/${ZKLLVM_BUILD_DIR}" >> $GITHUB_ENV
+
+      - name: Checkout SuperGenius source at develop
+        # The sed target: a fresh develop checkout whose cmake/version.cmake
+        # the franken-build step below edits IN THE WORKSPACE COPY. The exact
+        # commit is recorded and carried into the evidence.
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          repository: GeniusVentures/SuperGenius
+          ref: develop
+          path: SuperGenius
+          submodules: "recursive"
+          token: ${{ secrets.GNUS_TOKEN_1 }}
+          persist-credentials: false
+
+      - name: Record the SuperGenius source SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          SGNS_SOURCE_SHA="$(git -C SuperGenius rev-parse HEAD)"
+          echo "SGNS_SOURCE_SHA=$SGNS_SOURCE_SHA" >> "$GITHUB_ENV"
+          echo "SuperGenius develop source (pre-sed): $SGNS_SOURCE_SHA"
+          grep '^set(PROJECT_VERSION' SuperGenius/cmake/version.cmake
+
+      - name: Provision python3.12
+        shell: bash
+        run: |
+          # EL8's default python3 is 3.6; topology.py needs 3.8+ (invoked as
+          # python3.12 explicitly everywhere — the e2e job's step). The JSON
+          # asserts below ride the same interpreter instead of jq (not
+          # guaranteed in the EL8 image).
+          if command -v python3.12 >/dev/null 2>&1; then
+            echo "python3.12 already present"
+          elif command -v dnf >/dev/null 2>&1; then
+            SUDO=""
+            command -v sudo >/dev/null 2>&1 && SUDO="sudo"
+            $SUDO dnf install -y python3.12
+          else
+            sudo apt-get update
+            sudo apt-get install -y python3.12
+          fi
+          python3.12 --version
+
+      - name: Fetch the canonical artifact pair + fingerprint assert (JOIN.md §2)
+        # The cheap join machinery FIRST (fail-fast before the multi-hour
+        # build chain): the artifact set is the same canonical develop pair
+        # every joiner consumes.
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p staging-net
+          curl -fsSL -o staging-net/staging-net.json \
+            https://raw.githubusercontent.com/GeniusVentures/GeniusSDK/develop/deploy/staging-net/staging-net.json
+          curl -fsSL -o staging-net/manifest.bin \
+            https://raw.githubusercontent.com/GeniusVentures/GeniusSDK/develop/deploy/staging-net/manifest.bin
+          recorded="$(python3.12 -c 'import json;print(json.load(open("staging-net/staging-net.json"))["ceremony_fingerprint"])')"
+          actual="$(sha256sum staging-net/manifest.bin | cut -d' ' -f1)"
+          if [ -z "$recorded" ] || [ "$actual" != "$recorded" ]; then
+            echo "FATAL: sha256(manifest.bin) $actual != ceremony_fingerprint ${recorded:-<none>} — re-fetch the artifact set before anything else (JOIN.md troubleshooting)" >&2
+            exit 1
+          fi
+          echo "artifact fingerprint verified: $actual"
+
+      - name: Generate the joiner bundle (topology.py --join)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3.12 GeniusSDK/e2e/topology.py --join staging-net --out-dir joiners --count 1
+          net_id="$(python3.12 -c 'import json;print(json.load(open("joiners/joiner1/sgns_config.json"))["net_id"])')"
+          if [ "$net_id" != "333" ]; then
+            echo "FATAL: joiner sgns_config net_id=$net_id != 333 — this leg's mismatch is the BINARY's compiled-in version; the config must stay correct" >&2
+            exit 1
+          fi
+          tm="$(python3.12 -c 'import json;print(json.load(open("joiners/joiner1/log_config.json"))["loggers"]["TransactionManager"])')"
+          if [ "$tm" != "info" ]; then
+            echo "FATAL: joiner log_config TransactionManager=$tm != info — the dispatched ref predates 05-01's D-09 promotion" >&2
+            exit 1
+          fi
+          echo "joiner bundle: net_id=333, TransactionManager=info (D-09) — the skew rides the franken 3.6 binary, not the config"
+
+      - name: Configure Linux host
+        if: ${{ runner.os == 'Linux'}}
+        run: |
+          sudo update-alternatives --install /usr/bin/cc cc $(which clang) 100
+          sudo update-alternatives --install /usr/bin/c++ c++ $(which clang++) 100
+          sudo update-alternatives --set cc $(which clang)
+          sudo update-alternatives --set c++ $(which clang++)
+
+          # The e2e job's package set plus the SuperGenius release workflow's
+          # source-build additions (same merged set as staging-session-bin).
+          if command -v dnf >/dev/null 2>&1; then
+            if ! rpm -q ccache ninja-build vulkan-loader-devel vulkan-headers libsecret-devel libzstd-devel which perl perl-IPC-Cmd >/dev/null 2>&1; then
+              sudo dnf install -y ccache ninja-build vulkan-loader-devel vulkan-headers libsecret-devel libzstd-devel which perl perl-IPC-Cmd
+            fi
+          else
+            sudo apt install ccache ninja-build libvulkan-dev libzstd-dev libsecret-1-dev -y
+          fi
+          echo "CMAKE_GENERATOR=Ninja" >> $GITHUB_ENV
+
+      - name: Install bindgen + wasm Rust target
+        # Unconditional source-build steps from SuperGenius's
+        # build-release-tags.yml (mirrored, as in staging-session-bin).
+        run: |
+          cargo install cbindgen
+          rustup target add wasm32-unknown-emscripten
+
+      - name: "Apply the fake-old 3.6 sed to the checked-out source (D-10 mechanism test)"
+        # Honest labeling: a SYNTHESIZED version skew (no published
+        # old-major.minor binary exists — every image/tag is 3.7.0) testing
+        # the REAL wire mechanism, the topic-appendix segregation on
+        # .{major}.{minor}. The sed hits ONLY the CI workspace copy of
+        # develop; major.minor changes, patch stays .0.
+        shell: bash
+        run: |
+          set -euo pipefail
+          sed -i 's/set(PROJECT_VERSION 3\.7\.0)/set(PROJECT_VERSION 3.6.0)/' SuperGenius/cmake/version.cmake
+          if ! grep -q 'set(PROJECT_VERSION 3\.6\.0)' SuperGenius/cmake/version.cmake; then
+            echo "FATAL: the version sed did not bite — develop's version.cmake no longer matches set(PROJECT_VERSION 3.7.0); update the sed pattern" >&2
+            exit 1
+          fi
+          echo "franken-build version applied (fake-old 3.6 mechanism test, D-10):"
+          grep '^set(PROJECT_VERSION' SuperGenius/cmake/version.cmake
+
+      - name: Configure CMake for the SuperGenius source build
+        working-directory: ${{ github.workspace }}/SuperGenius
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The exact Linux-leg invocation of build-release-tags.yml (same as
+          # staging-session-bin) — tee'd, and GATED on the franken version
+          # actually reaching CMake (the compiled-in appendix is generated
+          # from these macros at configure time).
+          cmake -S build/Linux -B "$BUILD_DIRECTORY" \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DSGNS_NETWORK=release \
+            -DCMAKE_C_COMPILER="$(which clang)" \
+            -DCMAKE_CXX_COMPILER="$(which clang++)" \
+            -DTHIRDPARTY_DIR="$GITHUB_WORKSPACE/thirdparty" \
+            -DTHIRDPARTY_BUILD_DIR="$THIRDPARTY_BUILD_DIR" \
+            -DZKLLVM_DIR="$ZKLLVM_BUILD_DIR" \
+            -DZKLLVM_BUILD_DIR="$ZKLLVM_BUILD_DIR" \
+            -DABI_SUBFOLDER_NAME=x86_64 \
+            2>&1 | tee "$GITHUB_WORKSPACE/supergenius-configure.log"
+          if ! grep -q 'PROJECT_VERSION: 3\.6\.0' "$GITHUB_WORKSPACE/supergenius-configure.log"; then
+            echo "FATAL: the configure log lacks PROJECT_VERSION 3.6.0 — the sed did not reach the build" >&2
+            exit 1
+          fi
+
+      - name: Build SuperGenius (franken tree)
+        working-directory: ${{ github.workspace }}/SuperGenius/${{ env.BUILD_DIRECTORY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Full default build, exactly like build-release-tags.yml: the
+          # install rules cover the exported targets, not just genius_node.
+          cmake --build . --config Release -j
+
+      - name: Install the SuperGenius tree (phase-2 local precedent)
+        working-directory: ${{ github.workspace }}/SuperGenius/${{ env.BUILD_DIRECTORY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # CommonCompilerOptions sets CMAKE_INSTALL_PREFIX to the build
+          # dir's SuperGenius/ — the exact install-tree layout the release
+          # tarball carries and GeniusSDK's SUPERGENIUS_DIR consumption
+          # expects (<root>/build/Linux/Release/x86_64/SuperGenius/...).
+          cmake --install . --config Release
+          if [ ! -d "$GITHUB_WORKSPACE/SuperGenius/${BUILD_DIRECTORY}/SuperGenius/lib/cmake/SuperGenius" ]; then
+            echo "FATAL: install tree missing the SuperGenius CMake package dir" >&2
+            exit 1
+          fi
+
+      - name: Configure CMake for Linux (GeniusSDK against the franken install tree)
+        working-directory: ${{ github.workspace }}/GeniusSDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The e2e job's GeniusSDK invocation with SUPERGENIUS_DIR pointed
+          # at the source checkout root whose build/.../SuperGenius install
+          # tree the step above created — producing a GeniusSDKService whose
+          # compiled-in topic appendix is .3.6.333.
+          cmake -S build/Linux -B "$BUILD_DIRECTORY" \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER="$(which clang)" \
+            -DCMAKE_CXX_COMPILER="$(which clang++)" \
+            -DTHIRDPARTY_BUILD_DIR="$THIRDPARTY_BUILD_DIR" \
+            -DZKLLVM_BUILD_DIR="$ZKLLVM_BUILD_DIR" \
+            -DSUPERGENIUS_DIR="$GITHUB_WORKSPACE/SuperGenius" \
+            -DABI_SUBFOLDER_NAME='/x86_64' \
+            2>&1 | tee "$GITHUB_WORKSPACE/geniussdk-configure.log"
+
+      - name: Build GeniusSDK (the 3.6-appendix runner)
+        working-directory: ${{ github.workspace }}/GeniusSDK/${{ env.BUILD_DIRECTORY }}
+        shell: bash
+        run: cmake --build . --config Release -j
+
+      - name: Resolve the franken runner binary
+        shell: bash
+        run: |
+          set -euo pipefail
+          RUNNER_BIN="$GITHUB_WORKSPACE/GeniusSDK/${BUILD_DIRECTORY}/services/GeniusSDKService"
+          if [ ! -x "$RUNNER_BIN" ]; then
+            RUNNER_BIN="$(find "$GITHUB_WORKSPACE/GeniusSDK/build" -type f -name GeniusSDKService -perm -u+x 2>/dev/null | head -n 1)"
+          fi
+          if [ -z "$RUNNER_BIN" ] || [ ! -x "$RUNNER_BIN" ]; then
+            echo "FATAL: franken GeniusSDKService not found under the GeniusSDK build tree" >&2
+            exit 1
+          fi
+          echo "RUNNER_BIN=$RUNNER_BIN" >> "$GITHUB_ENV"
+          echo "franken runner: $RUNNER_BIN (sha256 $(sha256sum "$RUNNER_BIN" | cut -d' ' -f1))"
+
+      - name: "Boot the franken joiner in-container + refusal gate (D-07, 12-min bound)"
+        # Keyless (D-11) through the repo's own wrapper, inside THIS
+        # container: the EL8 image carries dbus + gnome-keyring (the e2e
+        # ctest shape) and IPC_LOCK rides the container options. timeout 780
+        # bounds the joiner's lifetime at 13 min via SIGTERM — the runner's
+        # honored lifetime contract (e3fff7e/b192165) — one minute past the
+        # 12-min refusal bound. The three observables are staging-refuse-net's
+        # exact gate: retry pair strictly increasing across the bound, zero
+        # READY (HALF-JOIN-DETECTED if not), zero head= — scanned over the
+        # tee'd log AND the base dir's sgnslog2.log when present (Linux
+        # console-sink builds ride stdout — Pitfall 4).
+        shell: bash
+        run: |
+          set -euo pipefail
+          export GENIUSSDK_BIN="$RUNNER_BIN"
+          export GENIUSSDK_BASE="$GITHUB_WORKSPACE/joiners/joiner1/"
+          : > fake-old-joiner.log
+          : > refuse-samples.log
+          dbus-run-session -- bash -c \
+            'timeout 780 bash "$GITHUB_WORKSPACE/GeniusSDK/deploy/sgns-node-wrap.sh"' \
+            > fake-old-joiner.log 2>&1 &
+          JOINER_PID=$!
+          counts=()
+          for i in $(seq 1 12); do
+            sleep 60
+            if ! kill -0 "$JOINER_PID" 2>/dev/null; then
+              echo "FATAL: the fake-old 3.6 joiner exited at sample $i — not the expected persistent-retry refusal shape" >&2
+              exit 1
+            fi
+            ts="$(date -u +%FT%TZ)"
+            retries="$(grep -c 'Scheduling blockchain retry after failure' fake-old-joiner.log || true)"
+            echo "REFUSE-3.6 $ts retries=$retries" | tee -a refuse-samples.log
+            counts+=("$retries")
+          done
+          set +e
+          wait "$JOINER_PID"
+          joiner_rc=$?
+          set -e
+          third="${counts[3]}"
+          last="${counts[11]}"
+          echo "joiner lifetime: bounded by timeout 780 (rc=$joiner_rc; 124 is the expected SIGTERM bound)"
+          if [ "$last" -le "$third" ]; then
+            echo "FATAL: the retry pair stopped recurring between the one-third mark (retries=$third) and the end (retries=$last) — persistence plus never-READY is the D-07 proof" >&2
+            exit 1
+          fi
+          if grep -q 'node_state=READY' fake-old-joiner.log; then
+            echo "FATAL: HALF-JOIN-DETECTED — node_state=READY observed on the fake-old 3.6 joiner" >&2
+            exit 1
+          fi
+          if [ -f joiners/joiner1/sgnslog2.log ] && grep -q 'node_state=READY' joiners/joiner1/sgnslog2.log; then
+            echo "FATAL: HALF-JOIN-DETECTED — node_state=READY observed in the joiner base dir sgnslog2.log" >&2
+            exit 1
+          fi
+          if grep -q 'head=' fake-old-joiner.log; then
+            echo "FATAL: a head= line was observed on the fake-old 3.6 joiner" >&2
+            exit 1
+          fi
+          if [ -f joiners/joiner1/sgnslog2.log ] && grep -q 'head=' joiners/joiner1/sgnslog2.log; then
+            echo "FATAL: a head= line was observed in the joiner base dir sgnslog2.log" >&2
+            exit 1
+          fi
+          echo "refusal proven per D-07 (version-skew axis): retries $third -> $last (still recurring at the bound), zero node_state=READY, zero head="
+          # Corroborating, NOT a hard gate (same stance as refuse-net): the
+          # quarantined joiner exchanged nothing (topic-appendix segregation).
+          find joiners/joiner1 -maxdepth 2 | sort | tee refuse-baseir.log || true
+          {
+            echo "## staging-refuse-version (version-skew mechanism test, franken-build D-10)"
+            echo
+            echo "- leg: version-skew mechanism test (franken-build, D-10) — sed set(PROJECT_VERSION 3.7.0) -> 3.6.0 on the checked-out develop source (major.minor only, workspace copy only)"
+            echo "- SuperGenius develop source sha: $SGNS_SOURCE_SHA"
+            echo "- retry pair: $third -> $last across the 12-min bound (still recurring)"
+            echo "- node_state=READY lines: 0; head= lines: 0 (tee'd log + base-dir sgnslog2.log scanned)"
+            echo '```'
+            cat refuse-samples.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Stage evidence + cleanup
+        # ONE flat dir (the 04-02 LCA lesson); the configure log rides along
+        # as the in-run record that the 3.6 version actually reached CMake.
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence
+          if [ -f fake-old-joiner.log ]; then cp fake-old-joiner.log evidence/; fi
+          if [ -f refuse-samples.log ]; then cp refuse-samples.log evidence/; fi
+          if [ -f refuse-baseir.log ]; then cp refuse-baseir.log evidence/; fi
+          if [ -f joiners/joiner1/sgns_config.json ]; then cp joiners/joiner1/sgns_config.json evidence/; fi
+          if [ -f joiners/joiner1/log_config.json ]; then cp joiners/joiner1/log_config.json evidence/; fi
+          if [ -f joiners/joiner1/sgnslog2.log ]; then cp joiners/joiner1/sgnslog2.log evidence/; fi
+          if [ -f "$GITHUB_WORKSPACE/supergenius-configure.log" ]; then cp "$GITHUB_WORKSPACE/supergenius-configure.log" evidence/; fi
+          # Guarded pkill — never fail the job from cleanup (e2e job's step).
+          pkill -x GeniusSDKService 2>/dev/null || true
+
+      - name: Upload refusal evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: staging-refuse-version-evidence-${{ github.run_id }}-${{ github.run_attempt }}
           path: evidence
           if-no-files-found: warn
           retention-days: 14
