@@ -1301,8 +1301,9 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Image provenance asserts (wrapper freshness + runner lineage)
-        # T-05-02-02. The wrapper grep is the 05-01 republish gate: the
-        # optional-key assignment reaches the registry only through a green
+        # T-05-02-02. The wrapper grep is the wrapper-refresh republish gate
+        # (05-01's optional key, then CR-01's GENIUSSDK_KEYLESS opt-in): the
+        # token reaches the registry only through a green
         # push run's node-image job — its absence means the republish has
         # not landed (wait for it; the entrypoint-bypass is the documented
         # fallback, never silently switched here). The runner byte-match
@@ -1319,8 +1320,8 @@ jobs:
           set -euo pipefail
           if ! docker run --rm --entrypoint /usr/bin/bash \
               ghcr.io/geniusventures/geniussdk-staging-node:staging \
-              -c 'grep -q "GENIUSSDK_KEY_FILE:-" /usr/local/bin/sgns-node-wrap.sh'; then
-            echo "FATAL: in-image wrapper lacks the optional-key assignment (GENIUSSDK_KEY_FILE:-) — the 05-01 push's node-image republish has not landed; wait for its green node-image job before dispatching" >&2
+              -c 'grep -q "GENIUSSDK_KEYLESS" /usr/local/bin/sgns-node-wrap.sh'; then
+            echo "FATAL: in-image wrapper lacks the keyless opt-in (GENIUSSDK_KEYLESS) — the wrapper-refresh push's node-image republish has not landed; wait for its green node-image job before dispatching" >&2
             exit 1
           fi
           publish_run="$(gh run list --workflow ceremony-e2e.yml --event push \
@@ -1352,11 +1353,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # NO GENIUSSDK_KEY_FILE: the joiner is a fresh account (every real
-          # joiner's shape). IPC_LOCK mirrors the image's own runtime notes.
+          # GENIUSSDK_KEYLESS=1: the explicit joiner opt-in (CR-01) — a
+          # fresh account, every real joiner's shape. IPC_LOCK mirrors the
+          # image's own runtime notes.
           docker run -d --name staging-joiner --cap-add IPC_LOCK \
             -e GENIUSSDK_BIN=/usr/local/bin/GeniusSDKService \
             -e GENIUSSDK_BASE=/data/joiner1/ \
+            -e GENIUSSDK_KEYLESS=1 \
             -e HOME=/data/joiner1 \
             -v "$PWD/joiners/joiner1:/data/joiner1" \
             ghcr.io/geniusventures/geniussdk-staging-node:staging
@@ -1399,7 +1402,10 @@ jobs:
         # The dry shape (this plan) proves the machinery green with a 5-min
         # READY-stability check; liveness=true is 05-04's witnessed window —
         # 30 samples of the D-09 'Tracking entry confirmed' count, one per
-        # minute, failing loudly unless the count grows 0 -> >=2.
+        # minute, failing loudly unless the count grows by >=2 across the
+        # window (the delta is the liveness property — new confirmations
+        # DURING the window — not the baseline; a tx confirmed before
+        # sample 1 is growth, not a red).
         shell: bash
         run: |
           set -euo pipefail
@@ -1423,14 +1429,14 @@ jobs:
               if [ -z "$first" ]; then first="$stdout_count"; fi
               last="$stdout_count"
             done
-            if [ "$first" != "0" ] || [ "$last" -lt 2 ]; then
-              echo "FATAL: liveness gate — the count must grow from a first sample of 0 to a last sample >= 2 (a no-growth run is a red build by design; re-dispatch with the witnessed transfer procedure); full series:" >&2
+            if [ $((last - first)) -lt 2 ]; then
+              echo "FATAL: liveness gate — the confirmed-tx count grew by <2 across the 30-sample window ($first -> $last; a no-growth run is a red build by design — the one-shot mint shape is unrepeatable, so the honest remediation is the recovery window per 05-VERIFICATION's priced path); full series:" >&2
               cat liveness.log >&2
               exit 1
             fi
-            echo "liveness window: count grew 0 -> $last across 30 samples (D-12)"
+            echo "liveness window: count grew $first -> $last across 30 samples (delta $((last - first)), D-12)"
             {
-              echo "- liveness window: first=0 last=$last"
+              echo "- liveness window: first=$first last=$last (delta $((last - first)))"
               echo '```'
               cat liveness.log
               echo '```'
@@ -1579,8 +1585,8 @@ jobs:
           set -euo pipefail
           if ! docker run --rm --entrypoint /usr/bin/bash \
               ghcr.io/geniusventures/geniussdk-staging-node:staging \
-              -c 'grep -q "GENIUSSDK_KEY_FILE:-" /usr/local/bin/sgns-node-wrap.sh'; then
-            echo "FATAL: in-image wrapper lacks the optional-key assignment (GENIUSSDK_KEY_FILE:-) — the 05-01 push's node-image republish has not landed; wait for its green node-image job before dispatching" >&2
+              -c 'grep -q "GENIUSSDK_KEYLESS" /usr/local/bin/sgns-node-wrap.sh'; then
+            echo "FATAL: in-image wrapper lacks the keyless opt-in (GENIUSSDK_KEYLESS) — the wrapper-refresh push's node-image republish has not landed; wait for its green node-image job before dispatching" >&2
             exit 1
           fi
           publish_run="$(gh run list --workflow ceremony-e2e.yml --event push \
@@ -1614,6 +1620,7 @@ jobs:
           docker run -d --name staging-refuse-net --cap-add IPC_LOCK \
             -e GENIUSSDK_BIN=/usr/local/bin/GeniusSDKService \
             -e GENIUSSDK_BASE=/data/joiner1/ \
+            -e GENIUSSDK_KEYLESS=1 \
             -e HOME=/data/joiner1 \
             -v "$PWD/joiners/joiner1:/data/joiner1" \
             ghcr.io/geniusventures/geniussdk-staging-node:staging
@@ -2350,7 +2357,8 @@ jobs:
           echo "franken runner: $RUNNER_BIN (sha256 $(sha256sum "$RUNNER_BIN" | cut -d' ' -f1))"
 
       - name: "Boot the franken joiner in-container + refusal gate (D-07, 12-min bound)"
-        # Keyless (D-11) through the repo's own wrapper, inside THIS
+        # Keyless (D-11, the explicit GENIUSSDK_KEYLESS=1 opt-in) through
+        # the repo's own wrapper, inside THIS
         # container: the EL8 image carries dbus + gnome-keyring (the e2e
         # ctest shape) and IPC_LOCK rides the container options. timeout 780
         # bounds the joiner's lifetime at 13 min via SIGTERM — the runner's
@@ -2373,6 +2381,7 @@ jobs:
           set -euo pipefail
           export GENIUSSDK_BIN="$RUNNER_BIN"
           export GENIUSSDK_BASE="$GITHUB_WORKSPACE/joiners/joiner1/"
+          export GENIUSSDK_KEYLESS=1
           : > fake-old-joiner.log
           : > refuse-samples.log
           dbus-run-session -- bash -c \
