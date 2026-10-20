@@ -79,6 +79,9 @@ INFO_LOGGERS = {
     NODE_LOGGER_NAME: "info",
     BLOCKCHAIN_LOGGER_NAME: "info",
     "GossipPubSub": "info",  # owns the DHT observables ("DHT: New Peer: <pid>")
+    "TransactionManager": "info",  # owns the tx-arrival count evidence
+                                   # ("Tracking entry confirmed tx=",
+                                   # TransactionManager.cpp:4800/4861)
 }
 
 # The canonical staging fleet is the 5-node ceremony (genesis on the AWS box +
