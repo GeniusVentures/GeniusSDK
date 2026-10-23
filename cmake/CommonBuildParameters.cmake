@@ -322,6 +322,50 @@ set(gnus_upnp_LIBRARY_DIR "${THIRDPARTY_BUILD_DIR}/gnus_upnp/lib")
 set(gnus_upnp_DIR "${THIRDPARTY_BUILD_DIR}/gnus_upnp/lib/cmake/gnus_upnp")
 find_package(gnus_upnp CONFIG REQUIRED)
 
+# sgns-blockstore cold-storage consumption block (INTG-01, v1.1 Phase 7),
+# mirroring SuperGenius/build/CommonBuildParameters.cmake.
+# ORDERING CONSTRAINT: this block MUST stay strictly BEFORE the
+# find_package(SuperGenius CONFIG REQUIRED) below - once any SuperGenius
+# export target references sgns-blockstore::sgns-blockstore, the SDK
+# configure fails with a missing-imported-target error unless
+# sgns-blockstore was found first.
+# OFF by default: the json -> pugixml -> minio-cpp -> sgns-blockstore
+# superbuild chain must never become a prerequisite of default, mobile, or
+# downstream builds. Mobile legs stay OFF until their install trees are
+# verified.
+option(SGNS_COLD_STORAGE "Link sgns-blockstore cold-storage tiers (desktop only)" OFF)
+if(IOS OR ANDROID)
+    set(SGNS_COLD_STORAGE OFF CACHE BOOL "Cold storage unsupported on mobile until install trees verified" FORCE)
+endif()
+if(SGNS_COLD_STORAGE)
+    # Deliberately OUTSIDE the libssh2 CMAKE_FIND_PACKAGE_PREFER_CONFIG window
+    # above: re-routing this chain's ZLIB resolution into ZLIBConfig.cmake
+    # corrupts the httplib config check (superbuild trap,
+    # thirdparty/build/CommonTargets.cmake:897-917).
+    # Order matters: miniocpp's consumer config re-runs miniocpp-deps.cmake in
+    # THIS context, so pugixml/nlohmann_json/httplib must resolve here too;
+    # httplib MUST be found EXPLICITLY first (Phase-3 spike finding - its QUIET
+    # sub-find inside miniocpp's config does not register the target for
+    # imported-target-reference verification).
+    # No find in this block carries a version argument - dual-RocksDB compat
+    # posture: one in-tree RocksDB shared with sgns-blockstore, never pinned,
+    # never a second archive.
+    # nlohmann_json installs to the GNUInstallDirs datadir (share/cmake, NOT
+    # lib/cmake); set self-contained here even though the find below repeats
+    # the hint.
+    set(pugixml_DIR         "${THIRDPARTY_BUILD_DIR}/pugixml/lib/cmake/pugixml")
+    set(nlohmann_json_DIR   "${THIRDPARTY_BUILD_DIR}/json/share/cmake/nlohmann_json")
+    set(httplib_DIR         "${THIRDPARTY_BUILD_DIR}/minio-cpp/lib/cmake/httplib")
+    set(miniocpp_DIR        "${THIRDPARTY_BUILD_DIR}/minio-cpp/lib/cmake/miniocpp")
+    find_package(httplib CONFIG REQUIRED)
+    find_package(miniocpp CONFIG REQUIRED)
+    set(sgns-blockstore_DIR "${THIRDPARTY_BUILD_DIR}/sgns-blockstore/lib/cmake/sgns-blockstore")
+    find_package(sgns-blockstore CONFIG REQUIRED)
+    # sgns-blockstore's installed config is silent on success - print the
+    # resolved package dir so ON-configure evidence logs show the find.
+    message(STATUS "SGNS_COLD_STORAGE: sgns-blockstore found via ${sgns-blockstore_DIR}")
+endif()
+
 # wallet-core
 set(TrustWalletCore_LIBRARY_DIR "${THIRDPARTY_BUILD_DIR}/wallet-core/lib")
 set(TrustWalletCore_INCLUDE_DIR "${THIRDPARTY_BUILD_DIR}/wallet-core/include")
