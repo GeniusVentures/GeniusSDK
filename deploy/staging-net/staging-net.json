@@ -1,9 +1,9 @@
 {
   "net_id": 333,
   "genesis_multiaddr": "/dns4/sg-fullnode-1s.gnus.ai/tcp/41273/ipfs/12D3KooWMvXKGwt2mDcgusWrjALbLMwfYCgTvWJxMSmwLi633txx",
-  "node_version": "3.7.0-develop.2272673",
-  "supergenius_tarball_sha256": "53dc42a4b2b6debb712988c9ec651a7d97f948ff45910b8da51562edce6c948d",
-  "runner_sha256": "4f032165cf6de81b1076619209ae7d3057b219ebd89f820ec8aa1b00cc0b3006",
+  "node_version": "3.7.0-develop.f5962e8",
+  "supergenius_tarball_sha256": "6a51df292a2e8a5d9d84cd63ccf652cffb61745bf964e2c75a3d54d9e7299436",
+  "runner_sha256": "511e14066f850ae4fa00d49a91064a084a229184ec3ec7c43a15d6dce6dc17bb",
   "ceremony_fingerprint": "4f6840f5bdffca6d51d463c4f02d85bde76b5ce88dd3d1ab4ed59e39663a7afb",
   "genesis_cid": "QmPZynsQE2hhJvQdYuC66bMzEdknpYaPTE2vtwFg3xarrf",
   "authorized_full_node": "9798e85e31bcb9ee077d9152c30af391ea0a555ff4680e17bede5a09a1183dd2c158a6da9e626f3c0527b23bef57d95b82f47a6ffb43f4efa07fedd7c8509b16",
