@@ -37,6 +37,13 @@ set_target_properties(Vulkan::Vulkan PROPERTIES
     INTERFACE_INCLUDE_DIRECTORIES "${THIRDPARTY_BUILD_DIR}/Vulkan-Headers/include"
 )
 
+if(APPLE)
+    # libMoltenVK.a embeds ObjC categories (MTLSamplerDescriptor+MoltenVK etc.) whose
+    # category symbols are LOCAL — static-archive linking never pulls them, so without
+    # -ObjC vkCreateSampler dies in doesNotRecognizeSelector: setBorderColorMVK:.
+    set_property(TARGET Vulkan::Vulkan APPEND PROPERTY INTERFACE_LINK_OPTIONS "-Wl,-ObjC")
+endif()
+
 set(ZLIB_DIR "${THIRDPARTY_BUILD_DIR}/zlib/lib/cmake/zlib")
 find_package(ZLIB CONFIG REQUIRED)
 
