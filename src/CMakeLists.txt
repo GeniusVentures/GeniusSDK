@@ -88,7 +88,7 @@ endif()
 geniussdk_install(GeniusSDK_shared)
 
 if(APPLE)
-    if(PLATFORM STREQUAL "OS64")
+    if(PLATFORM STREQUAL "OS64" OR PLATFORM STREQUAL "SIMULATORARM64")
         # iOS Framework
         add_library(GeniusSDK_framework SHARED ${ALL_SRCS} ${ALL_HDRS})
         set_target_properties(GeniusSDK_framework PROPERTIES
