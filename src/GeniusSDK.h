@@ -340,6 +340,28 @@ GNUS_VISIBILITY_DEFAULT GeniusTransactionStatus_t GeniusSDKGetTransactionStatus(
  */
 GNUS_VISIBILITY_DEFAULT GeniusProcessingStatusInfo GeniusSDKGetProcessingStatus();
 
+/**
+ * @brief       Retrieves the ids of the tasks this account submitted or processed.
+ * @param[in]   limit Maximum number of ids to return (capped at 200).
+ * @param[in]   offset Number of ids to skip from the start of the list.
+ * @return      A JSON array of task id strings, owned by a static buffer (not thread-safe).
+ */
+GNUS_VISIBILITY_DEFAULT const char *GeniusSDKGetMyTaskIds( uint64_t limit, uint64_t offset );
+
+/**
+ * @brief       Retrieves the result of a task by id.
+ * @param[in]   task_id A null-terminated task id.
+ * @return      The task result as a JSON object string, owned by a static buffer (not thread-safe).
+ *              Returns a JSON object with "error" set when the task is unknown or not finished.
+ */
+GNUS_VISIBILITY_DEFAULT const char *GeniusSDKGetTaskResult( const char *task_id );
+
+/**
+ * @brief       Retrieves the developer payout address configured for this node.
+ * @return      The payout address as a JSON string, owned by a static buffer (not thread-safe).
+ */
+GNUS_VISIBILITY_DEFAULT const char *GeniusSDKGetPayoutAddress();
+
 GNUS_EXPORT_END
 
 #endif

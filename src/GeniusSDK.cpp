@@ -23,6 +23,7 @@
 #include <rapidjson/filereadstream.h>
 #include <rapidjson/filewritestream.h>
 #include <rapidjson/writer.h>
+#include <google/protobuf/util/json_util.h>
 
 #include <base/buffer.hpp>
 #include <processing/processing_service.hpp>
@@ -663,4 +664,54 @@ GeniusProcessingStatusInfo GeniusSDKGetProcessingStatus()
 
     result.percentage = status_info.percentage;
     return result;
+}
+
+const char *GeniusSDKGetMyTaskIds( uint64_t limit, uint64_t offset )
+{
+    static char buffer[16384];
+    if ( !GeniusNodeInstance )
+    {
+        return "[]";
+    }
+    if ( limit == 0 || limit > 200 )
+    {
+        limit = 200;
+    }
+    auto ids = GeniusNodeInstance->GetMyTaskIds( static_cast<size_t>( limit ), static_cast<size_t>( offset ) );
+    rapidjson::StringBuffer sb;
+    rapidjson::Writer<rapidjson::StringBuffer> writer( sb );
+    writer.StartArray();
+    for ( const auto &id : ids )
+    {
+        writer.String( id.c_str(), static_cast<rapidjson::SizeType>( id.size() ) );
+    }
+    writer.EndArray();
+    std::snprintf( buffer, sizeof( buffer ), "%s", sb.GetString() );
+    return buffer;
+}
+
+const char *GeniusSDKGetTaskResult( const char *task_id )
+{
+    static char buffer[8192];
+    if ( !GeniusNodeInstance || task_id == nullptr || task_id[0] == '\0' )
+    {
+        return "{\"error\":\"not_initialized\"}";
+    }
+    auto result = GeniusNodeInstance->GetTaskResult( task_id );
+    if ( result.has_error() )
+    {
+        std::snprintf( buffer, sizeof( buffer ), "{\"error\":\"%s\"}", result.error().message().c_str() );
+        return buffer;
+    }
+    std::string json;
+    google::protobuf::util::MessageToJsonString( result.value(), &json );
+    std::snprintf( buffer, sizeof( buffer ), "%s", json.c_str() );
+    return buffer;
+}
+
+const char *GeniusSDKGetPayoutAddress()
+{
+    static char buffer[128];
+    std::snprintf( buffer, sizeof( buffer ), "%s", DEV_CONFIG.Addr.c_str() );
+    return buffer;
 }
