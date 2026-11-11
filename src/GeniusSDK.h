@@ -526,6 +526,14 @@ GNUS_VISIBILITY_DEFAULT GeniusTransactionStatus_t GeniusSDKGetTransactionStatus(
 GNUS_VISIBILITY_DEFAULT GeniusProcessingStatusInfo GeniusSDKGetProcessingStatus();
 
 /**
+ * @brief       Retrieves the node account's processing payout destination: the stored
+ *              payout address when one is saved, otherwise the account's own address.
+ * @return      A malloc'd C string — free with GeniusSDKFree. Null when the SDK is not
+ *              initialized or the account services are not ready.
+ */
+GNUS_VISIBILITY_DEFAULT const char *GeniusSDKGetPayoutAddress();
+
+/**
  * @brief       Returns the task IDs of jobs submitted by the active account.
  * @param[in]   limit  Maximum number of task IDs to return.
  * @param[in]   offset Number of task IDs to skip from the end of the list.
