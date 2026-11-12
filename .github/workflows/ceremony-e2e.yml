@@ -87,19 +87,48 @@ concurrency:
 
 jobs:
   resolve-runners:
-    runs-on: ubuntu-latest
+    # Probe runs on the self-hosted Linux runner itself; if that runner is
+    # offline, the workflow waits for it. The linux_x64 selector is pinned
+    # to the self-hosted machine unconditionally — offline or busy means
+    # downstream jobs queue on it rather than falling back to a
+    # GitHub-hosted machine. The API probe below is diagnostics-only.
+    runs-on: [self-hosted, sg-ubuntu-linux]
     env:
       GH_TOKEN: ${{ secrets.GNUS_TOKEN_1 }}
     outputs:
       linux_x64: ${{ steps.pick.outputs.linux_x64 }}
     steps:
-      - name: Check self-hosted runner availability
+      - name: Pin selectors to self-hosted runners (report availability)
         id: pick
         env:
           REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
           ORG="${REPO%%/*}"
+
+          # Pin the selector to the self-hosted runner regardless of current
+          # availability: offline or busy means downstream jobs queue on it
+          # instead of falling back to GitHub-hosted machines. The probe
+          # below is diagnostics-only and never changes this selector.
+          SH_LINUX_X64='["self-hosted","sg-ubuntu-linux"]'
+
+          echo "linux_x64=$SH_LINUX_X64" >> "$GITHUB_OUTPUT"
+
+          {
+            echo "## Runner selection"
+            echo
+            echo "Selector pinned to a self-hosted runner (no GitHub-hosted fallback):"
+            echo "- linux_x64: sg-ubuntu-linux"
+            echo
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          # Best-effort availability report: a missing gh/jq or failing API
+          # calls must not fail the job — the selector above is fixed.
+          if ! command -v gh >/dev/null 2>&1 || ! command -v jq >/dev/null 2>&1; then
+            echo "gh or jq not available on the runner host; skipping availability report"
+            exit 0
+          fi
+
           repo_err="$(mktemp)"
           org_err="$(mktemp)"
 
@@ -145,33 +174,6 @@ jobs:
             echo "$data" | jq -r '.runners[]? | "- \(.name) | status=\(.status) | busy=\(.busy) | labels=\([.labels[].name] | join(", "))"'
             echo
           } >> "$GITHUB_STEP_SUMMARY"
-
-          # Define JSON arrays using single quotes so real double-quotes are preserved.
-          SH_LINUX_X64='["self-hosted","sg-ubuntu-linux"]'
-          FB_LINUX='["ubuntu-latest"]'
-
-          # Returns the self-hosted label array if at least one matching runner
-          # is online and not busy, otherwise returns the GitHub-hosted fallback.
-          # Match either runner name or label/tag text, case-insensitively.
-          pick_runner() {
-            local label="$1" self_hosted="$2" fallback="$3"
-            if echo "$data" | jq -e --arg L "$label" \
-              '.runners[]
-               | select(.status=="online" and (.busy|not))
-               | select((.name | ascii_downcase) == ($L | ascii_downcase)
-                 or any(.labels[]; (.name | ascii_downcase) == ($L | ascii_downcase)))' \
-              >/dev/null 2>&1; then
-              echo "Selector '$label' matched an available self-hosted runner" >&2
-              echo "- $label: self-hosted" >> "$GITHUB_STEP_SUMMARY"
-              echo "$self_hosted"
-            else
-              echo "Selector '$label' did not match an available self-hosted runner" >&2
-              echo "- $label: fallback" >> "$GITHUB_STEP_SUMMARY"
-              echo "$fallback"
-            fi
-          }
-
-          echo "linux_x64=$(pick_runner 'sg-ubuntu-linux' "$SH_LINUX_X64" "$FB_LINUX")"   >> "$GITHUB_OUTPUT"
 
   # Push/PR/dispatch shape: ONE job, ONE build, then (D-13) the happy path +
   # the run-number-rotated scenario + the negative control, sequentially.
@@ -414,9 +416,9 @@ jobs:
           # floor, replacing the EOL Debian Bullseye container). The image
           # ships clang, cmake, ninja, Vulkan headers, and libsecret, so the
           # dnf branch is a guarded safety net that avoids repo traffic when
-          # the image already provides everything; Ubuntu runners (the
-          # resolve-runners fallback, which runs this same container, or a
-          # no-container future) still need apt.
+          # the image already provides everything; the apt branch remains
+          # only for a no-container future (runners are pinned self-hosted,
+          # so there is no GitHub-hosted Ubuntu fallback anymore).
           if command -v dnf >/dev/null 2>&1; then
             if ! rpm -q ccache ninja-build vulkan-loader-devel libsecret-devel libzstd-devel >/dev/null 2>&1; then
               sudo dnf install -y ccache ninja-build vulkan-loader-devel libsecret-devel libzstd-devel
@@ -432,8 +434,9 @@ jobs:
           # EL8's default python3 is 3.6; the harness needs 3.10+ and is
           # invoked as python3.12 explicitly everywhere. The container is
           # ephemeral per job, so this check runs on every job (D-12,
-          # research Pitfall 4). dnf branch first (AlmaLinux 8 AppStream),
-          # apt for the hosted-fallback distro.
+          # research Pitfall 4). dnf branch first (AlmaLinux 8 AppStream);
+          # the apt branch is a no-container-future safety net (runners are
+          # pinned self-hosted — no hosted fallback exists anymore).
           if command -v python3.12 >/dev/null 2>&1; then
             echo "python3.12 already present"
           elif command -v dnf >/dev/null 2>&1; then

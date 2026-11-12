@@ -53,3 +53,14 @@ Phases execute in numeric order: 1 → 2
 |-------|----------------|--------|-----------|
 | 1. Init Interface Modernization | 0/2 | Not started | - |
 | 2. Verification & Documentation | 1/1 | Complete   | 2026-07-06 |
+
+## Consumer contract (read before adding any C API)
+
+The authoritative FFI contract lives in the WALLET's bindings, not here:
+GeniusWallet branch `claude/gsd-dashboard-bridge-milestone-b6a5e7`,
+`packages/genius_api/lib/ffi/genius_api_ffi.dart` — Braian's Doxygen blocks
+define each function's exact shape, ownership and free pattern. Develop's
+`src/GeniusSDK.cpp` must match those shapes or the wallet cannot bind the
+symbol. Example: `GeniusSDKGetPayoutAddress` returns `GeniusAddress` via
+MakeGeniusAddress (braianxde's bindings + itsafuu's review confirmed the
+shape 2026-11-11).

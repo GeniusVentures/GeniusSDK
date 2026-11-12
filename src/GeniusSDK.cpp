@@ -19,6 +19,7 @@
 #include <spdlog/spdlog.h>
 #include <string>
 #include <cstring>
+#include <cstdio>
 #include <fstream>
 
 #include "account/GeniusNode.hpp"
@@ -584,6 +585,30 @@ GeniusAddress GeniusSDKGetAddress()
     return ret;
 }
 
+GeniusAddress GeniusSDKGetPayoutAddress()
+{
+    const std::lock_guard<std::recursive_mutex> lock( GeniusSDKMutex );
+
+    GeniusAddress ret = {};
+
+    auto node = GeniusNodeInstance;
+    if ( node )
+    {
+        auto address = node->GetPayoutAddress();
+        if ( address.has_value() && !address.value().empty() )
+        {
+            auto raw = address.value();
+            if ( raw.rfind( "0x", 0 ) == 0 )
+            {
+                raw = raw.substr( 2 );
+            }
+            ret = MakeGeniusAddress( raw );
+        }
+    }
+
+    return ret;
+}
+
 GeniusMnemonic GeniusSDKGetMnemonic()
 {
     const std::lock_guard<std::recursive_mutex> lock( GeniusSDKMutex );
@@ -1070,6 +1095,8 @@ GeniusProcessingStatusInfo GeniusSDKGetProcessingStatus()
     result.percentage = status_info.percentage;
     return result;
 }
+
+
 
 const char *GeniusSDKGetMyTaskIds( uint64_t limit, uint64_t offset )
 {
