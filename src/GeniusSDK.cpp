@@ -585,6 +585,30 @@ GeniusAddress GeniusSDKGetAddress()
     return ret;
 }
 
+GeniusAddress GeniusSDKGetPayoutAddress()
+{
+    const std::lock_guard<std::recursive_mutex> lock( GeniusSDKMutex );
+
+    GeniusAddress ret = {};
+
+    auto node = GeniusNodeInstance;
+    if ( node )
+    {
+        auto address = node->GetPayoutAddress();
+        if ( address.has_value() && !address.value().empty() )
+        {
+            auto raw = address.value();
+            if ( raw.rfind( "0x", 0 ) == 0 )
+            {
+                raw = raw.substr( 2 );
+            }
+            ret = MakeGeniusAddress( raw );
+        }
+    }
+
+    return ret;
+}
+
 GeniusMnemonic GeniusSDKGetMnemonic()
 {
     const std::lock_guard<std::recursive_mutex> lock( GeniusSDKMutex );
@@ -1072,26 +1096,7 @@ GeniusProcessingStatusInfo GeniusSDKGetProcessingStatus()
     return result;
 }
 
-const char *GeniusSDKGetPayoutAddress()
-{
-    const std::lock_guard<std::recursive_mutex> lock( GeniusSDKMutex );
 
-    if ( !GeniusNodeInstance )
-    {
-        return nullptr;
-    }
-
-    auto address = GeniusNodeInstance->GetPayoutAddress();
-    if ( address.has_error() )
-    {
-        return nullptr;
-    }
-
-    const auto &value = address.value();
-    char *ret = static_cast<char *>( malloc( value.size() + 1 ) );
-    std::memcpy( ret, value.c_str(), value.size() + 1 );
-    return ret;
-}
 
 const char *GeniusSDKGetMyTaskIds( uint64_t limit, uint64_t offset )
 {
